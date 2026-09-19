@@ -149,6 +149,7 @@ export class ProjectWorkspace {
       await this.registry.closeAll();
       this.projects.clear();
       for (const recovery of this.#recoveries.values()) recovery.dispose();
+      this.#recoveries.clear();
     } catch (error) {
       this.#quitting = false;
       for (const path of this.projects.keys()) {
@@ -157,5 +158,11 @@ export class ProjectWorkspace {
       }
       throw error;
     }
+  }
+  async resumeAfterShutdown() {
+    if (!this.#quitting || this.registry.list().length || this.projects.size) throw new Error('Shutdown must complete before resuming projects');
+    this.registry = new ProjectRegistry();
+    this.#quitting = false;
+    return this.restore();
   }
 }

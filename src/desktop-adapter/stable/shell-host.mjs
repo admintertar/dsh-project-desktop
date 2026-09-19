@@ -2,6 +2,7 @@ import {join} from 'node:path';
 import {loadDesktop, loadDependency} from './modules.mjs';
 import {repository, lock} from '../paths.mjs';
 import {readProjectAgentInstructions} from '../../app/project-agent.mjs';
+import {productVersion} from '../../app/product.mjs';
 
 const {desktopRendererUrl, Config} = await loadDesktop('index');
 const {handleRendererBootRequest, RENDERER_BOOT_REPORT_PATH} = await loadDesktop('renderer-boot');
@@ -39,7 +40,7 @@ export function apply(ctx, config) {
     provider: z.union(['disabled', 'dsh-market']).default('dsh-market'),
   }), {applies: 'restart'});
   const material = effectiveDesktopWindowMaterial('advanced', runtime.platform, config.macosMaterial, config.windowsMaterial, runtime.windowsBuild);
-  const url = desktopRendererUrl(ctx.webServer.port, 'advanced', runtime.platform, lock.desktop.version, material, runtime.windowsBuild)
+  const url = desktopRendererUrl(ctx.webServer.port, 'advanced', runtime.platform, productVersion, material, runtime.windowsBuild)
     + (process.env.DSH_PROJECT_SAFE_MODE === '1' ? '&projectSafeMode=1' : '');
   ctx.effect(() => ctx.webServer.register({kind: 'exact', path: RENDERER_BOOT_REPORT_PATH, handler(req, res) {
     const rejected = ctx.connection.requestRejection(req);

@@ -8,6 +8,7 @@ import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-s
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
+import {productVersion, productName} from '../app/product.mjs';
 
 function spawnUtility(electron, entry, args, options) {
   const child = electron.utilityProcess.fork(entry, args, {cwd: options.cwd, env: options.env, stdio: 'pipe', serviceName: 'DSH Project Host'});
@@ -55,7 +56,7 @@ export async function openNativeProject(electron, options) {
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
   const runtime = {
     platform: process.platform, locale,
-    updates: {isPackaged: false, canDownload: false, currentVersion: lock.desktop.version, statePath: join(options.stateDirectory, 'updates-disabled'),
+    updates: {isPackaged: false, canDownload: false, currentVersion: productVersion, statePath: join(options.stateDirectory, 'updates-disabled'),
       request: disabled, confirmDownload: disabled, showManualCheckResult: disabled, downloadAndOpen: disabled, notify() {}},
     schedule(spec) {
       if (spec.mode !== 'advanced' || specification) throw new Error('Invalid project window specification');
@@ -84,7 +85,7 @@ export async function openNativeProject(electron, options) {
         buttons: locale === 'zh' ? ['取消', '导出'] : ['Cancel', 'Export'], defaultId: 0, cancelId: 0});
       if (confirmation.response !== 1) return;
       const path = await exportDiagnosticsZip(join(options.stateDirectory, 'logs'), options.stateDirectory,
-        {appVersion: `DSH Project Desktop 0.1.0 / Desktop ${lock.desktop.version}`});
+        {appVersion: `${productName} ${productVersion} / Desktop ${lock.desktop.version}`});
       shell.showItemInFolder(path);
     },
     async pickDirectory() {const result = await dialog.showOpenDialog(window, {properties: ['openDirectory', 'createDirectory']}); return result.canceled ? null : result.filePaths[0]},
@@ -150,7 +151,7 @@ export async function openNativeProject(electron, options) {
     const dispatch = createDesktopRendererActionDispatcher({
       openTerminal: runtime.openTerminal, restart: runtime.requestRestart, restartToRecovery: runtime.requestRecoveryRestart,
       reload: runtime.reloadRenderer, developerTools: runtime.toggleDeveloperTools,
-      checkForUpdates: disabled, exportDiagnostics: runtime.exportDiagnostics,
+      checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportDiagnostics,
     }, message => options.onError(new Error(message)));
     contents.ipc.handle('dsh-desktop:renderer-action', (event, action) => {
       if (!trustedSender(event, contents, specification.url)) throw new Error('Untrusted renderer');

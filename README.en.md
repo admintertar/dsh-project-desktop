@@ -19,7 +19,7 @@ An independent AI development desktop for projects spanning multiple repositorie
 
 Early development; only the `stable` channel is supported: Desktop **2.0.11** and Harness **0.1.5-rc.2**. The plugin revision is pinned in [upstream.lock.json](upstream.lock.json). Stable is a release channel, not a long-term API guarantee.
 
-The current local native acceptance baseline is **macOS x64**. GitHub Actions produces one macOS Universal DMG for Intel and Apple Silicon, plus Windows x64 installers. The same DMG is launched on both Mac architectures; acceptance depends on each job's result. Linux packages, formally signed releases and automatic updates are not provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
+The current local native acceptance baseline is **macOS x64**. GitHub Actions produces one macOS Universal DMG for Intel and Apple Silicon, plus Windows x64 installers. The same DMG is launched on both Mac architectures; acceptance depends on each job's result. Background checks use our own Releases; installer downloads require confirmation and checksum verification. Linux packages, formally signed releases and silent installation are not provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
 
 ## Development setup
 
@@ -67,7 +67,7 @@ npm run package:mac
 npm run package:win
 ```
 
-Local packages are written to `release/`. On GitHub, open Actions → **Package Desktop** → **Run workflow**, select `all`, `mac` or `win`, then download the DMG / Windows installer and portable ZIP from the successful run's Artifacts. Pushing a `v*` tag matching `package.json` also triggers packaging. macOS uses ad-hoc signing without notarization; Windows builds are unsigned. No GitHub Release is created automatically. See [packaging notes](docs/packaging.md) for verification and limitations.
+Download installers from [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest). Local packages are written to `release/`. In Actions → **Package Desktop** → **Run workflow**, select `all`, `mac` or `win`; select `all` with `publish` enabled to publish after verification. Pushing a `v*` tag matching `package.json` automatically builds and publishes. Replacing a release requires the explicit `replace_existing` input. macOS uses ad-hoc signing without notarization; Windows builds are unsigned. Welcome, Help/tray menus and the official version popover share application-level update checks using the Shell version. See [packaging notes](docs/packaging.md) for verification and limitations.
 
 ## Architecture and rights
 

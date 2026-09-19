@@ -25,6 +25,7 @@ export function packagingPlan(lock, version, selection = 'all', ref = '') {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const lock = JSON.parse(readFileSync(new URL('../upstream.lock.json', import.meta.url), 'utf8'));
   const {version} = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  if (process.env.PACKAGE_PUBLISH === 'true' && !['', 'all'].includes(process.env.PACKAGE_PLATFORM ?? '')) throw new Error('Publishing requires both macOS and Windows packages');
   const outputs = packagingPlan(lock, version, process.env.PACKAGE_PLATFORM || 'all', process.env.GITHUB_REF || '');
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT,
     Object.entries(outputs).map(([name, value]) => `${name}=${value}\n`).join(''));

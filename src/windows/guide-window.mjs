@@ -6,6 +6,7 @@ import {GuideClones} from '../app/guide-clones.mjs';
 import {inspectGuideResource} from '../desktop-adapter/stable/guide-resources.mjs';
 import {guideWindowOptions} from '../desktop-adapter/stable/guide-window-options.mjs';
 import {GuideLayoutState} from './guide-layout-state.mjs';
+import {productVersion} from '../app/product.mjs';
 
 const creations = new Set();
 const draftCleanups = new Set();
@@ -25,7 +26,7 @@ export async function cancelGuideCreations() {
 }
 
 export async function createGuideWindow(electron, {repository, iconPath, locale, getLocale, recent, open, hidden = false, mode = 'welcome',
-  chooseDirectory, defaultDirectory, openNewProject, recentChanged = () => {}, getFailures = () => [], warning, forget, relocate,
+  chooseDirectory, defaultDirectory, openNewProject, recentChanged = () => {}, getFailures = () => [], warning, forget, relocate, updates,
   createClonePool = () => GuideClones.create(electron.app.getPath('userData'))}) {
   const {BrowserWindow, dialog} = electron;
   const html = join(repository, 'dist/guide/index.html');
@@ -80,10 +81,12 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
       window.setTitle(createOnly ? (locale === 'zh' ? '新建项目' : 'New Project')
         : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop'));
       ready.resolve();
-      return {locale, recent: recent.list(), failures: getFailures(), warning, version: '0.1.0', mode,
+      return {locale, recent: recent.list(), failures: getFailures(), warning, version: productVersion, mode,
+        updates: updates ? {label: updates.label(), busy: updates.busy} : undefined,
         chrome, sidebarWidth: layoutState.width(mode)};
     }
     if (action === 'sidebar-width') {layoutState.save(mode, value); return true}
+    if (action === 'check-for-updates' && updates) {await updates.checkNow(window); return true}
     if (action === 'resource-auth') return clonePool ? (await clonePool).authentication(value) : {requests: []};
     if (action === 'clone-state') return clonePool ? (await clonePool).snapshot() : [];
     if (action === 'clone-start' || action === 'clone-cancel' || action === 'clone-retain') {

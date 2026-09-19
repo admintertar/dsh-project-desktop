@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {createProjectInDirectory} from '../src/app/project-files.mjs';
+import {productVersion} from '../src/app/product.mjs';
 
 /** A local installation diagnostic. All fixtures live in a new, launcher-owned temporary directory. */
 export async function verifyInstallation({electron, open, close, workspace, showGuide, userData}) {
@@ -10,10 +11,12 @@ export async function verifyInstallation({electron, open, close, workspace, show
   await guide.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   const text = await guide.webContents.executeJavaScript('document.body.innerText');
   assert.match(text, /最近项目|Recent projects/);
+  assert.ok(await guide.webContents.executeJavaScript('Boolean(document.querySelector("[data-check-updates]"))'));
   const paths = await Promise.all(['First', 'Second'].map(name => {const path = join(userData, name); mkdirSync(path); return createProjectInDirectory(path)}));
   const [first, second] = await Promise.all(paths.map(open));
   assert.ok(first && second, 'Packaged projects did not open: ' + JSON.stringify(workspace.failures()));
   assert.notEqual(first.host.result.pid, second.host.result.pid);
+  assert.equal(new URL(first.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
   assert.equal(first.host.result.harnessVersion, '0.1.5-rc.2');
   assert.equal((await first.host.request('/api/project/snapshot')).status, 200);
   assert.equal((await second.host.request('/api/project/snapshot')).status, 200);

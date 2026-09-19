@@ -12,7 +12,15 @@
 gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master -f platform=all
 ```
 
-推送 `v<package.json version>` 标签也会构建全部平台，例如版本为 `0.1.0` 时使用 `v0.1.0`。标签与版本不一致会直接拒绝；普通分支推送不自动打包。
+推送 `v<package.json version>` 标签会构建全部平台，并在全部验收通过后发布到 GitHub Releases。例如版本为 `0.1.1` 时提交版本与变更后执行 `git tag v0.1.1`、`git push origin v0.1.1`。轻量和附注标签都支持。标签与版本不一致会直接拒绝；普通分支推送不自动打包。
+
+手动发布选择 `platform=all`、`publish=true`。只有明确需要覆盖已有版本时才额外启用 `replace_existing=true`；它会移动同名版本标签到本次构建提交，旧 Release 保留为私有备份草稿。正常发布不启用此项，并递增 package.json 版本。
+
+```sh
+gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master -f platform=all -f publish=true
+```
+
+两平台产物、官方更新 UI 冒烟和 Intel DMG 验收必须全部成功才允许发布。发布 job 首先核对来源提交、干净源码、文件大小和 SHA-256；附件全部上传到候选草稿并验证 GitHub 摘要后才切换公开版本。失败不会发布半套安装包；重发切换失败会尝试恢复旧标签和旧公开 Release。并发发布串行处理，未显式开启覆盖时拒绝已有 Release。
 
 | 任务 | 原生 runner | 可下载产物 |
 | --- | --- | --- |
@@ -20,11 +28,11 @@ gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master 
 | Verify universal DMG on Intel | `macos-15-intel` | 校验并启动同一 DMG；结果见该任务日志 |
 | win-x64 | `windows-2022` | NSIS Setup.exe、便携 ZIP、SHA-256、验证结果 |
 
-运行成功后，在该次工作流页面底部 **Artifacts** 下载对应平台的压缩包，解压后取出安装文件。产物保留 14 天，内含构建提交、架构、签名类型与安装检查结果。不上传整个展开的运行时目录，也不自动创建 GitHub Release、npm 发布或应用更新。
+运行成功后，在该次工作流页面底部 **Artifacts** 下载对应平台的压缩包，解压后取出安装文件。产物保留 14 天，内含构建提交、架构、签名类型与安装检查结果。启用发布时，Release 长期保留安装文件和校验和；不上传整个展开的运行时目录或本机日志，不发布 npm 包。
 
 流程参考固定官方 Desktop 的 [CI](https://github.com/anywhere-labs/dsh-desktop/blob/01fa59e6688d82fa34b59fc507e3a6f5d695fa17/.github/workflows/ci.yml)：原生 runner、固定 Node 22.23.2、官方 Yarn immutable 安装、官方 Electron 原生依赖准备和无证书构建。只导入 stable；官方根工作区安装会准备其锁文件包含的其他 workspace，但不构建或验收 beta 产品。
 
-三个来源均按完整 commit 检出，不读取个人缓存、私有仓库或未提交文件。官方源码及锁文件不改写，完整性检查仍重算 source tree。随后执行 `npm run check`，覆盖构建、应用测试、恢复、安全模式和双 Host；最后打包并在开发目录外启动真实应用自检。安装检查失败时，该平台任务失败，不上传安装产物。工作流只有 `contents: read`，不要求签名或发布 secrets。
+三个来源均按完整 commit 检出，不读取个人缓存、私有仓库或未提交文件。官方源码及锁文件不改写，完整性检查仍重算 source tree。随后执行 `npm run check`，覆盖构建、应用测试、恢复、安全模式和双 Host；最后打包并在开发目录外启动真实应用自检。安装检查失败时，该平台任务失败，不上传安装产物。构建任务仅有 `contents: read`；发布任务单独授予 `contents: write`，使用 GitHub 自动提供的 token，不需要另配 PAT 或签名 secrets。
 
 macOS 使用 ad-hoc 签名且未公证；Windows 不做 Authenticode 签名。这些是测试安装包，不能视为已通过 Gatekeeper/SmartScreen 的正式签名发行。
 
@@ -59,7 +67,7 @@ npm run sign:mac -- "/path/to/DSH Project Desktop.app" "Developer ID Application
 
 正式模式启用 hardened runtime、JIT entitlement 和 Apple timestamp，按嵌套顺序签名；可选运行 notarytool 提交 ZIP、等待结果及 staple/validate。正式签名和公证尚未用真实证书验收。签名或 staple 后应重新生成分发 DMG 及校验和，不继续分发旧 ad-hoc 磁盘镜像。没有自动上传、发布或更新动作。
 
-正式发行仍需 Developer ID 实机验收、Gatekeeper/隔离下载验证、自有更新源及回滚策略。
+正式签名发行仍需 Developer ID 实机验收和 Gatekeeper/隔离下载验证。应用检查更新使用自有 GitHub Release，并保留固定运行时组合；同版本重发的旧安装包需要手动覆盖一次。
 
 ## 本地 Windows 安装包
 

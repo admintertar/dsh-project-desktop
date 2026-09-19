@@ -256,3 +256,32 @@ All jobs in the run succeeded. The macOS signature remained intact after launch
 on both architectures. Windows installer UI/upgrade/uninstall acceptance and
 Developer ID/notarization or Authenticode remain separate from these local unsigned
 distribution checks.
+
+## Application updates and automatic releases (0.1.0 republish)
+
+Local macOS x64 source acceptance passed: 63 application tests, 7 recovery tests,
+1 safe-mode test, immutable upstream verification, production builds and real
+dual-Host smoke. Update coverage exercises the official SemVer/lifecycle/downloader
+with the Shell release adapter: stable-only metadata and exact asset identities,
+ETag reuse, coalesced checks, persistent notification deduplication, both DMG/PE
+formats, and corrupt downloads preserving the existing destination. Publication
+tests cover candidate promotion, recoverable old releases, rollback, lost successful
+responses and annotated tags. Actionlint accepts the release workflow.
+
+The real Electron update smoke passed with ten official dialogs: welcome before
+any Host, offline failure, the official settings version popover, renderer IPC,
+English/Chinese and light/dark, Escape cancellation, Later, verified download and
+two unaffected project Hosts. The narrow 420px welcome retains its update action
+without horizontal overflow. Test release responses, save destination and OS
+installer handoff are substituted; the official rendered dialogs and their buttons
+are exercised. Synthetic future versions do not change the product's 0.1.0 version.
+The nine-phase native lifecycle smoke also passed: persisted project restoration,
+explicit closure, partial failure, safe-mode quit/relaunch and abandoned-state cleanup.
+
+CI repeats source and native update checks on Windows x64 and macOS arm64, then
+validates both packaged applications and the same Universal DMG on Intel. Release
+publication requires all jobs to pass and both clean build records to match the
+workflow commit, file sizes and SHA-256 values. Those pending CI results and local
+downloaded-package acceptance must be recorded separately from local source tests.
+Windows interactive installation/upgrade/uninstallation and trusted code signing
+remain outside this acceptance.

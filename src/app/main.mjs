@@ -17,6 +17,7 @@ import {prepareSafeMode, cleanupSafeMode} from '../desktop-adapter/stable/safe-m
 import {cancelGuideCreations, createGuideWindow} from '../windows/guide-window.mjs';
 import {assertProjectCreationReady} from './project-bootstrap.mjs';
 import {cleanupGuideClones} from './guide-clones.mjs';
+import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, dialog} = electron;
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -26,7 +27,8 @@ const smoke = process.argv.includes('--native-smoke') && !app.isPackaged;
 const lifecycleTest = process.argv.includes('--lifecycle-test') && !app.isPackaged;
 const profileRecoveryTest = process.argv.includes('--profile-recovery-test') && !app.isPackaged;
 const installationCheck = process.argv.includes('--verify-installation');
-const testing = smoke || lifecycleTest || profileRecoveryTest || installationCheck;
+const updateTest = process.argv.includes('--update-test') && !app.isPackaged;
+const testing = smoke || lifecycleTest || profileRecoveryTest || installationCheck || updateTest;
 app.setName('DSH Project Desktop');
 const userData = installationCheck ? mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))
   : testing ? resolve(process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA) : join(app.getPath('appData'), 'dsh-project-desktop');
@@ -37,7 +39,7 @@ else {void run().catch(error => {console.error(error); app.exit(1)})}
 
 async function run() {
   await cleanupGuideClones(userData);
-  let guide, guideOpening, projectCreate, projectCreateOpening, tray, quitting = false, quitReady = false, startupComplete = false;
+  let guide, guideOpening, projectCreate, projectCreateOpening, tray, updates, updateExit, quitting = false, quitReady = false, startupComplete = false;
   const startupFiles = process.argv.filter(value => value.endsWith('.agent-project'));
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
   const session = new SessionState(join(userData, 'workspace-session.json'));
@@ -90,7 +92,7 @@ async function run() {
     if (guide && !guide.isDestroyed()) {guide.show(); guide.focus(); return guide}
     if (guideOpening) return guideOpening;
     guideOpening = createGuideWindow(electron, {repository, iconPath: appIcon, locale: language(), getLocale: language,
-      recent, open, hidden: testing, defaultDirectory: app.getPath('documents'),
+      recent, open, updates, hidden: testing, defaultDirectory: app.getPath('documents'),
       openNewProject: showProjectCreate,
       recentChanged: refreshMenus,
       getFailures: () => workspace.failures().filter(item => !surfaces.has(item.path) && !projects.has(item.path)),
@@ -112,7 +114,7 @@ async function run() {
     if (projectCreate && !projectCreate.isDestroyed()) {projectCreate.show(); projectCreate.focus(); return projectCreate}
     if (projectCreateOpening) return projectCreateOpening;
     projectCreateOpening = createGuideWindow(electron, {repository, iconPath: appIcon, locale: language(), getLocale: language,
-      recent, open: target => open(target, {showWelcomeOnError: false}), hidden: testing, mode: 'create', defaultDirectory: app.getPath('documents'),
+      recent, open: target => open(target, {showWelcomeOnError: false}), updates, hidden: testing, mode: 'create', defaultDirectory: app.getPath('documents'),
       recentChanged: refreshMenus,
     }).then(window => {
       projectCreate = window;
@@ -228,6 +230,7 @@ async function run() {
         value = await openNativeProject(electron, {...state, projectRoot: dirname(manifest), ...temporary,
           title: safeMode ? `${title} — ${language() === 'zh' ? '安全模式' : 'Safe Mode'}` : title,
           locale: language(), hidden: testing, onMenuChanged: refreshMenus, onError: report,
+          checkForUpdates: window => updates.checkNow(window),
           onWarning: error => console.error('Project checkpoint:', error),
           windowState: session.window(manifest), saveWindowState: safeMode ? undefined : bounds => session.saveWindow(manifest, bounds),
           onFocus: () => session.focus(manifest),
@@ -301,12 +304,16 @@ async function run() {
         }, {enabled: Boolean(current)}),
         command(zh ? '项目恢复…' : 'Project Recovery…', () => active()?.recover(), {enabled: Boolean(current)})]},
       roles.window,
+      {label: zh ? '帮助' : 'Help', submenu: [command(updates?.label() ?? (zh ? '检查更新…' : 'Check for Updates…'),
+        () => updates?.checkNow(BrowserWindow.getFocusedWindow()), {enabled: Boolean(updates) && !updates.busy})]},
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
     tray?.setContextMenu(Menu.buildFromTemplate([
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '显示应用' : 'Show App', showApplication),
-      command(zh ? '欢迎窗口' : 'Welcome Window', showGuide), {role: 'quit', label: zh ? '退出' : 'Quit'},
+      command(zh ? '欢迎窗口' : 'Welcome Window', showGuide),
+      command(updates?.label() ?? (zh ? '检查更新…' : 'Check for Updates…'), () => updates?.checkNow(), {enabled: Boolean(updates) && !updates.busy}),
+      {role: 'quit', label: zh ? '退出' : 'Quit'},
     ]));
   }
   app.on('open-file', (event, path) => {event.preventDefault(); if (startupComplete) perform(() => open(path)); else startupFiles.push(path)});
@@ -321,17 +328,35 @@ async function run() {
   app.on('before-quit', event => {
     if (quitReady) return;
     event.preventDefault(); if (quitting) return; quitting = true;
+    updates?.prepareToQuit();
+    let stopped = false;
     void cancelGuideCreations().then(async () => {
       await Promise.all([...surfaces.keys()].map(dismissSurface));
       for (const temporary of preparedSafeModes.values()) temporary.cleanup();
       preparedSafeModes.clear();
       await workspace.shutdown();
-    }).then(() => {quitReady = true; tray?.destroy(); app.exit(process.exitCode ?? 0)}).catch(error => {
-      quitting = false; report(error); perform(showGuide);
+      stopped = true;
+      await updateExit?.launch();
+      await updates?.dispose();
+    }).then(() => {quitReady = true; tray?.destroy(); app.exit(process.exitCode ?? 0)}).catch(async error => {
+      quitting = false;
+      const failedInstall = updateExit; updateExit = undefined;
+      if (stopped) await workspace.resumeAfterShutdown().catch(report);
+      updates?.resumeAfterQuit();
+      if (failedInstall) {failedInstall.reject(error); void updates.showFailure()} else report(error);
+      perform(showGuide);
     });
   });
   await app.whenReady();
   lastLocale = app.getLocale().startsWith('zh') ? 'zh' : 'en';
+  const updateFixtures = updateTest ? await import('../../scripts/native-update-fixture.mjs') : undefined;
+  updates = await createProjectUpdates(electron, {userData, locale: language,
+    getWindow: () => {const focused = BrowserWindow.getFocusedWindow(); return focused?.getParentWindow() ?? focused ?? active()?.window ?? guide},
+    changed: () => {refreshMenus(); for (const window of [guide, projectCreate]) if (window && !window.isDestroyed()) window.webContents.send('project-desktop:state-changed')},
+    policy: {enabled: !testing},
+    install: launch => new Promise((resolve, reject) => {updateExit = {launch, resolve, reject}; app.quit()}),
+    ...(updateFixtures ? updateFixtures.options : {}),
+  });
   // Single-instance ownership is held and no Host has started. Remove only disposable trees.
   const stateRoot = join(userData, 'projects');
   if (existsSync(stateRoot)) for (const entry of readdirSync(stateRoot, {withFileTypes: true})) {
@@ -347,6 +372,13 @@ async function run() {
   tray = new Tray(icon); tray.setToolTip('DSH Project Desktop');
   tray.on('click', () => perform(showApplication));
   refreshMenus();
+  if (updateTest) {
+    startupComplete = true;
+    try {await (await import('../../scripts/native-update-case.mjs')).runUpdateCase({electron, open, close, showGuide, updates, userData, workspace, fixture: updateFixtures})}
+    catch (error) {console.error(error); process.exitCode = 1}
+    finally {app.quit()}
+    return;
+  }
   if (profileRecoveryTest) {
     startupComplete = true;
     try {await (await import('../../scripts/native-profile-recovery-case.mjs')).runProfileRecoveryCase({electron, open, close,
@@ -378,6 +410,7 @@ async function run() {
   while (startupFiles.length) await Promise.allSettled(startupFiles.splice(0).map(open));
   startupComplete = true;
   if ((!projects.size && !surfaces.size) || workspace.failures().some(item => !surfaces.has(item.path))) await showGuide();
+  if (!testing) void updates.offerCleanup();
   if (lifecycleTest) {
     try {await (await import('../../scripts/native-lifecycle-case.mjs')).runLifecycleCase({electron, open, close, showGuide, dismissSurface,
       projects, userData, workspace, session, hasGuide: () => Boolean(guide)});}

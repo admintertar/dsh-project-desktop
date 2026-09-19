@@ -19,7 +19,7 @@
 
 当前是早期开发版本，只支持 `stable` 通道：Desktop **2.0.11**、Harness **0.1.5-rc.2**，插件提交由 [upstream.lock.json](upstream.lock.json) 固定。stable 表示发行通道，不是长期 API 稳定承诺。
 
-当前本地原生验收基线为 **macOS x64**。GitHub Actions 生成同时支持 Intel / Apple Silicon 的 macOS Universal DMG，以及 Windows x64 安装包；同一 DMG 分别在两种 Mac 架构启动自检，各平台状态以对应任务结果为准。Linux、正式签名发行与自动更新尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
+当前本地原生验收基线为 **macOS x64**。GitHub Actions 生成同时支持 Intel / Apple Silicon 的 macOS Universal DMG，以及 Windows x64 安装包；同一 DMG 分别在两种 Mac 架构启动自检，各平台状态以对应任务结果为准。应用支持后台检查自有 Release、确认后下载并校验安装包。Linux、正式签名发行与静默安装尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
 
 ## 开发准备
 
@@ -67,7 +67,7 @@ npm run package:mac
 npm run package:win
 ```
 
-本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；成功后从该次运行的 Artifacts 下载 DMG / Windows 安装程序与便携 ZIP。推送与 `package.json` 版本一致的 `v*` 标签也会触发打包。macOS 使用 ad-hoc 签名、未公证，Windows 未签名；不自动创建 Release。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。
+安装包可从 [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest) 下载。本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；选择 `all` 并启用 `publish` 可在验收后发布。推送与 `package.json` 版本一致的 `v*` 标签会自动打包并发布；覆盖已有版本必须显式启用 `replace_existing`。macOS 使用 ad-hoc 签名、未公证，Windows 未签名。应用更新以 Shell 版本为准，欢迎页、帮助/托盘菜单和官方版本浮层共用检查入口。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。
 
 ## 架构与权利
 

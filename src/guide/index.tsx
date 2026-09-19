@@ -14,7 +14,7 @@ import {GuideFrame} from '../desktop-adapter/stable/GuideFrame';
 
 const copy = {
   zh: {title: '项目', body: '会话、资料、记忆和任务，都从这里开始。', resizeSidebar: '调整侧栏宽度',
-    opening: '打开中…', creating: '创建中…', openingRecent: '正在打开…', preparing: '正在准备新项目…',
+    opening: '打开中…', creating: '创建中…', openingRecent: '正在打开…', preparing: '正在准备新项目…', checkUpdates: '检查更新', checkingUpdates: '正在检查更新…',
     creatingDetail: '正在创建项目文件和本地仓库…', openingDetail: '正在打开项目窗口…',
     roleBackend: '服务端', roleWeb: 'Web 前端', roleMiniapp: '小程序', roleApp: '移动端', roleAdmin: '管理后台', roleDesktop: '桌面端',
     linkResource: '关联资源', resourceSource: '资源来源', sourceRemote: '远程仓库', sourceLocal: '本地文件夹', unlinkResource: '取消关联', editRemote: '编辑仓库地址和分支', editLocal: '更换本地文件夹',
@@ -32,7 +32,7 @@ const copy = {
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
     unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。'},
   en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.', resizeSidebar: 'Resize sidebar',
-    opening: 'Opening…', creating: 'Creating…', openingRecent: 'Opening…', preparing: 'Preparing a new project…',
+    opening: 'Opening…', creating: 'Creating…', openingRecent: 'Opening…', preparing: 'Preparing a new project…', checkUpdates: 'Check for updates', checkingUpdates: 'Checking for updates…',
     creatingDetail: 'Creating project files and local repositories…', openingDetail: 'Opening the project window…',
     roleBackend: 'Backend', roleWeb: 'Web frontend', roleMiniapp: 'Mini program', roleApp: 'Mobile app', roleAdmin: 'Admin panel', roleDesktop: 'Desktop app',
     linkResource: 'Link resource', resourceSource: 'Resource source', sourceRemote: 'Remote repository', sourceLocal: 'Local folder', unlinkResource: 'Unlink resource', editRemote: 'Edit repository URL and branch', editLocal: 'Change local folder',
@@ -191,6 +191,7 @@ function Guide() {
   const [query, setQuery] = useState('');
   const [warning, setWarning] = useState('');
   const [version, setVersion] = useState('');
+  const [updates, setUpdates] = useState<{label: string; busy: boolean}>();
   const [frameState, setFrameState] = useState<any>();
   const [details, setDetails] = useState<string>();
   const [selection, setSelection] = useState<any>();
@@ -214,6 +215,7 @@ function Guide() {
   const t = Object.fromEntries(Object.keys(copy.en).map(key => [key, translate(key)]));
   async function refresh() {const state = await api.invoke('state');
     setLocale(state.locale); setRecent(state.recent); setFailures(state.failures ?? []); setWarning(state.warning ?? ''); setVersion(state.version);
+    setUpdates(state.updates);
     setFrameState({chrome: state.chrome, sidebarWidth: state.sidebarWidth});
     document.documentElement.lang = state.locale;
   }
@@ -388,7 +390,9 @@ function Guide() {
         <GuideActionButton variant="primary" label={selection.existing ? t.existing : t.create} phase={actionPhase('confirm')}
           allowCreate={!selection.existing} t={t} disabled={busy || (!selection.existing && (!projectName.trim() || !selection.directory.trim() || !resourcesReady))}
           onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}/></>
-        : <p className="guideWelcomeHint" role="status">{progressText || t.footer}</p>}</footer>
+        : <><p className="guideWelcomeHint" role="status">{progressText || t.footer}</p>
+          {updates && <Button variant="outline" data-check-updates disabled={updates.busy} title={updates.label}
+            onClick={() => {void api.invoke('check-for-updates').catch((e: Error) => setError(e.message))}}>{updates.busy ? t.checkingUpdates : t.checkUpdates}</Button>}</>}</footer>
     </div>
   </GuideFrame>;
 }

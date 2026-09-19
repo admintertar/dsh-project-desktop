@@ -2,6 +2,8 @@ import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Button, Menu, Modal, Switch, IconChevronDownOutline14} from '@deepseek-ai/dsh-client-ui-primitives';
 import {createDesktopSettingsApi} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/desktop-settings-api.ts';
 import {DesktopTerminalSettingsAction} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/DesktopTerminalSettingsAction.tsx';
+import {DesktopVersionControl} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/DesktopFrameTitlebarView.tsx';
+import {installExtendedStyles} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/extended-styles.ts';
 import {en as desktopActionsEn, zh as desktopActionsZh} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/desktop-settings-locales.ts';
 import {installDesktopSettingsStyles} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/desktop-settings-styles.ts';
 import './settings.css';
@@ -108,6 +110,11 @@ export function applyProjectSettings(ctx: any, environment: any) {
   // dismissal, keyboard handling and restart order stay aligned with upstream.
   ctx.effect(() => ctx.locale.register('desktop.settings', {zh: desktopActionsZh, en: desktopActionsEn}), 'project-desktop: native action copy');
   ctx.effect(() => installDesktopSettingsStyles(), 'project-desktop: native action styles');
+  // The official version popover lives in the framed-shell stylesheet. Its
+  // frame layout rules are mode-scoped and do not change our advanced frame.
+  ctx.effect(() => installExtendedStyles(), 'project-desktop: official version popover styles');
+  ctx.slots.inject('settings.action', () => ctx.slots.register({name: 'settings.action', id: 'project-desktop-version', order: 0,
+    locale: 'desktop.settings', inject: () => ({version: environment.version, checkForUpdates: api.checkForUpdates})}, DesktopVersionControl));
   ctx.slots.inject('settings.action', () => ctx.slots.register({name: 'settings.action', id: 'project-desktop-native-actions', order: 1,
     locale: 'desktop.settings', inject: () => ({api})}, DesktopTerminalSettingsAction));
   // SettingsRoot in pinned ui-settings-general maps the official `desktop` id to its monitor icon.

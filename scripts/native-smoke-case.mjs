@@ -5,6 +5,7 @@ import {createProjectInDirectory} from '../src/app/project-files.mjs';
 import {checkGuide, checkProjectCreateEntryPoints} from './native-guide-checks.mjs';
 import {checkGuideRemote} from './native-guide-remote-checks.mjs';
 import {checkGuideAdd} from './native-guide-add-checks.mjs';
+import {productVersion} from '../src/app/product.mjs';
 
 export async function runNativeSmoke({electron, open, close, showGuide, theme, userData, repository, workspace, session}) {
   const guide = await showGuide();
@@ -49,8 +50,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
     assert.doesNotMatch(inspection.text, /内测声明|Internal Testing|Add an API key to get started/);
     await project.window.webContents.executeJavaScript(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
     writeFileSync(join(userData, `${project.window.getTitle()}.png`), (await project.window.webContents.capturePage()).toPNG());
-    const blocked = await project.window.webContents.executeJavaScript(`window.dshDesktopActions.invoke('check-for-updates').then(() => false, () => true)`);
-    assert.equal(blocked, true);
+    assert.equal(new URL(project.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
   }
   await alpha.host.selectTheme('dark');
   const deadline = Date.now() + 5000;
@@ -111,7 +111,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
       'guide-remote-modal-validation-and-layout', 'guide-private-https-authentication-and-branch', 'guide-reuses-completed-clone',
       'guide-add-resource-local-inspection-and-git-import', 'guide-add-resource-cancel-validation-and-responsive-layout',
       'two-native-project-windows', 'separate-chromium-sessions', 'sandboxed-preload', 'native-menu-locale', 'official-model-settings-without-onboarding',
-      'healthy-official-advanced-and-project-client', 'blocked-official-updates', 'shared-native-theme', 'native-close-reopen-isolation', 'last-project-restart',
+      'healthy-official-advanced-and-project-client', 'shell-product-version', 'shared-native-theme', 'native-close-reopen-isolation', 'last-project-restart',
       'welcome-search-stable-layout', 'native-desktop-settings', 'native-settings-header-actions', 'native-project-market-settings', 'renderer-crash-isolation', 'host-crash-isolation', 'checkpoint-restore-ui', 'diagnostic-zip',
       'all-native-menu-roles-zh-en', 'native-restart-confirmation', 'safe-mode-with-broken-normal-settings', 'safe-mode-no-project-plugin', 'safe-mode-session-and-cleanup', 'safe-mode-normal-reopen'],
     evidence: userData};

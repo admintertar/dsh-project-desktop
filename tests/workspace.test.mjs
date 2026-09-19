@@ -107,6 +107,18 @@ test('failed application quit allows close retry and new work without losing the
   assert.deepEqual(session.list().map(item => item.path), [b]);
 });
 
+test('an installer launch failure can resume every saved project after a successful shutdown', async () => {
+  const {workspace, session} = fixture();
+  const first = await workspace.open(a); await workspace.open(b);
+  await workspace.shutdown();
+  assert.equal(workspace.projects.size, 0);
+  await workspace.resumeAfterShutdown();
+  assert.deepEqual([...workspace.projects.keys()].sort(), [a, b]);
+  assert.notEqual(workspace.projects.get(a), first);
+  assert.deepEqual(session.list().map(item => item.phase), ['open', 'open']);
+  await workspace.shutdown();
+});
+
 test('unreadable window records are preserved and do not prevent the welcome page', () => {
   const {root, file} = fixture(); writeFileSync(file, 'broken json');
   const state = new SessionState(file); assert.equal(state.warning, 'session-unreadable');

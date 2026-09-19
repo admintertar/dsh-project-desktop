@@ -8,6 +8,14 @@ on:
         type: choice
         default: all
         options: [all, mac, win]
+      publish:
+        description: Publish verified macOS and Windows assets to GitHub Releases (requires all)
+        type: boolean
+        default: false
+      replace_existing:
+        description: Replace an existing release and move its tag to this build (explicit republish only)
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 
@@ -44,6 +52,7 @@ jobs:
         id: pins
         env:
           PACKAGE_PLATFORM: ${{ inputs.platform || 'all' }}
+          PACKAGE_PUBLISH: ${{ inputs.publish || startsWith(github.ref, 'refs/tags/v') }}
         run: node scripts/ci-plan.mjs
 
   package:
@@ -123,6 +132,8 @@ jobs:
             --project-dependencies .cache/ci-sources/project/node_modules
       - name: Build and run source, recovery, safe-mode and two-Host checks
         run: npm run check
+      - name: Verify official update UI and application-level coordination
+        run: npm run smoke:updates
       - name: Package and launch the relocated installed application
         env:
           PACKAGE_SCRIPT: ${{ matrix.script }}
@@ -166,3 +177,32 @@ jobs:
           test -n "$dmg"
           (cd "$(dirname "$dmg")" && shasum -a 256 -c "$(basename "$dmg").sha256")
           node scripts/verify-mac-package.mjs "$dmg"
+
+  publish:
+    name: Publish verified release
+    needs: [plan, package, verify-mac-intel]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.package.result == 'success' && needs.verify-mac-intel.result == 'success' && (inputs.publish || startsWith(github.ref, 'refs/tags/v')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: project-desktop-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-project-desktop-*-${{ github.sha }}
+          path: .cache/release-download
+      - name: Verify every asset, stage a draft, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPLACE_EXISTING: ${{ inputs.replace_existing || false }}
+        run: node scripts/publish-release.mjs .cache/release-download

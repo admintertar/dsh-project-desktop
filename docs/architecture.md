@@ -95,13 +95,15 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `window-material`、`client/layout-state`、`client/styles`，私有 `AdvancedFrame.ResizeHandle` 最小适配 | 欢迎／新建窗口的官方玻璃、内嵌标题栏、双栏拖拽和紧凑布局；固定版本升级时检查适配 |
 | `tray-locale` 的 `desktopRestartConfirmationCopy` | 原生重启／恢复警告文案，按当前项目语言与操作范围适配 |
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
+| `update-lifecycle`、`update-checker`、`update-download`、`native-dialog-copy` | 主进程仅创建一个官方更新生命周期。通过 request 适配自有 GitHub Release，保留官方版本比较、检查合并、通知去重、临时下载/原子替换及安装包清理。私有 ElectronRuntime 提示和平台交接在 `project-updates.mjs` 最小适配为自有品牌、动态所属窗口和全项目退出；上游源码及 bundle 不改写 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
 | `profile-checkpoint`、`startup-recovery-controller` | 健康配置检查点、预览与确认 token、恢复校验，不调用官方应用级重启 |
 | `startup-recovery-window`、`profile-selection-window`、`profile-create-window` 及其 native-ui 页面 | 完整复用官方恢复／选择／创建界面与交互，回调限定当前项目；仅补生命周期归属 |
 | `recovery-plugin-uninstall` | 在确认 Host 停止后通过官方 CLI 移除当前 Profile 的第三方依赖 |
 | `profile-materializer`、`mask-secrets` | 恢复后的依赖重建，以及展示启动错误时的脱敏 |
 | `safe-mode` 的 paths/reset/cleanup | 临时环境路径及清理；不使用官方 compatibility 默认组合或应用启动 |
-| Desktop client 的 `desktop-settings-api`、`DesktopTerminalSettingsAction`、locale 与 settings styles | 原生 preload 动作协议及设置页头正式操作组件；只使用终端、诊断及单项目重新加载/重启/恢复方法 |
+| Desktop client 的 `desktop-settings-api`、`DesktopTerminalSettingsAction`、locale 与 settings styles | 原生 preload 动作协议及设置页头正式操作组件；终端、诊断及单项目重新加载/重启/恢复方法 |
+| Desktop client 的 `DesktopVersionControl` 与 `installExtendedStyles` | 设置页头直接复用官方版本浮层及完整样式，显示 Shell 版本并调用应用级更新服务；原样式中的框架规则按模式限定，不改变 advanced 布局 |
 | Desktop client 的 advanced/window/boot-health/footer 模块 | 复用原始框架、主题、侧栏及生命周期 |
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |
@@ -115,6 +117,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 - 自己的创建项目引导取代官方首次向导；不写伪造的 completed/skipped 标记。
 - 官方 `desktop-updates` 从 Host 组合中关闭，不检查或安装官方应用更新。
+- 应用级更新由 Shell 主进程的 `createProjectUpdates` 管理，与项目、Profile、欢迎或恢复窗口是否存活无关。`product.mjs` 从应用 package.json 提供唯一产品版本；上游锁文件只承担运行时兼容性校验。原生入口调用同一个服务，状态写入应用 userData/updates，不写入项目目录。
 - 官方 `desktop-profiles` 的应用级 Host 菜单条目禁用；主进程使用项目范围的官方 Profile 窗口／管理函数，DesktopSettingsController 和应用设置页面不实例化。
 - 不实例化官方全局 Market Controller 或 Profile 管理器；市场 provider 从项目设置读取，在该项目启动前交给官方 Profile 组合。只读 Profile 身份仅用于让市场绑定当前项目并选择 `desktopPnpm` 包操作通道。
 - fixed advanced、随机 loopback 端口、禁止 ordinary browser/LAN，由正式 settings schema 校验；非法变更在持久化前被拒绝。
@@ -124,6 +127,12 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 GitHub Actions 的 `Package Desktop` 工作流按锁定提交从公开仓库准备依赖，在 Apple Silicon runner 生成 Universal DMG，分别在 arm64 和 Intel runner 启动同一产物；Windows x64 runner 生成 NSIS 与 ZIP。两平台共用独立 staging、生产依赖收集、许可保留与链接边界审计，选中的依赖文件实体化，安装包不回链构建目录。源码构建使用平台无关的路径判断；运行时 Profile 在 Windows 使用目录 junction，安全模式按不区分大小写的允许列表保留系统环境。各平台安装自检均在开发目录外启动打包应用，实际验收以对应 job 为准；产物、触发方式和签名限制见 [打包说明](packaging.md)。
 
 ## 升级策略
+
+打包版默认启动 60 秒后、此后每 6 小时检查自有 GitHub Releases 的 latest；只接受正式稳定标签及当前平台已上传的安装包和校验文件。后台失败不打扰工作，同一版本只通知一次；手动检查复用官方确认、最新版本和失败窗口。GitHub ETag 只复用已经校验的元数据；下载重新解析目标标签，以该版本的附件大小和 SHA-256 校验流，失败不得替换已有文件。没有访问官方更新服务器，也不向 GitHub 传递安装标识、认证令牌或上游专用请求头。
+
+macOS 下载后打开 Universal DMG，用户替换应用；Windows 确认安装后先正常停止全部项目 Host，再启动可见 NSIS 安装器并退出。保留项目恢复集合；安装器启动失败则恢复项目并显示官方错误窗口。退出中止未完成下载，升级成功后沿用官方安装包保留/删除确认。便携 ZIP 在发布页面保留手动替换入口，暂不实现静默安装。
+
+发布由 CI 在 Mac/Windows 打包、原生更新弹窗和同一 DMG 的 Intel 验收完成后执行。先上传并验证私有候选草稿；显式重发同版本时，旧版转为可恢复草稿，随后移动标签并公开候选。切换失败会尝试恢复旧标签和旧公开版。一般发布递增版本，`replace_existing` 仅供明确要求的重发；同版本的新旧包不会互相提示升级。
 
 显式选择配套的 Desktop/Harness 版本，更新锁文件，在独立分支运行源码完整性、依赖版本、双 Host 与图形验收。验证通过才改变开发/发行基线。保留上一个锁定组合，不自动追踪最新版本。
 
