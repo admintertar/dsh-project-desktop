@@ -20,3 +20,18 @@ test('native IPC rejects subframes and other documents, external launches reject
   assert.equal(trustedSender({sender: contents, senderFrame: mainFrame}, contents, 'file:///guide/index.html', true), false);
   for (const value of ['file:///etc/passwd', 'javascript:alert(1)', 'https://user:pass@example.com']) assert.equal(externalUrl(value), undefined);
 });
+
+test('local guide IPC accepts equivalent file encoding without accepting other files, queries or frames', () => {
+  const expected = 'file:///C:/Users/RUNNER%7E1/DSH%20Project/dist/guide/index.html?mode=create';
+  const mainFrame = {url: expected.replace('%7E', '~')};
+  const contents = {mainFrame, isDestroyed: () => false};
+  const event = {sender: contents, senderFrame: mainFrame};
+  assert.equal(trustedSender(event, contents, expected, true), true);
+  assert.equal(trustedSender({...event, senderFrame: {...mainFrame}}, contents, expected, true), false);
+  for (const url of [expected.replace('index.html', 'other.html'), expected.replace('mode=create', 'mode=welcome'),
+    expected + '#other', expected.replace('%7E', '%257E'), expected.replace('file:', 'https:'),
+    expected.replace('guide/index', 'guide%2Findex')]) {
+    mainFrame.url = url;
+    assert.equal(trustedSender(event, contents, expected, true), false, url);
+  }
+});

@@ -201,11 +201,29 @@ that same artifact on Intel, alongside the Windows x64 package job. It reuses th
 pinned official dependency collector, package file filters, paired native-module
 preparation and Universal merge rules. DMGs use the builder's HFS+ compressed target.
 
-Local source checks passed with 51 application tests, 7 recovery tests, 1 safe-mode
+Local source checks passed with 53 application tests, 7 recovery tests, 1 safe-mode
 test, source integrity and dual-Host smoke. The dependency fixture covers nested
 versions, installed/missing optional dependencies, required-dependency failure,
 licenses, development-tool exclusion and both native prebuilds without host build
-outputs. Actionlint accepted the updated workflow.
+outputs. Universal merge matching is checked against the official paired-native
+inventory inside the Shell's hidden runtime directory; unlisted binaries and
+host-only build outputs remain excluded from that exception. Actionlint accepted
+the updated workflow. A clean checkout imported the standalone DMG verifier without
+installing development dependencies, matching the Intel verification job.
+
+Native Windows checks exposed Git's long-path versus runner short-path aliases and
+the local HTTPS fixture's certificate backend. Git-root comparison now canonicalizes
+native paths. Only the Windows fixture selects Git's OpenSSL backend and its explicit
+test CA; certificate verification remains enabled. All Windows source, recovery,
+safe-mode and dual-Host checks passed after these changes. The Windows packager also
+uses the official pinned NSIS toolset required by its long-path-aware template.
+
+Installed Windows startup then exposed Node/Chromium's different encodings for
+`~` in local file URLs. A real Electron probe reproduced the difference on macOS
+as well. Local guide IPC now compares decoded file paths while retaining the
+owning main-frame, protocol, host, query and fragment checks; regression coverage
+rejects other files, frames, query modes and encoded separators. The Windows
+relocation check also uses the native canonical temporary-directory path.
 
 An isolated macOS x64 app with the production dependency payload passed the real
 installation diagnostic: welcome, two independent project Hosts, official Renderer,

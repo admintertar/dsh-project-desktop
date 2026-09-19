@@ -49,7 +49,7 @@ for (const name of ['package.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'THIRD_
   assert.ok(archive.getEntry('resources/app/' + name), `Portable ZIP is missing ${name}`);
 }
 // Run the actual archive contents after extraction, outside the checkout.
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-project-win-check-')));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-project-win-check-')));
 const relocated = join(root, product);
 archive.extractAllTo(relocated, false);
 assert.equal(existsSync(join(relocated, 'resources/app/.cache/runtime/dsh-plugin-desktop/lib/index.js')), true);

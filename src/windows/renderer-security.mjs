@@ -1,9 +1,16 @@
+import {fileURLToPath} from 'node:url';
+
 export function trustedSender(event, contents, expectedUrl, localFile = false) {
   if (contents.isDestroyed() || event.sender !== contents || event.senderFrame !== contents.mainFrame) return false;
   try {
     const actual = new URL(event.senderFrame.url);
     const expected = new URL(expectedUrl);
-    return localFile ? actual.href === expected.href : actual.origin === expected.origin;
+    if (!localFile) return actual.origin === expected.origin;
+    // Node's pathToFileURL escapes ~ while Chromium's loadFile preserves it
+    // (notably Windows RUNNER~1 paths). Compare the same file, not its encoding.
+    return actual.protocol === 'file:' && expected.protocol === 'file:'
+      && actual.host === expected.host && actual.search === expected.search && actual.hash === expected.hash
+      && fileURLToPath(actual) === fileURLToPath(expected);
   } catch {return false}
 }
 

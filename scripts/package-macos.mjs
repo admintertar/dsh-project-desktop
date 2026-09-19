@@ -48,7 +48,8 @@ const settings = {
   dmg: {format: 'UDZO', filesystem: 'HFS+', writeUpdateInfo: false,
     artifactName: 'DSH-Project-Desktop-${version}-mac-universal.dmg'},
 };
-await build({projectDir: appDirectory, targets: Platform.MAC.createTarget(['dir'], Arch.universal), publish: 'never', config: settings});
+// Builder normalizes arrays in place; each phase needs a fresh configuration.
+await build({projectDir: appDirectory, targets: Platform.MAC.createTarget(['dir'], Arch.universal), publish: 'never', config: structuredClone(settings)});
 const app = join(output, 'mac-universal', product + '.app');
 if (!existsSync(app)) throw new Error('Packager did not produce the expected app');
 const packagedDesktop = join(app, packagedMacRuntime);
@@ -61,7 +62,7 @@ const signed = await signMacApp(app, '-');
 // Reuse the official DMG target (HFS+, compressed conversion and Applications
 // entry), packaging the signed app without rebuilding or changing its contents.
 await build({projectDir: appDirectory, prepackaged: app, targets: Platform.MAC.createTarget(['dmg'], Arch.universal),
-  publish: 'never', config: settings});
+  publish: 'never', config: structuredClone(settings)});
 const dmg = join(output, `DSH-Project-Desktop-${manifest.version}-mac-universal.dmg`);
 const validation = await verifyMacDmg(dmg);
 recordPackage(prepared, {app: realpathSync(app), dmg, bytes: statSync(dmg).size, sha256: checksum(dmg),
