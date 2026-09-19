@@ -67,7 +67,7 @@ test('creates missing parent directories through an existing directory alias', a
     const manifest = await createProjectFromPlan({location, name: 'demo', templateId: 'empty'});
     const root = join(realpathSync(existing), 'AgentIDE', 'Nested projects', 'demo');
     assert.equal(manifest, join(root, 'demo.agent-project'));
-    assert.equal(git(['rev-parse', '--show-toplevel'], root), root);
+    assert.equal(realpathSync.native(git(['rev-parse', '--show-toplevel'], root)), realpathSync.native(root));
     assert.equal(readFileSync(join(existing, 'keep.txt'), 'utf8'), 'keep');
     assert.equal(await createProjectFromPlan({location, name: 'demo'}), manifest);
   } finally {f.cleanup()}
@@ -121,7 +121,7 @@ test('admin and desktop compositions create their intended independent resource 
       ]);
       for (const role of roles) {
         const resourceRoot = join(f.root, templateId, 'resources', `${templateId}-${role}`);
-        assert.equal(git(['rev-parse', '--show-toplevel'], resourceRoot), realpathSync(resourceRoot));
+        assert.equal(realpathSync.native(git(['rev-parse', '--show-toplevel'], resourceRoot)), realpathSync.native(resourceRoot));
         assert.match(readFileSync(join(resourceRoot, 'AGENT.md'), 'utf8'), new RegExp(`Resource role: ${role}\\.`));
       }
       if (templateId === 'desktop') assert.equal(existsSync(join(f.root, templateId, 'resources/desktop-backend')), false);
@@ -141,7 +141,7 @@ test('omitted resource paths default under resources while explicit destinations
       ['.', 'resources/Web UI', 'packages/custom']);
     for (const path of ['resources/Web UI', 'packages/custom']) {
       const target = join(root, path);
-      assert.equal(git(['rev-parse', '--show-toplevel'], target), realpathSync(target));
+      assert.equal(realpathSync.native(git(['rev-parse', '--show-toplevel'], target)), realpathSync.native(target));
       assert.equal(git(['check-ignore', path], root), path);
     }
     assert.equal(existsSync(join(root, 'Web UI')), false);

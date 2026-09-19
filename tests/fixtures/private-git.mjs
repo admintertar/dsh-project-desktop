@@ -1,13 +1,13 @@
 import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:https';
 import {once} from 'node:events';
-import {mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve, sep} from 'node:path';
 
 /** Real private HTTPS repository, local CA and fixed test-only credentials. No third-party services. */
 export async function privateGitFixture() {
-  const root = mkdtempSync(join(tmpdir(), 'guide-private-git-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'guide-private-git-')));
   const seed = join(root, 'seed'); mkdirSync(seed);
   const git = (args, cwd = seed) => execFileSync('git', args, {cwd, stdio: 'pipe', encoding: 'utf8'}).trim();
   git(['init', '--quiet', '--initial-branch=main']);
@@ -36,7 +36,11 @@ export async function privateGitFixture() {
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return {root, git, credential, get requests() {return requests}, url: `https://127.0.0.1:${server.address().port}/private.git`,
-    run: base => (args, cwd, options) => base(['-c', `http.sslCAInfo=${cert}`, ...(!options?.auth ? ['-c', 'credential.helper='] : []), ...args], cwd, options),
+    // Use Git for Windows' OpenSSL backend for this fixture's private CA,
+    // independent of the machine certificate store. Verification stays enabled.
+    run: base => (args, cwd, options) => base(['-c', `http.sslCAInfo=${cert}`,
+      ...(process.platform === 'win32' ? ['-c', 'http.sslBackend=openssl'] : []),
+      ...(!options?.auth ? ['-c', 'credential.helper='] : []), ...args], cwd, options),
     async close() {server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); rmSync(root, {recursive: true, force: true})}};
 }
 

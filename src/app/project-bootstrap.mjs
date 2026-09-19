@@ -141,8 +141,10 @@ function writeAtomic(path, content, mode = 0o600) {
 
 async function inspectGitRoot(path, runGit, signal) {
   try {
-    const root = realpathSync(await runGit(['rev-parse', '--show-toplevel'], path));
-    return root === realpathSync(path);
+    // Windows Git prints long paths while TEMP may use an 8.3 alias. Native
+    // realpath resolves both to the same filesystem identity.
+    const root = realpathSync.native(await runGit(['rev-parse', '--show-toplevel'], path));
+    return root === realpathSync.native(path);
   } catch {
     signal?.throwIfAborted();
     return false;
