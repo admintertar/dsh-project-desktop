@@ -19,7 +19,7 @@ An independent AI development desktop for projects spanning multiple repositorie
 
 Early development; only the `stable` channel is supported: Desktop **2.0.11** and Harness **0.1.5-rc.2**. The plugin revision is pinned in [upstream.lock.json](upstream.lock.json). Stable is a release channel, not a long-term API guarantee.
 
-The current native development and local packaging baseline is **macOS x64**. Windows, Linux and native Apple Silicon packages have not completed acceptance in this repository. Cross-platform releases and automatic updates are not yet provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
+The current local native acceptance baseline is **macOS x64**. GitHub Actions configures native packaging and installed-app checks for macOS x64 / arm64 and Windows x64; acceptance depends on each target's job result. Linux packages, formally signed releases and automatic updates are not provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
 
 ## Development setup
 
@@ -63,9 +63,11 @@ See [project directories and files](docs/project-directory-structure.md). Applic
 
 ```sh
 npm run package:mac
+# On Windows x64:
+npm run package:win
 ```
 
-Local macOS x64 packages are written to `release/`, using ad-hoc signing by default without Developer ID notarization. See [packaging notes](docs/packaging.md) for signing, installation checks and limitations. GitHub Actions release workflows are not yet provided.
+Local packages are written to `release/`. On GitHub, open Actions → **Package Desktop** → **Run workflow**, select `all`, `mac` or `win`, then download the DMG / Windows installer and portable ZIP from the successful run's Artifacts. Pushing a `v*` tag matching `package.json` also triggers packaging. macOS uses ad-hoc signing without notarization; Windows builds are unsigned. No GitHub Release is created automatically. See [packaging notes](docs/packaging.md) for verification and limitations.
 
 ## Architecture and rights
 

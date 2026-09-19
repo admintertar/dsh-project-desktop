@@ -26,10 +26,16 @@ official UI primitives, theme styles and LocaleRuntime. The source inventory
 and integration boundaries are documented in docs/architecture.md.
 
 Official source snapshots, dependencies and generated bundles are not committed.
-The build preserves Desktop's LICENSE in its generated runtime package. macOS
+The build preserves Desktop's LICENSE in its generated runtime package. Desktop
 packaging includes the Shell and plugin rights notices, package-level dependency
 licenses, Electron distribution notices, and the pinned Harness UI license under
 THIRD_PARTY_LICENSES/Harness.txt.
+
+The packaging workflow follows the pinned Desktop's native-runner CI and locked
+dependency preparation. Windows packaging directly imports its unsigned-build
+environment policy, Electron Builder traversal policy and PE validators from
+scripts/package-win.ts, scripts/electron-builder-environment.ts and
+scripts/verify-win-installer.ts; those source files remain unchanged.
 
 ## DSH Desktop license
 

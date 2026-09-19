@@ -1,6 +1,6 @@
 import {build} from 'esbuild';
 import {cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {basename, join} from 'node:path';
 import {repository, desktopSource, projectSource, runtimePackage, projectPackage, lock} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
@@ -67,7 +67,7 @@ const shellBuild = await build({...browser, ...envelope('dsh-project-shell'),
   entryPoints: [join(repository, 'src/desktop-adapter/stable/shell-client.ts')], outfile: join(shellPackage, 'client.js'), write: false});
 // Package the unchanged official Models page's CSS with our own client module.
 const shellCss = shellBuild.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
-for (const file of shellBuild.outputFiles) writeFileSync(file.path, file.path.endsWith('/client.js') ? file.text +
+for (const file of shellBuild.outputFiles) writeFileSync(file.path, basename(file.path) === 'client.js' ? file.text +
   `\n{const style=document.createElement('style');style.dataset.plugin='dsh-project-shell';style.textContent=${JSON.stringify(shellCss)};document.head.appendChild(style);}\n` : file.contents);
 // Helpers are compiled from the locked plugin, not copied into our source tree.
 await build({entryPoints: [join(projectSource, 'src/project-files.ts')], outfile: join(repository, 'dist/project-files.mjs'),

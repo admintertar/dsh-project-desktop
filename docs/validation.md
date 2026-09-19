@@ -176,3 +176,20 @@ ends. The actual scrollbar visibility and geometry assertions remain intact.
 
 Source snapshots, dependency caches, logs and runtime data remain ignored.
 No remote repository, release or package was created or published by these checks.
+# Packaging workflow validation
+
+The packaging workflow targets native macOS x64 / arm64 and Windows x64. Local
+validation on macOS x64 passed `npm run check`: 50 application tests, 7 recovery
+tests, 1 safe-mode test, source integrity, project-file checks and dual-Host smoke.
+Actionlint 1.7.12 accepted `.github/workflows/package.yml`.
+
+The shared staging and macOS packager produced an ad-hoc signed DMG, passed strict
+signature and disk-image verification, and launched the copied app outside the
+development checkout. The installed app passed welcome, two-project Host/Renderer,
+Chinese menu, safe-mode cleanup and close/reopen checks; its signature remained
+intact after launch. Tests used an isolated checkout and synthetic project data.
+
+Windows and macOS arm64 require their own successful Actions jobs; the local x64
+result does not certify them. Windows NSIS interactive installation, upgrades,
+uninstallation and Authenticode, plus macOS Developer ID/notarization and download
+quarantine behavior, remain separate acceptance work. See [packaging](packaging.md).

@@ -25,6 +25,7 @@
     "test:safe-mode": "node --test scripts/check-safe-mode.mjs",
     "test:recovery:network": "node scripts/check-network-recovery.mjs",
     "package:mac": "npm run build && node scripts/package-macos.mjs",
+    "package:win": "npm run build && node scripts/package-windows.mjs",
     "sign:mac": "node scripts/sign-macos.mjs",
     "smoke:host": "node scripts/smoke-host.mjs",
     "check": "npm run verify:upstream && npm run build && npm test && npm run test:recovery && npm run test:safe-mode && node scripts/check-project-files.mjs && npm run smoke:host"

@@ -88,8 +88,12 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 | `npm run smoke:resources` | Native resource status and remote-association checks |
 | `npm run smoke:lifecycle` | Native lifecycle and single-instance behavior |
 | `npm run test:recovery:network` | Network dependency recovery with an isolated test registry |
+| `npm run package:mac` | Native macOS x64 / arm64 DMG with ad-hoc signing and relocated-app verification |
+| `npm run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
 
 Automated checks use synthetic temporary projects and do not call models. Native
-checks are separate and require Electron. Current platform acceptance is macOS
-x64; other platforms and Developer ID signing require their own validation.
-No script automatically pushes source or publishes a release.
+checks are separate and require Electron. The local acceptance baseline is macOS
+x64; the packaging workflow runs each additional platform's own checks. Developer
+ID and Authenticode signing require separate validation. See [packaging](packaging.md)
+for manual/tag Actions triggers and artifact downloads. No script automatically
+pushes source or publishes a release.

@@ -1,0 +1,142 @@
+name: Package Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to build
+        type: choice
+        default: all
+        options: [all, mac, win]
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}-${{ inputs.platform || 'all' }}
+  cancel-in-progress: false
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pins.outputs.matrix }}
+      desktop_repository: ${{ steps.pins.outputs.desktop_repository }}
+      desktop_commit: ${{ steps.pins.outputs.desktop_commit }}
+      harness_repository: ${{ steps.pins.outputs.harness_repository }}
+      harness_commit: ${{ steps.pins.outputs.harness_commit }}
+      project_repository: ${{ steps.pins.outputs.project_repository }}
+      project_commit: ${{ steps.pins.outputs.project_commit }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - name: Resolve immutable source pins and target runners
+        id: pins
+        env:
+          PACKAGE_PLATFORM: ${{ inputs.platform || 'all' }}
+        run: node scripts/ci-plan.mjs
+
+  package:
+    needs: plan
+    name: Package ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - name: Prepare Git and Corepack
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+          git config --global core.symlinks true
+          corepack enable
+      # Like the pinned upstream CI, build on native runners and install from
+      # its unchanged Yarn lock/patches. Only the stable workspace is imported.
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.desktop_repository }}
+          ref: ${{ needs.plan.outputs.desktop_commit }}
+          path: .cache/ci-sources/desktop
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.harness_repository }}
+          ref: ${{ needs.plan.outputs.harness_commit }}
+          path: .cache/ci-sources/harness
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.project_repository }}
+          ref: ${{ needs.plan.outputs.project_commit }}
+          path: .cache/ci-sources/project
+          persist-credentials: false
+      - name: Resolve upstream Yarn download cache
+        id: yarn-cache
+        working-directory: .cache/ci-sources/desktop
+        run: echo "dir=$(corepack yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: desktop-yarn-${{ runner.os }}-${{ runner.arch }}-${{ needs.plan.outputs.desktop_commit }}
+      - name: Install official locked dependencies
+        working-directory: .cache/ci-sources/desktop
+        run: corepack yarn install --immutable
+      - name: Prepare official Electron and native bindings
+        working-directory: .cache/ci-sources/desktop/dsh-plugin-desktop
+        run: |
+          node node_modules/electron/install.js
+          corepack yarn prepare:electron-native
+      - name: Install pinned plugin build dependencies
+        working-directory: .cache/ci-sources/project
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install shell build dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Import verified stable snapshots and independent caches
+        run: |
+          npm run setup -- \
+            --desktop-source .cache/ci-sources/desktop \
+            --harness-source .cache/ci-sources/harness \
+            --project-source .cache/ci-sources/project \
+            --desktop-dependencies .cache/ci-sources/desktop/dsh-plugin-desktop/node_modules \
+            --project-dependencies .cache/ci-sources/project/node_modules
+      - name: Build and run source, recovery, safe-mode and two-Host checks
+        run: npm run check
+      - name: Package and launch the relocated installed application
+        env:
+          PACKAGE_SCRIPT: ${{ matrix.script }}
+        run: node "$PACKAGE_SCRIPT"
+      - name: Upload verified installers, checksums and result
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-project-desktop-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            release/*/*.dmg
+            release/*/*.exe
+            release/*/*.zip
+            release/*/*.sha256
+            release/*/package-result.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

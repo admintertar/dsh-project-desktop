@@ -137,5 +137,5 @@ function runtimeLink(source, target) {
   const stat = lstatSync(target, {throwIfNoEntry: false});
   if (stat && !stat.isSymbolicLink()) throw new Error(`Owned runtime link was replaced: ${target}`);
   if (stat) unlinkSync(target);
-  symlinkSync(source, target);
+  symlinkSync(source, target, process.platform === 'win32' ? 'junction' : 'dir');
 }

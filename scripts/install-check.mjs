@@ -18,7 +18,8 @@ export async function verifyInstallation({electron, open, close, workspace, show
   assert.equal((await second.host.request('/api/project/snapshot')).status, 200);
   await first.host.updateShellSettings('locale', {preference: 'zh'}); first.focus();
   await first.window.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 500))');
-  assert.ok(electron.Menu.getApplicationMenu().items[0].submenu.items.some(item => item.label === '退出 DSH Project Desktop'));
+  const fileMenu = electron.Menu.getApplicationMenu().items.find(item => item.label === '文件');
+  assert.ok(fileMenu?.submenu.items.some(item => item.label === '新建项目…'));
   writeFileSync(join(userData, 'packaged-project.png'), (await first.window.webContents.capturePage()).toPNG());
   const safe = await workspace.safeMode(paths[0]);
   assert.equal(safe.host.result.projectSessionVersion, null);
@@ -27,7 +28,7 @@ export async function verifyInstallation({electron, open, close, workspace, show
   await workspace.open(paths[0]);
   await Promise.all(paths.map(path => close(path)));
   const result = {ok: true, packaged: electron.app.isPackaged, name: electron.app.getName(),
-    appPath: electron.app.getAppPath(), electron: process.versions.electron, evidence: userData,
+    appPath: electron.app.getAppPath(), electron: process.versions.electron, platform: process.platform, arch: process.arch, evidence: userData,
     checks: ['packaged-welcome', 'two-packaged-project-hosts', 'official-renderer-health', 'chinese-native-menu', 'packaged-safe-mode', 'temporary-cleanup', 'normal-reopen']};
   writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2));
   console.log('INSTALLATION_CHECK=' + JSON.stringify(result));

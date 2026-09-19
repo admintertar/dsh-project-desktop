@@ -1,4 +1,4 @@
-import {constants, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
+import {constants, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, statSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
 import {dirname, join, relative, resolve, sep} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
@@ -58,8 +58,10 @@ function rehomeLinks(directory, from, to) {
       }
       const target = resolve(dirname(path), readlinkSync(path));
       if (target.startsWith(from + sep)) {
+        const type = statSync(path).isDirectory() ? (process.platform === 'win32' ? 'junction' : 'dir') : 'file';
+        const destination = join(to, relative(from, target));
         unlinkSync(path);
-        symlinkSync(relative(dirname(path), join(to, relative(from, target))), path);
+        symlinkSync(type === 'junction' ? destination : relative(dirname(path), destination), path, type);
       } else if (!target.startsWith(to + sep)) throw new Error(`Dependency cache has an external link: ${path}`);
     }
   }

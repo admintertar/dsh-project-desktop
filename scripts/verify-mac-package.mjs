@@ -1,10 +1,11 @@
-import {cpSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from 'node:fs';
+import {cpSync, mkdtempSync, readFileSync, realpathSync} from 'node:fs';
 import {basename, join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {spawn, execFileSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {repository} from '../src/desktop-adapter/paths.mjs';
+import {verifyPackagedLaunch} from './verify-packaged-launch.mjs';
 
 export async function verifyMacPackage(app) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-project-package-check-')));
@@ -15,22 +16,7 @@ export async function verifyMacPackage(app) {
   for (const asset of assets) assert.deepEqual(readFileSync(join(relocated, 'Contents/Resources/app/assets', asset)),
     readFileSync(join(repository, 'assets', asset)), `Packaged artwork differs: ${asset}`);
   const executable = join(relocated, 'Contents/MacOS/DSH Project Desktop');
-  const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE;
-  const log = await new Promise((resolve, reject) => {
-    const child = spawn(executable, ['--verify-installation'], {env, stdio: ['ignore', 'pipe', 'pipe']});
-    let output = '';
-    const record = data => {output += data.toString(); process.stdout.write(data)};
-    child.stdout.on('data', record); child.stderr.on('data', record);
-    const deadline = setTimeout(() => {child.kill('SIGTERM')}, 180000);
-    child.on('error', reject);
-    child.on('close', code => {clearTimeout(deadline); writeFileSync(join(root, 'launch.log'), output);
-      code === 0 ? resolve(output) : reject(new Error(`Relocated packaged launch failed (${code}); ${root}/launch.log`));
-    });
-  });
-  const line = log.split('\n').find(line => line.startsWith('INSTALLATION_CHECK='));
-  if (!line) throw new Error('Packaged application did not finish its installation check');
-  const result = JSON.parse(line.slice('INSTALLATION_CHECK='.length));
-  if (!result.ok || !result.appPath.startsWith(root + '/')) throw new Error('Installation check did not use the relocated bundle');
+  const result = await verifyPackagedLaunch(executable, root);
   execFileSync('codesign', ['--verify', '--deep', '--strict', relocated], {stdio: 'inherit'});
   const info = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', join(relocated, 'Contents/Info.plist')], {encoding: 'utf8'}));
   if (info.CFBundleName !== 'DSH Project Desktop') throw new Error('App bundle still has the development runner identity');

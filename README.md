@@ -19,7 +19,7 @@
 
 当前是早期开发版本，只支持 `stable` 通道：Desktop **2.0.11**、Harness **0.1.5-rc.2**，插件提交由 [upstream.lock.json](upstream.lock.json) 固定。stable 表示发行通道，不是长期 API 稳定承诺。
 
-当前原生开发和本地打包基线为 **macOS x64**。Windows、Linux 与 Apple Silicon 原生包尚未完成本仓库验收；没有正式跨平台发行或自动更新承诺。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
+当前本地原生验收基线为 **macOS x64**。GitHub Actions 配置了 macOS x64 / arm64 与 Windows x64 的原生打包及安装自检，各平台状态以对应任务结果为准；Linux、正式签名发行与自动更新尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
 
 ## 开发准备
 
@@ -63,9 +63,11 @@ npm start
 
 ```sh
 npm run package:mac
+# Windows x64 上运行：
+npm run package:win
 ```
 
-macOS x64 本地包输出到 `release/`。默认使用 ad-hoc 签名，未通过 Developer ID 公证。正式签名入口、安装验证及当前限制见 [打包说明](docs/packaging.md)。本仓库尚未提供 GitHub Actions 发布工作流。
+本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；成功后从该次运行的 Artifacts 下载 DMG / Windows 安装程序与便携 ZIP。推送与 `package.json` 版本一致的 `v*` 标签也会触发打包。macOS 使用 ad-hoc 签名、未公证，Windows 未签名；不自动创建 Release。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。
 
 ## 架构与权利
 

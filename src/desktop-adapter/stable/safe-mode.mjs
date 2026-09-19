@@ -22,7 +22,11 @@ export async function cleanupSafeMode(stateDirectory) {
 }
 
 /** Allow only process essentials. Do not inherit API keys, proxies, npm hooks or DSH overrides. */
-export function safeHostEnvironment(environment) {
+export function safeHostEnvironment(environment, platform = process.platform) {
   const names = ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'WINDIR', 'COMSPEC', 'LANG', 'LC_ALL'];
+  if (platform === 'win32') {
+    const allowed = new Set([...names, 'PATHEXT', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA'].map(name => name.toLowerCase()));
+    return Object.fromEntries(Object.entries(environment).filter(([name, value]) => allowed.has(name.toLowerCase()) && typeof value === 'string'));
+  }
   return Object.fromEntries(names.filter(name => typeof environment[name] === 'string').map(name => [name, environment[name]]));
 }
