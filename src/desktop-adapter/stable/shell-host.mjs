@@ -49,6 +49,24 @@ export function apply(ctx, config) {
   ctx.on('settings/updated', (namespace, next) => {
     if (namespace === 'locale') runtime.setLocalePreference(next.preference);
   });
+  // Adapt the official desktop-shell material watcher: save first, then ask the native runtime.
+  // A cancelled restart leaves settings saved; unrelated live settings must not reopen the prompt.
+  ctx.effect(() => {
+    let previous = material, pending;
+    const stop = ctx.on('settings/updated', (namespace, next) => {
+      if (namespace !== 'dsh-desktop') return;
+      const selected = effectiveDesktopWindowMaterial('advanced', runtime.platform, next.macosMaterial, next.windowsMaterial, runtime.windowsBuild);
+      if (selected === previous) return;
+      previous = selected;
+      if (pending) clearImmediate(pending);
+      pending = undefined;
+      if (selected !== material) pending = setImmediate(() => {
+        pending = undefined;
+        void runtime.requestRestart().catch(error => console.error('Project material restart:', error));
+      });
+    });
+    return () => {stop(); if (pending) clearImmediate(pending)};
+  }, 'project-desktop: confirm material restart');
   ctx.effect(() => runtime.schedule({...config, mode: 'advanced', material, url,
     authenticationUrl: ctx.connection.authenticatedUrl(new URL(url).origin),
     rendererAccessHeader: ctx.desktopBrowserAccess.rendererHeader,

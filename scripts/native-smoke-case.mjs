@@ -99,10 +99,11 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
   })`);
   writeFileSync(join(userData, 'Bravo-models-en-light.png'), (await bravo.window.webContents.capturePage()).toPNG());
   await (await import('./native-recovery-checks.mjs')).checkNativeRecovery({electron, open, showGuide, workspace, session, manifests, userData, bravo});
+  await (await import('./native-restart-checks.mjs')).checkNativeRestart({electron, workspace, manifests, userData, bravo});
   await (await import('./native-safe-checks.mjs')).checkNativeSafeMode({electron, workspace, session, manifests, userData, bravo});
   await theme.select('system');
   await close(manifests[0]);
-  const restarted = await bravo.restart();
+  const restarted = await workspace.restart(manifests[1]);
   assert.notEqual(restarted.host.result.pid, bravo.host.result.pid);
   assert.equal((await restarted.host.request('/api/project/snapshot')).status, 200);
   const result = {ok: true, electron: process.versions.electron, desktop: '2.0.11',
@@ -112,7 +113,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
       'two-native-project-windows', 'separate-chromium-sessions', 'sandboxed-preload', 'native-menu-locale', 'official-model-settings-without-onboarding',
       'healthy-official-advanced-and-project-client', 'blocked-official-updates', 'shared-native-theme', 'native-close-reopen-isolation', 'last-project-restart',
       'welcome-search-stable-layout', 'native-desktop-settings', 'native-settings-header-actions', 'native-project-market-settings', 'renderer-crash-isolation', 'host-crash-isolation', 'checkpoint-restore-ui', 'diagnostic-zip',
-      'all-native-menu-roles-zh-en', 'safe-mode-with-broken-normal-settings', 'safe-mode-no-project-plugin', 'safe-mode-session-and-cleanup', 'safe-mode-normal-reopen'],
+      'all-native-menu-roles-zh-en', 'native-restart-confirmation', 'safe-mode-with-broken-normal-settings', 'safe-mode-no-project-plugin', 'safe-mode-session-and-cleanup', 'safe-mode-normal-reopen'],
     evidence: userData};
   writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

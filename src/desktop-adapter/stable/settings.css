@@ -2,6 +2,7 @@
 .projectDesktopRow {display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}
 .projectDesktopRow>div:first-child {min-width:0}.projectDesktopRow h3 {font-size:14px;font-weight:500;margin:0}.projectDesktopRow p {font-size:12px;line-height:1.6;color:var(--dsw-alias-label-secondary);margin:6px 0 0;overflow-wrap:anywhere}
 .projectDesktopRow>button,.projectDesktopRow>[data-menu-root] {flex-shrink:0}
+.projectDesktopSelect {white-space:nowrap}
 /* Minimal size adaptation of pinned DesktopSettingsSection.ToggleRow / desktop-settings-styles.
    Official Switch retains semantics, keyboard handling, focus and disabled states. */
 .projectDesktopSwitch {width:40px;height:22px;border-radius:999px;background:var(--dsw-alias-border-l2)}

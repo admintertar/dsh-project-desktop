@@ -7,6 +7,7 @@ import {runtimePackage, lock} from './paths.mjs';
 import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-security.mjs';
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
+import {createProjectRestartRequest} from '../windows/project-restart.mjs';
 
 function spawnUtility(electron, entry, args, options) {
   const child = electron.utilityProcess.fork(entry, args, {cwd: options.cwd, env: options.env, stdio: 'pipe', serviceName: 'DSH Project Host'});
@@ -25,8 +26,10 @@ export async function openNativeProject(electron, options) {
   const {createDesktopRendererActionDispatcher} = await loadDesktop('renderer-actions-dispatch');
   const {openDesktopTerminal} = await loadDesktop('desktop-terminal');
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
+  const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
+  const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   let window, host, specification, removeHeaders, removeSessionPolicies, chromiumSession;
-  let disposed = false;
+  let disposed = false, quitting = false;
   let locale = options.locale;
   let healthTimer;
   let ready = false;
@@ -45,6 +48,9 @@ export async function openNativeProject(electron, options) {
     options.onFocus?.(); options.onMenuChanged?.();
   }};
   const disabled = async () => {throw new Error('This operation is unavailable in Project Desktop')};
+  const requestRestart = createProjectRestartRequest({getWindow: () => window, getLocale: () => locale,
+    confirmationCopy: desktopRestartConfirmationCopy, showMessageBox: (owner, options) => showDesktopMessageBox(options, owner),
+    isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
   const runtime = {
     platform: process.platform, locale,
     updates: {isPackaged: false, canDownload: false, currentVersion: lock.desktop.version, statePath: join(options.stateDirectory, 'updates-disabled'),
@@ -85,8 +91,8 @@ export async function openNativeProject(electron, options) {
     setLocalePreference(value) {locale = value === 'zh' || value === 'en' ? value : options.locale; options.onMenuChanged?.()},
     // SharedTheme is the sole native appearance owner; no per-window override.
     setThemeSource() {},
-    requestRestart: () => options.restart(), requestRecoveryRestart: () => options.recover(),
-    prepareToQuit() {}, openProfileCreateWindow: disabled,
+    requestRestart: () => requestRestart(), requestRecoveryRestart: () => requestRestart('recovery'),
+    prepareToQuit() {quitting = true}, openProfileCreateWindow: disabled,
   };
   const close = async () => {
     saveWindow?.(); disposed = true; clearTimeout(healthTimer);

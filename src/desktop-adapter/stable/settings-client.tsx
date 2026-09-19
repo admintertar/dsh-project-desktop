@@ -10,7 +10,8 @@ const copy = {
   zh: {nav: '桌面', notifications: '启用桌面通知', notificationsBody: '项目在后台时，提醒你查看已完成或失败的操作。',
     safe: '安全模式', safeBody: '这是空白的临时诊断环境，未加载项目插件、配置和密钥。在这里的修改会在关闭后清理。使用“项目工具 → 退出安全模式”返回恢复界面。', continue: '继续诊断',
     notifyOnTurnCompletion: '会话回复完成', notifyOnTurnFailure: '会话回复失败', notifyOnJobCompletion: '后台任务完成', notifyOnJobFailure: '后台任务失败',
-    material: '窗口材质', materialBody: '更改后重启当前项目窗口生效。', off: '关闭', transparent: '透明', mica: '云母',
+    material: desktopActionsZh.windowMaterial, materialBody: '设置窗口背景效果。更改后需重启当前项目窗口才能生效。',
+    off: desktopActionsZh.windowMaterialOff, transparent: desktopActionsZh.windowMaterialTransparent, mica: desktopActionsZh.windowMaterialMica,
     log: '日志级别', logBody: '仅影响当前项目，保存后立即生效。', debug: '调试', info: '信息', warn: '警告', error: '错误',
     marketTitle: '插件市场', marketIntro: '为当前项目选择一个插件市场，一次只能启用一个。更改后重启当前项目生效。',
     marketDisabled: '关闭插件市场', marketDisabledBody: '不加载插件市场界面。',
@@ -21,7 +22,8 @@ const copy = {
   en: {nav: 'Desktop', notifications: 'Enable desktop notifications', notificationsBody: 'Get completion and failure notifications while this project is in the background.',
     safe: 'Safe Mode', safeBody: 'This is a blank, temporary diagnostic environment. Project plugins, configuration and credentials are not loaded. Changes here are removed on close. Use Project Tools → Exit Safe Mode to return to recovery.', continue: 'Continue diagnosis',
     notifyOnTurnCompletion: 'Conversation completed', notifyOnTurnFailure: 'Conversation failed', notifyOnJobCompletion: 'Background job completed', notifyOnJobFailure: 'Background job failed',
-    material: 'Window material', materialBody: 'Restart this project window to apply changes.', off: 'Off', transparent: 'Transparent', mica: 'Mica',
+    material: desktopActionsEn.windowMaterial, materialBody: 'Set the window background effect. Restart this project window to apply changes.',
+    off: desktopActionsEn.windowMaterialOff, transparent: desktopActionsEn.windowMaterialTransparent, mica: desktopActionsEn.windowMaterialMica,
     log: 'Log level', logBody: 'Applies immediately to this project.', debug: 'Debug', info: 'Info', warn: 'Warning', error: 'Error',
     marketTitle: 'Plugin market', marketIntro: 'Choose one plugin market for this project. Restart the project to apply changes.',
     marketDisabled: 'Turn off plugin market', marketDisabledBody: 'Do not load a plugin market interface.',
@@ -40,7 +42,7 @@ function Row({title, body, children}: any) {
 function Select({value, options, disabled, onChange, label}: any) {
   const [open, setOpen] = useState(false);
   return <Menu open={open} onClose={() => setOpen(false)} items={options} selectedId={value} align="end" portal
-    onSelect={id => {setOpen(false); onChange(id)}} anchor={<Button variant="outline" disabled={disabled} aria-label={label}
+    onSelect={id => {setOpen(false); onChange(id)}} anchor={<Button className="projectDesktopSelect" variant="outline" disabled={disabled} aria-label={label}
       aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{options.find((item: any) => item.id === value)?.label ?? value}<IconChevronDownOutline14/></Button>}/>;
 }
 // Minimal adaptation of the pinned DesktopSettingsSection Choice used by the official Market selector.

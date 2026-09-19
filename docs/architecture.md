@@ -47,6 +47,8 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 桌面设置通过原始 settingsScope / settings.section 注册，复用官方 Button/Menu/Switch。仅组合通知、材质、日志和当前项目原生操作，不注册原来的模式/Profile/应用更新页面。设置页头通过框架正式的 `settings.action` 插槽复用固定 Desktop 的原生操作组件，提供导出诊断、打开 DSH 终端及重新加载/重启/恢复模式菜单；通用设置框架继续提供打开配置文件。所有重启操作由项目窗口自己的 runtime 处理，不影响其他项目。Switch 尺寸按未导出的 DesktopSettingsSection.ToggleRow 最小适配；日志直接接入官方 FileExporter 的阈值。模型、主题、语言等其他页面仍由已有官方服务提供。
 
+材质保存后沿用官方设置监听流程，异步请求所属项目的重启确认。设置页菜单、原生菜单和 Host 发起的重启／恢复请求共用该确认入口：直接调用 `desktop-dialog-window.showDesktopMessageBox` 和原始 `DesktopDialogWindow`，使用官方 `desktop-dialog` 页面、组件、图标、字体与主题样式，不调用系统 `dialog.showMessageBox`。构建在临时目录通过官方 Vite/React/Tailwind 配置编译原封不动的 native-ui 源文件，产物放在官方模块预期的 `lib/native-ui/`，随运行时一同打包。文案复用 `tray-locale.desktopRestartConfirmationCopy`，仅将应用级描述适配为当前项目，默认聚焦取消。取消保留已保存设置和当前窗口；确认后才停止该项目 Host 并重建窗口或进入恢复界面。同一项目的并发请求合并为一次确认，关闭期间不再执行重启；日志、通知与主题的即时更新不触发该弹窗。
+
 插件市场选择属于项目 Profile。stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当前项目设置中关闭；官方 Profile 组合负责过滤未选中的 provider，并把 `dsh-market` 显式绑定到项目的 `desktop` Profile。Shell 向市场提供只读的当前 Profile 身份，使其使用官方 `desktopPnpm` 可恢复包操作服务；该身份不提供创建、选择或删除 Profile 的能力。产品自带 Project 插件使用 `devDependencies` 本地 link，市场只管理普通依赖，不能从市场误卸载产品核心插件。`dsh-community-market` 当前要求 DSH 0.1.6 alpha，在 stable 页面中只展示为不可用选项。
 
 欢迎窗口只承载应用级入口，不创建共享 Host。模型与项目配置属于各自 Profile；应用共享明暗主题，其他设置保持项目独立。
@@ -72,6 +74,8 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 | `desktop-runtime-environment`、`launch-environment` | 命令环境与项目环境变量 |
 | `index` 的 Config/desktopRendererUrl、`window-material`、`renderer-boot` | 原始窗口参数、URL 标记与健康报告协议 |
 | `window-options`、`preload`、`renderer-actions-dispatch` | 安全窗口配置、文件拖放/原生命令及重启先应答语义 |
+| `tray-locale` 的 `desktopRestartConfirmationCopy` | 原生重启／恢复警告文案，按当前项目语言与操作范围适配 |
+| `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
 | `profile-checkpoint`、`startup-recovery-controller` | 健康配置检查点、预览与确认 token、恢复校验，不调用官方应用级重启 |
 | `profile-materializer`、`mask-secrets` | 恢复后的依赖重建，以及展示启动错误时的脱敏 |
@@ -81,7 +85,7 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |
 
-编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。此阶段未构建官方原生向导/恢复 HTML，也不使用官方 `main`、`bin` 或 fork 的 `workbench`。
+编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。目前仅额外构建独立确认窗口 `desktop-dialog.html`，未构建官方向导/恢复 HTML，也不使用官方 `main`、`bin` 或 fork 的 `workbench`。
 
 ## 功能取舍
 

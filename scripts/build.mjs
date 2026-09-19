@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {repository, desktopSource, projectSource, runtimePackage, projectPackage, lock} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
+import {buildDesktopDialog} from './build-desktop-dialog.mjs';
 
 verifyUpstream();
 if (!existsSync(join(runtimePackage, 'node_modules/@deepseek-ai/dsh'))) throw new Error('Run npm run setup first');
@@ -27,6 +28,7 @@ for (const name of ['preload', 'compatibility-preload']) await build({
   entryPoints: [join(desktopSource, 'src', name + '.ts')], outfile: join(runtimePackage, 'lib', name + '.cjs'),
   bundle: true, platform: 'node', format: 'cjs', packages: 'external', target: 'node22', nodePaths,
 });
+await buildDesktopDialog();
 const browser = {bundle: true, platform: 'browser', format: 'cjs', target: 'es2022', sourcemap: true,
   define: {'process.env.NODE_ENV': '"production"'}, nodePaths,
   external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
