@@ -12,7 +12,7 @@ export function setupGuideSources(source) {
     const archive = execFileSync('git', ['-C', resolve(source), 'archive', '--format=tar', lock.harness.commit,
       ...missing, 'LICENSE'], {maxBuffer: 8 * 1024 * 1024});
     mkdirSync(destination, {recursive: true});
-    execFileSync('tar', ['-xf', '-', '-C', destination], {input: archive});
+    execFileSync('tar', ['-xf', '-'], {cwd: destination, input: archive});
   }
   for (const [path, tree] of Object.entries(lock.harness.guideSources)) assertSourceTree(join(destination, path), tree);
 }

@@ -176,7 +176,7 @@ ends. The actual scrollbar visibility and geometry assertions remain intact.
 
 Source snapshots, dependency caches, logs and runtime data remain ignored.
 No remote repository, release or package was created or published by these checks.
-# Packaging workflow validation
+## Packaging workflow validation
 
 The packaging workflow targets native macOS x64 / arm64 and Windows x64. Local
 validation on macOS x64 passed `npm run check`: 50 application tests, 7 recovery

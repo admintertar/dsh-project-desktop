@@ -20,7 +20,9 @@ function snapshot(source, commit, destination, paths = []) {
   mkdirSync(destination, {recursive: true});
   // Read committed objects only: working-tree changes and fork commits never enter the snapshot.
   const archive = execFileSync('git', ['-C', repo, 'archive', '--format=tar', commit, ...paths], {maxBuffer: 256 * 1024 * 1024});
-  execFileSync('tar', ['-xf', '-', '-C', destination], {input: archive});
+  // A native Windows path passed to Git Bash's tar -C is parsed as a POSIX
+  // path. Set the process directory instead; the archive uses relative paths.
+  execFileSync('tar', ['-xf', '-'], {cwd: destination, input: archive});
 }
 snapshot(values['desktop-source'], lock.desktop.commit, dirname(desktopSource), [
   'dsh-plugin-desktop', `vendor/dsh-runtime/${lock.harness.version}`, 'upstream.json', 'LICENSE',
