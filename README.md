@@ -71,4 +71,6 @@ macOS x64 本地包输出到 `release/`。默认使用 ad-hoc 签名，未通过
 
 实现边界和固定官方内部接口清单见 [架构说明](docs/architecture.md)。升级需一起核对 Desktop、Harness 与插件提交，不自动跟随 latest。
 
+界面开发须遵循 [桌面壳前端规范](docs/frontend-guidelines.md) 及其引用的通用组件规则，优先复用官方完整界面与交互流程。
+
 自有代码目前**公开可读、保留其他权利，暂不授予开源许可**。详见 [LICENSE](LICENSE)。上游材料保留各自原有许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。`private: true` 只用于防止误发布到 npm。

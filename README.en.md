@@ -71,4 +71,6 @@ Local macOS x64 packages are written to `release/`, using ad-hoc signing by defa
 
 See [architecture](docs/architecture.md) for integration boundaries and the inventory of pinned private upstream interfaces. Upgrades must validate Desktop, Harness and plugin revisions together; the application does not follow latest automatically.
 
+UI work must follow the [Shell frontend guidelines](docs/frontend-guidelines.md) (detailed requirements in Chinese) and the linked shared rules, including complete official UI and workflow reuse.
+
 Original code is currently **publicly readable with all other rights reserved; no open-source license is granted**. See [LICENSE](LICENSE). Third-party material retains its original terms in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). `private: true` only prevents accidental npm publication.

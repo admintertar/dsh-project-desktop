@@ -8,6 +8,9 @@ for native module builds. Keep the Node version within package.json engines.
 壳读取固定源码和独立依赖，不要求私有仓库或 fork。以下目录均为 README 中的同级路径。
 macOS 原生模块需要 Xcode Command Line Tools；Node 版本应符合 package.json。
 
+Before UI work, read the required [Shell frontend guidelines](frontend-guidelines.md)
+and the shared component guidelines linked there. 修改界面前，必须阅读该前端规范及其引用的通用组件规则。
+
 ## 1. Official source and dependencies / 官方源码与依赖
 
 Run from the parent workspace directory / 在这几个仓库的父目录执行：
