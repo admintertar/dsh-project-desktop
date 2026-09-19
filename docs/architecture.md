@@ -104,6 +104,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `safe-mode` 的 paths/reset/cleanup | 临时环境路径及清理；不使用官方 compatibility 默认组合或应用启动 |
 | Desktop client 的 `desktop-settings-api`、`DesktopTerminalSettingsAction`、locale 与 settings styles | 原生 preload 动作协议及设置页头正式操作组件；终端、诊断及单项目重新加载/重启/恢复方法 |
 | Desktop client 的 `DesktopVersionControl` 与 `installExtendedStyles` | 设置页头直接复用官方版本浮层及完整样式，显示 Shell 版本并调用应用级更新服务；原样式中的框架规则按模式限定，不改变 advanced 布局 |
+| Desktop `index.ts` 私有 `desktopLocalePreference` | Host 桥按官方逻辑只传递 `zh/en`；`system` 及扩展语言采用原生回退。启动读取和实时设置共用解析，避免未解析语言进入官方菜单或弹窗 |
 | Desktop client 的 advanced/window/boot-health/footer 模块 | 复用原始框架、主题、侧栏及生命周期 |
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |

@@ -164,7 +164,7 @@ export async function openNativeProject(electron, options) {
     if (!options.safeMode) try {await captureProjectCheckpoint(options.stateDirectory, host.result.profileName)} catch (error) {options.onWarning?.(error)}
     if (bootFailure) throw bootFailure;
     ready = true;
-    locale = specification.readLocalePreference?.() ?? locale;
+    runtime.setLocalePreference(specification.readLocalePreference?.());
     if (!options.hidden) focus();
     return {host, window, focus, close, get locale() {return locale}, contributions: () => [...contributions.values()],
       restart: runtime.requestRestart, recover: runtime.requestRecoveryRestart,

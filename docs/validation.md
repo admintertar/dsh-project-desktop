@@ -285,3 +285,13 @@ workflow commit, file sizes and SHA-256 values. Those pending CI results and loc
 downloaded-package acceptance must be recorded separately from local source tests.
 Windows interactive installation/upgrade/uninstallation and trusted code signing
 remain outside this acceptance.
+
+The first update build caught an installed-startup failure on both platforms:
+the raw `system` locale reached the official tray labels. This was reproduced
+locally in an isolated packaged copy. The Host bridge now applies the same locale
+narrowing as the private official helper, and native startup uses the existing
+locale setter. The update smoke explicitly restarts with persisted `system` and
+no focused welcome window; installed diagnostics require a resolved `zh/en` locale.
+After the fix, that same isolated macOS x64 installed probe passed welcome,
+two Hosts, Renderer, Chinese menus, safe mode, cleanup and reopening. This local
+probe updates an isolated existing bundle and is not the final rebuilt CI DMG.

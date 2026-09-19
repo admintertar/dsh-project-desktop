@@ -41,8 +41,14 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   await guide.webContents.executeJavaScript('document.querySelector("[data-check-updates]").click()');
   const failed = await dialog(guide); assert.equal(failed.options.type, 'warning'); await failed.choose(0);
   fixture.state.offline = false;
+  // Installed startup/restoration may have no focused welcome window. In that
+  // case menu refresh immediately reads the project's native locale.
+  guide.hide();
   const paths = await Promise.all(['Update Alpha', 'Update Bravo'].map(name => {const path = join(userData, name); mkdirSync(path); return createProjectInDirectory(path)}));
-  const [alpha, bravo] = await Promise.all(paths.map(open));
+  let [alpha, bravo] = await Promise.all(paths.map(open));
+  await alpha.host.updateShellSettings('locale', {preference: 'system'});
+  alpha = await workspace.restart(paths[0]);
+  for (const project of [alpha, bravo]) assert.ok(['zh', 'en'].includes(project.locale), `Invalid native locale: ${project.locale}`);
   const pids = [alpha.host.result.pid, bravo.host.result.pid];
   alpha.focus();
   await until(() => alpha.window.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())))`), 'official settings entrance');
@@ -102,7 +108,7 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   const check = updates.checkNow(guide); await (await dialog(guide)).choose(1); await check;
   assert.equal(workspace.projects.size, 0);
   const result = {ok: true, platform: process.platform, realDialogsRendered: captures, savePickerAndInstallerHandoffSubstituted: true,
-    checks: ['welcome-without-host', 'offline-warning', 'official-version-popover', 'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
+    checks: ['welcome-without-host', 'offline-warning', 'system-locale-after-restart', 'official-version-popover', 'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
       'keyboard-cancel', 'download-confirmation-and-later', 'verified-download', 'normal-projects-unaffected', 'narrow-welcome', 'all-projects-closed-update']};
   writeFileSync(join(userData, 'updates-result.json'), JSON.stringify(result, null, 2));
   console.log('Update UI checks passed:', JSON.stringify(result));

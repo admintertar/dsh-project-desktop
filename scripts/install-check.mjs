@@ -15,6 +15,7 @@ export async function verifyInstallation({electron, open, close, workspace, show
   const paths = await Promise.all(['First', 'Second'].map(name => {const path = join(userData, name); mkdirSync(path); return createProjectInDirectory(path)}));
   const [first, second] = await Promise.all(paths.map(open));
   assert.ok(first && second, 'Packaged projects did not open: ' + JSON.stringify(workspace.failures()));
+  for (const project of [first, second]) assert.ok(['zh', 'en'].includes(project.locale), 'Native locale must be resolved before menu refresh');
   assert.notEqual(first.host.result.pid, second.host.result.pid);
   assert.equal(new URL(first.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
   assert.equal(first.host.result.harnessVersion, '0.1.5-rc.2');

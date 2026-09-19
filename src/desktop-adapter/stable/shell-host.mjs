@@ -1,6 +1,6 @@
 import {join} from 'node:path';
 import {loadDesktop, loadDependency} from './modules.mjs';
-import {repository, lock} from '../paths.mjs';
+import {repository} from '../paths.mjs';
 import {readProjectAgentInstructions} from '../../app/project-agent.mjs';
 import {productVersion} from '../../app/product.mjs';
 
@@ -11,6 +11,10 @@ const {default: z} = await loadDependency('@deepseek-ai/schemastery');
 export {Config};
 export const name = 'project-desktop-shell';
 export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection', 'desktopRuntime', 'systemPrompt'];
+
+// The pinned index.ts desktopLocalePreference helper is private. Keep the same
+// narrowing before crossing the native bridge; system/custom locales use fallback.
+const desktopLocalePreference = value => value === 'zh' || value === 'en' ? value : undefined;
 
 export function apply(ctx, config) {
   const runtime = ctx.desktopRuntime;
@@ -48,7 +52,7 @@ export function apply(ctx, config) {
     return handleRendererBootRequest(req, res, new URL(url).origin, report => runtime.reportRendererBoot(report));
   }}), 'project-desktop: official renderer boot report');
   ctx.on('settings/updated', (namespace, next) => {
-    if (namespace === 'locale') runtime.setLocalePreference(next.preference);
+    if (namespace === 'locale') runtime.setLocalePreference(desktopLocalePreference(next.preference));
   });
   // Adapt the official desktop-shell material watcher: save first, then ask the native runtime.
   // A cancelled restart leaves settings saved; unrelated live settings must not reopen the prompt.
@@ -74,7 +78,7 @@ export function apply(ctx, config) {
     productName: 'DSH Project Desktop', windowTitle: 'DSH Project Desktop',
     iconPath,
     trayIcons: {templatePath: join(trayRoot, 'tray-iconTemplate.png'), bluePath: join(trayRoot, 'tray-icon-blue.png')},
-    readLocalePreference: () => ctx.settings.get('locale')?.preference,
+    readLocalePreference: () => desktopLocalePreference(ctx.settings.get('locale')?.preference),
     readThemeSource: () => ctx.settings.get('ui-theme').preference,
     requestQuit: code => ctx.appExit(code),
     requestModeChange: async () => {throw new Error('Project Desktop only supports project windows')},
