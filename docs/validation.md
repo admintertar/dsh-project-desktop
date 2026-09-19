@@ -281,8 +281,8 @@ explicit closure, partial failure, safe-mode quit/relaunch and abandoned-state c
 CI repeats source and native update checks on Windows x64 and macOS arm64, then
 validates both packaged applications and the same Universal DMG on Intel. Release
 publication requires all jobs to pass and both clean build records to match the
-workflow commit, file sizes and SHA-256 values. Those pending CI results and local
-downloaded-package acceptance must be recorded separately from local source tests.
+workflow commit, file sizes and SHA-256 values. CI and downloaded-package results
+are recorded separately below from local source tests.
 Windows interactive installation/upgrade/uninstallation and trusted code signing
 remain outside this acceptance.
 
@@ -295,3 +295,35 @@ no focused welcome window; installed diagnostics require a resolved `zh/en` loca
 After the fix, that same isolated macOS x64 installed probe passed welcome,
 two Hosts, Renderer, Chinese menus, safe mode, cleanup and reopening. This local
 probe updates an isolated existing bundle and is not the final rebuilt CI DMG.
+
+Final acceptance for commit `d7ebfc4af801f21c4be9622963c8a9c793ef79fa` passed in
+[Actions run 35455370899](https://github.com/admintertar/dsh-project-desktop/actions/runs/35455370899):
+Windows x64 and macOS arm64 source/update UI checks, both relocated packaged
+applications, and the same Universal DMG launched on Intel. The workflow itself
+published the rebuilt [0.1.0 release](https://github.com/admintertar/dsh-project-desktop/releases/tag/v0.1.0).
+The version tag resolves to that exact build commit. Both build records report a
+clean source checkout; the previous release is retained as a private backup draft.
+
+| Download | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Universal DMG | 290,927,411 | `c2910b430edb23ca13922f3d8eefb8f6990a0b5c2662bf61709542bc151c3db9` |
+| Windows x64 Setup | 138,449,789 | `e90418393a08032adb4d17e440ead20ed764bbd2427f6c4d0bc1d7306b0aa268` |
+| Windows x64 Portable ZIP | 222,667,700 | `72bb28744873a01f25017f040b1c51b6ea20864188792ce14021db2885fc3781` |
+
+All three packages were downloaded locally. All six release assets, including
+checksum files, match local hashes and GitHub asset digests. Public unauthenticated
+downloads, latest-release metadata and the real Shell feed were verified for both
+platforms: 0.1.0 reports up-to-date and an older synthetic current version reports
+the available 0.1.0 without initiating installation.
+
+On macOS 15.7.7 x64, the downloaded DMG passed disk-image verification, all 18
+official native-file architecture checks, six Universal executable checks, internal
+link/license checks and strict ad-hoc signature verification. It replaced the
+Applications installation after preserving the previous app. With the source DMG
+detached, Launch Services started the installed app and its isolated diagnostic
+passed welcome/update entrance, two Hosts, official Renderer, Chinese menu, safe
+mode, cleanup and reopening. Signatures remained intact and daily project records
+were unchanged. The host already had Gatekeeper disabled and the command-line
+download had no quarantine attribute; security settings were not changed, and this
+is not notarization or browser-quarantine acceptance. Windows interactive installer,
+upgrade/uninstall and trusted signing still require their separate acceptance.
