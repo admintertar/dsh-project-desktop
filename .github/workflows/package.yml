@@ -140,3 +140,29 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+  verify-mac-intel:
+    needs: [plan, package]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (inputs.platform != 'win') }}
+    name: Verify universal DMG on Intel
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          architecture: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: dsh-project-desktop-mac-universal-${{ github.sha }}
+          path: .cache/universal-download
+      - name: Verify checksum and launch the same DMG on Intel
+        shell: bash
+        run: |
+          dmg=$(find .cache/universal-download -name '*.dmg' -type f)
+          test -n "$dmg"
+          (cd "$(dirname "$dmg")" && shasum -a 256 -c "$(basename "$dmg").sha256")
+          node scripts/verify-mac-package.mjs "$dmg"

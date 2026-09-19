@@ -19,7 +19,7 @@
 
 当前是早期开发版本，只支持 `stable` 通道：Desktop **2.0.11**、Harness **0.1.5-rc.2**，插件提交由 [upstream.lock.json](upstream.lock.json) 固定。stable 表示发行通道，不是长期 API 稳定承诺。
 
-当前本地原生验收基线为 **macOS x64**。GitHub Actions 配置了 macOS x64 / arm64 与 Windows x64 的原生打包及安装自检，各平台状态以对应任务结果为准；Linux、正式签名发行与自动更新尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
+当前本地原生验收基线为 **macOS x64**。GitHub Actions 生成同时支持 Intel / Apple Silicon 的 macOS Universal DMG，以及 Windows x64 安装包；同一 DMG 分别在两种 Mac 架构启动自检，各平台状态以对应任务结果为准。Linux、正式签名发行与自动更新尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
 
 ## 开发准备
 

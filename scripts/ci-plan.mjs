@@ -16,8 +16,7 @@ export function packagingPlan(lock, version, selection = 'all', ref = '') {
     outputs[`${name}_commit`] = pin.commit;
   }
   const include = [
-    {target: 'mac-x64', family: 'mac', runner: 'macos-15-intel', arch: 'x64', script: 'scripts/package-macos.mjs'},
-    {target: 'mac-arm64', family: 'mac', runner: 'macos-15', arch: 'arm64', script: 'scripts/package-macos.mjs'},
+    {target: 'mac-universal', family: 'mac', runner: 'macos-15', arch: 'arm64', script: 'scripts/package-macos.mjs'},
     {target: 'win-x64', family: 'win', runner: 'windows-2022', arch: 'x64', script: 'scripts/package-windows.mjs'},
   ].filter(item => selection === 'all' || item.family === selection);
   return {...outputs, matrix: JSON.stringify({include})};

@@ -106,6 +106,8 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |
 | 构建脚本中的 `package-win`、`electron-builder-environment`、`verify-win-installer` | 原样复用无签名 Windows 构建环境、依赖遍历策略及 PE 验证；自有应用身份、产物和安装自检留在 Shell 打包脚本 |
+| 构建脚本中的 `release-preflight`、`prepare-fs-ext`、`mac-universal` 与官方 `build.mac` | 原样复用无证书环境、双架构 Electron ABI 构建、原生模块清单和 Universal 合并配置；仅在私有 staging 准备绑定，不修改开发缓存 |
+| 官方锁定 electron-builder 的 `TraversalNodeModulesCollector`、`NodeModuleCopyHelper` 和 DMG target | 直接复用生产依赖遍历、版本提升、包文件过滤及 HFS+ 压缩镜像生成；为 Shell 的两个运行时根目录分别收集，保留插件 peers 和许可 |
 
 编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。原样构建 `desktop-dialog.html`、`recovery.html`、`profile-create.html`、`profile-selector.html`，不使用官方 `main`、`bin` 或 fork 的 `workbench`。
 
@@ -119,7 +121,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 - 模型页面与项目页保留；强制模型首次弹窗不参与组合。通知、终端、诊断、材质和日志已经接入自有设置及菜单。
 - 已实现项目集合/窗口布局恢复、项目内多 Profile、官方恢复助手、配置检查点、第三方插件卸载接入、临时安全模式和本地 macOS x64 打包流程。工厂重置、环境迁移、Developer ID 签名公证和正式分发仍为后续工作。
 
-GitHub Actions 的 `Package Desktop` 工作流按锁定提交从公开仓库准备依赖，在原生 macOS x64 / arm64、Windows x64 runner 上检查和打包。两平台共用独立 staging、许可保留与链接边界审计；Windows 将内部 junction 实体化，macOS 保留包内相对链接。源码构建使用平台无关的路径判断；运行时 Profile 在 Windows 使用目录 junction，安全模式按不区分大小写的允许列表保留系统环境。各平台安装自检均在开发目录外启动打包应用，实际验收以对应 job 为准；产物、触发方式和签名限制见 [打包说明](packaging.md)。
+GitHub Actions 的 `Package Desktop` 工作流按锁定提交从公开仓库准备依赖，在 Apple Silicon runner 生成 Universal DMG，分别在 arm64 和 Intel runner 启动同一产物；Windows x64 runner 生成 NSIS 与 ZIP。两平台共用独立 staging、生产依赖收集、许可保留与链接边界审计，选中的依赖文件实体化，安装包不回链构建目录。源码构建使用平台无关的路径判断；运行时 Profile 在 Windows 使用目录 junction，安全模式按不区分大小写的允许列表保留系统环境。各平台安装自检均在开发目录外启动打包应用，实际验收以对应 job 为准；产物、触发方式和签名限制见 [打包说明](packaging.md)。
 
 ## 升级策略
 

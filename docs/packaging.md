@@ -1,12 +1,12 @@
 # macOS、Windows 打包与签名
 
-打包目标为 macOS x64 / arm64 与 Windows x64，使用固定的 Electron 43.3.0、Desktop stable 2.0.11 / Harness 0.1.5-rc.2。每个目标在对应原生机器构建并启动打包后的应用验证；配置了目标不等于该平台已验收，实际结果以对应 Actions job 和 `package-result.json` 为准。Linux 暂无打包任务。
+打包目标为 macOS Universal（一个 DMG 原生支持 Intel / Apple Silicon）与 Windows x64，使用固定的 Electron 43.3.0、Desktop stable 2.0.11 / Harness 0.1.5-rc.2。Mac 融合包在 Apple Silicon 构建，再分别在 arm64 和 Intel 机器启动同一个 DMG；Windows 在原生 x64 runner 构建验证。配置了目标不等于该平台已验收，实际结果以对应 Actions job 和 `package-result.json` 为准。Linux 暂无打包任务。
 
 ## GitHub Actions
 
 工作流为 [Package Desktop](../.github/workflows/package.yml)，入口在 **dsh-project-desktop** 仓库；插件按 `upstream.lock.json` 中的提交一起构建，不需要在插件仓库再生成安装包。
 
-手动打包：进入 GitHub → Actions → Package Desktop → Run workflow，选择 `master` 和 `platform`：`all` 构建全部，`mac` 构建两种 Mac 架构，`win` 构建 Windows x64。命令行等价入口为：
+手动打包：进入 GitHub → Actions → Package Desktop → Run workflow，选择 `master` 和 `platform`：`all` 构建全部，`mac` 构建 Mac 融合包并验证两种架构，`win` 构建 Windows x64。命令行等价入口为：
 
 ```sh
 gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master -f platform=all
@@ -16,8 +16,8 @@ gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master 
 
 | 任务 | 原生 runner | 可下载产物 |
 | --- | --- | --- |
-| mac-x64 | `macos-15-intel` | Intel DMG、SHA-256、验证结果 |
-| mac-arm64 | `macos-15` | Apple Silicon DMG、SHA-256、验证结果 |
+| mac-universal | `macos-15` | Universal DMG、SHA-256、arm64 验证结果 |
+| Verify universal DMG on Intel | `macos-15-intel` | 校验并启动同一 DMG；结果见该任务日志 |
 | win-x64 | `windows-2022` | NSIS Setup.exe、便携 ZIP、SHA-256、验证结果 |
 
 运行成功后，在该次工作流页面底部 **Artifacts** 下载对应平台的压缩包，解压后取出安装文件。产物保留 14 天，内含构建提交、架构、签名类型与安装检查结果。不上传整个展开的运行时目录，也不自动创建 GitHub Release、npm 发布或应用更新。
@@ -30,9 +30,11 @@ macOS 使用 ad-hoc 签名且未公证；Windows 不做 Authenticode 签名。�
 
 ## 本地 macOS 安装包
 
-完成 README 的缓存准备后运行 `npm run package:mac`。在 Intel Mac 生成 x64 包，在 Apple Silicon 与 arm64 Node 下生成 arm64 包，不交叉编译。输出在 `release/<版本与架构及时间>/`，最近成功结果记录在 `.local/last-package.json`。
+完成 README 的缓存准备后运行 `npm run package:mac`。在 Intel 或 Apple Silicon Mac 上均生成 Universal DMG；官方 Yarn 配置必须安装两个 CPU 的可选原生模块。脚本在独立 staging 复用官方 `prepare-fs-ext.ts` 为两个 CPU 编译 Electron ABI 绑定，并由 `mac-universal.ts` 检查完整清单。Electron Builder 下载两个架构的同版 Electron，并按官方 `x64ArchFiles` 规则合并。输出在 `release/<版本与架构及时间>/`，最近成功结果记录在 `.local/last-package.json`。
 
-流程包括固定源码/运行依赖验证、独立 staging、相对链接审计、electron-builder 生成自有应用、由内到外签名 Mach-O 和嵌套 bundle、严格签名验证、复制到开发目录外进行真实安装自检，最后生成 DMG、磁盘镜像校验和 SHA-256。应用标识为 `local.dsh.project.desktop`，名称为 `DSH Project Desktop`，直接使用仓库 `assets/app-icon.icns` 作为安装图标，并携带完整 `assets/` 供 Dock、窗口和托盘使用。安装自检逐字节核对图标资源与 bundle 图标，避免开发环境存在而安装包遗漏。DMG 包含应用及 Applications 拖放入口。
+流程包括固定源码/运行依赖验证、独立 staging、链接审计、electron-builder 生成融合应用、验证原生模块、由内到外签名 Mach-O 和嵌套 bundle、严格签名验证，再通过官方使用的 DMG target 生成 HFS+ 压缩镜像。挂载最终 DMG 后，将其中的应用复制到开发目录外进行真实安装自检，校验主程序、Electron Framework 和 Helper 均包含两种架构，最后记录 SHA-256。应用标识为 `local.dsh.project.desktop`，名称为 `DSH Project Desktop`，直接使用仓库 `assets/app-icon.icns` 作为安装图标，并携带完整 `assets/` 供 Dock、窗口和托盘使用。安装自检逐字节核对图标资源与 bundle 图标，避免开发环境存在而安装包遗漏。DMG 包含应用及 Applications 拖放入口。
+
+两平台使用官方锁定 builder 的生产依赖遍历与文件过滤，不整份复制开发依赖缓存。Desktop 与 Project 分别收集，保持各自依赖版本；插件的 DSH peers 从固定 Desktop 提供。保留运行时动态加载模块、可选原生模块和许可证，排除开发工具、测试样例与官方禁止的宿主 native build 输出。`package-result.json` 记录两组依赖的包数、文件数和字节数，供后续检查体积变化。
 
 应用携带固定运行时、Project 构建、自有 Shell、引导资源和第三方许可，不链接开发仓库。使用者不需要安装 Node/npm 或保留 Desktop fork。Profile 中的自有运行时链接在确认 Host 停止后的下次打开时重新定位；运行中的项目不被准备流程改写。
 

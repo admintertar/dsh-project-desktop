@@ -1,4 +1,4 @@
-import {existsSync, mkdtempSync, readFileSync, realpathSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
@@ -16,7 +16,7 @@ const {electronBuilderEnvironment} = await import(pathToFileURL(join(desktopSour
 const unsigned = electronBuilderEnvironment({...withoutWindowsSigningSecrets(process.env), CSC_IDENTITY_AUTO_DISCOVERY: 'false'});
 for (const name of Object.keys(process.env)) if (!(name in unsigned)) delete process.env[name];
 Object.assign(process.env, unsigned);
-const prepared = preparePackage(process.platform, process.arch);
+const prepared = await preparePackage(process.platform, process.arch);
 const {appDirectory, output, manifest, config} = prepared;
 const {build, Platform, Arch} = desktopRequire('electron-builder');
 const settings = {...config,
@@ -55,5 +55,6 @@ for (const asset of ['app-icon.ico', 'app-icon.png', 'tray/tray-icon-blue.png'])
 }
 const validation = await verifyPackagedLaunch(join(relocated, product + '.exe'), root);
 recordPackage(prepared, {app, installer, zip, signature: {kind: 'unsigned'},
+  bytes: {installer: statSync(installer).size, portable: statSync(zip).size},
   sha256: {installer: checksum(installer), portable: checksum(zip)},
   validation: {...validation, relocated, portableExtracted: true, artworkVerified: true, installerPEVerified: true}});

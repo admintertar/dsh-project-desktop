@@ -36,6 +36,12 @@ dependency preparation. Windows packaging directly imports its unsigned-build
 environment policy, Electron Builder traversal policy and PE validators from
 scripts/package-win.ts, scripts/electron-builder-environment.ts and
 scripts/verify-win-installer.ts; those source files remain unchanged.
+macOS packaging also imports the unchanged release-preflight.ts,
+prepare-fs-ext.ts and mac-universal.ts helpers and reuses the official Universal
+merge rules. Production dependency collection and filtering call the pinned
+electron-builder TraversalNodeModulesCollector and NodeModuleCopyHelper; DMGs
+use its existing HFS+ compression target. The Shell adapts only its runtime
+directory layout, product identity, local signing and installation diagnostic.
 
 ## DSH Desktop license
 

@@ -88,7 +88,7 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 | `npm run smoke:resources` | Native resource status and remote-association checks |
 | `npm run smoke:lifecycle` | Native lifecycle and single-instance behavior |
 | `npm run test:recovery:network` | Network dependency recovery with an isolated test registry |
-| `npm run package:mac` | Native macOS x64 / arm64 DMG with ad-hoc signing and relocated-app verification |
+| `npm run package:mac` | Universal macOS DMG, built on a Mac, with ad-hoc signing and verification of the mounted artifact |
 | `npm run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
 
 Automated checks use synthetic temporary projects and do not call models. Native

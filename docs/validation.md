@@ -193,3 +193,24 @@ Windows and macOS arm64 require their own successful Actions jobs; the local x64
 result does not certify them. Windows NSIS interactive installation, upgrades,
 uninstallation and Authenticode, plus macOS Developer ID/notarization and download
 quarantine behavior, remain separate acceptance work. See [packaging](packaging.md).
+
+## Production dependencies and Universal packaging
+
+The packaging workflow now builds one Universal DMG on Apple Silicon and launches
+that same artifact on Intel, alongside the Windows x64 package job. It reuses the
+pinned official dependency collector, package file filters, paired native-module
+preparation and Universal merge rules. DMGs use the builder's HFS+ compressed target.
+
+Local source checks passed with 51 application tests, 7 recovery tests, 1 safe-mode
+test, source integrity and dual-Host smoke. The dependency fixture covers nested
+versions, installed/missing optional dependencies, required-dependency failure,
+licenses, development-tool exclusion and both native prebuilds without host build
+outputs. Actionlint accepted the updated workflow.
+
+An isolated macOS x64 app with the production dependency payload passed the real
+installation diagnostic: welcome, two independent project Hosts, official Renderer,
+Chinese menu, safe mode, cleanup and reopening. The diagnostic also caught the
+Shell's explicit Electron package-version lookup; staging retains that metadata
+without shipping the development Electron binary. Cloud Universal/arm64/Windows
+acceptance must still be read from the matching run; local x64 evidence alone does
+not certify the other architecture or the final merged disk image.
