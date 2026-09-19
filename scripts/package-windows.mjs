@@ -7,6 +7,7 @@ import {desktopSource, repository} from '../src/desktop-adapter/paths.mjs';
 import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
 import {auditLinks, checksum, preparePackage, product, recordPackage} from './package-common.mjs';
 import {verifyPackagedLaunch} from './verify-packaged-launch.mjs';
+import {officialPackageBuild} from './package-upstream-config.mjs';
 
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Build Windows x64 packages on a native Windows x64 host');
 // Reuse the pinned upstream unsigned-build policy and PE validators unchanged.
@@ -20,6 +21,8 @@ const prepared = await preparePackage(process.platform, process.arch);
 const {appDirectory, output, manifest, config} = prepared;
 const {build, Platform, Arch} = desktopRequire('electron-builder');
 const settings = {...config,
+  // The pinned builder's NSIS template needs the official newer NSIS toolset.
+  toolsets: officialPackageBuild.toolsets,
   electronFuses: {onlyLoadAppFromAsar: false},
   fileAssociations: [{ext: 'agent-project', name: 'Agent Project', role: 'Editor'}],
   win: {icon: join(appDirectory, 'assets/app-icon.ico'), signExecutable: false,

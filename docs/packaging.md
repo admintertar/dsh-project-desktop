@@ -63,7 +63,7 @@ npm run sign:mac -- "/path/to/DSH Project Desktop.app" "Developer ID Application
 
 ## 本地 Windows 安装包
 
-在 Windows x64 上准备同一固定源码及 Windows 依赖缓存，运行 `npm run check` 和 `npm run package:win`。脚本复用官方 `package-win.ts` 的无签名环境策略、builder 依赖遍历策略及 `verify-win-installer.ts` 的 PE 校验，生成自有身份和图标的 NSIS 安装程序与便携 ZIP。
+在 Windows x64 上准备同一固定源码及 Windows 依赖缓存，运行 `npm run check` 和 `npm run package:win`。脚本复用官方 `package-win.ts` 的无签名环境策略、builder 依赖遍历策略、固定 NSIS toolset 及 `verify-win-installer.ts` 的 PE 校验，生成自有身份和图标的 NSIS 安装程序与便携 ZIP。
 
 安装器允许选择安装目录，创建桌面与开始菜单入口，关联 `.agent-project`；卸载不删除项目或 userData。打包前验证依赖链接边界，将 Windows junction 的内容实体化，安装包不包含指向构建机器的链接。ZIP 检查应用入口、声明及许可文件，解压到独立临时目录后执行 `--verify-installation`，确认两个项目 Host、官方 Renderer、中文菜单、安全模式与关闭重开。
 

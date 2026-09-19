@@ -1,4 +1,4 @@
-import {cpSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync} from 'node:fs';
+import {cpSync, existsSync, mkdirSync, realpathSync, statSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
@@ -7,6 +7,7 @@ import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
 import {signMacApp} from './sign-macos.mjs';
 import {verifyMacDmg} from './verify-mac-package.mjs';
 import {checksum, preparePackage, product, recordPackage} from './package-common.mjs';
+import {macUniversalArchFiles, officialPackageBuild, packagedMacRuntime} from './package-upstream-config.mjs';
 
 if (process.platform !== 'darwin' || !['x64', 'arm64'].includes(process.arch)) throw new Error('Build macOS packages on a native x64 or arm64 Mac');
 const {withoutMacReleaseSecrets} = await import(pathToFileURL(join(desktopSource, 'scripts/release-preflight.ts')).href);
@@ -32,7 +33,7 @@ for (const arch of ['arm64', 'x64']) {
   mkdirSync(dirname(target), {recursive: true}); cpSync(binding.path, target);
 }
 prepareInstalledMacUniversalRuntime(stagedDesktop);
-const officialMac = JSON.parse(readFileSync(join(desktopSource, 'package.json'), 'utf8')).build.mac;
+const officialMac = officialPackageBuild.mac;
 const {build, Platform, Arch} = desktopRequire('electron-builder');
 // A host electronDist contains only one CPU. Let the official builder obtain
 // both pinned Electron archives and merge them with its universal target.
@@ -41,7 +42,7 @@ const settings = {
   ...config,
   electronFuses: {onlyLoadAppFromAsar: false, resetAdHocDarwinSignature: true, runAsNode: true},
   mac: {identity: null, icon: join(appDirectory, 'assets/app-icon.icns'), category: 'public.app-category.developer-tools',
-    asar: false, mergeASARs: officialMac.mergeASARs, x64ArchFiles: officialMac.x64ArchFiles, notarize: false,
+    asar: false, mergeASARs: officialMac.mergeASARs, x64ArchFiles: macUniversalArchFiles, notarize: false,
     extendInfo: {CFBundleLocalizations: ['en', 'zh_CN'], CFBundleDevelopmentRegion: 'en'},
     fileAssociations: [{ext: 'agent-project', name: 'Agent Project', role: 'Editor', rank: 'Alternate'}]},
   dmg: {format: 'UDZO', filesystem: 'HFS+', writeUpdateInfo: false,
@@ -50,7 +51,7 @@ const settings = {
 await build({projectDir: appDirectory, targets: Platform.MAC.createTarget(['dir'], Arch.universal), publish: 'never', config: settings});
 const app = join(output, 'mac-universal', product + '.app');
 if (!existsSync(app)) throw new Error('Packager did not produce the expected app');
-const packagedDesktop = join(app, 'Contents/Resources/app/.cache/runtime/dsh-plugin-desktop');
+const packagedDesktop = join(app, packagedMacRuntime);
 for (const entry of MACOS_UNIVERSAL_NATIVE_ENTRIES) execFileSync('lipo',
   [join(packagedDesktop, entry.path), '-verify_arch', entry.arch], {stdio: 'inherit'});
 for (const entry of FORBIDDEN_MACOS_UNIVERSAL_ENTRIES) {

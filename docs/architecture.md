@@ -106,7 +106,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |
 | 构建脚本中的 `package-win`、`electron-builder-environment`、`verify-win-installer` | 原样复用无签名 Windows 构建环境、依赖遍历策略及 PE 验证；自有应用身份、产物和安装自检留在 Shell 打包脚本 |
-| 构建脚本中的 `release-preflight`、`prepare-fs-ext`、`mac-universal` 与官方 `build.mac` | 原样复用无证书环境、双架构 Electron ABI 构建、原生模块清单和 Universal 合并配置；仅在私有 staging 准备绑定，不修改开发缓存 |
+| 构建脚本中的 `release-preflight`、`prepare-fs-ext`、`mac-universal` 与官方 `build.mac` | 原样复用无证书环境、双架构 Electron ABI 构建与原生模块清单；合并规则只增加 Shell 的隐藏运行时目录前缀，避免 glob 跳过 `.cache`；仅在私有 staging 准备绑定，不修改开发缓存 |
 | 官方锁定 electron-builder 的 `TraversalNodeModulesCollector`、`NodeModuleCopyHelper` 和 DMG target | 直接复用生产依赖遍历、版本提升、包文件过滤及 HFS+ 压缩镜像生成；为 Shell 的两个运行时根目录分别收集，保留插件 peers 和许可 |
 
 编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。原样构建 `desktop-dialog.html`、`recovery.html`、`profile-create.html`、`profile-selector.html`，不使用官方 `main`、`bin` 或 fork 的 `workbench`。

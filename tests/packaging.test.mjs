@@ -3,10 +3,28 @@ import assert from 'node:assert/strict';
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
 import {auditLinks, isWithin} from '../scripts/package-common.mjs';
 import {packagingPlan} from '../scripts/ci-plan.mjs';
 import {safeHostEnvironment} from '../src/desktop-adapter/stable/safe-mode.mjs';
 import {copyProductionDependencies} from '../scripts/package-dependencies.mjs';
+import {macUniversalArchFiles, packagedMacRuntime} from '../scripts/package-upstream-config.mjs';
+import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
+import {desktopSource} from '../src/desktop-adapter/paths.mjs';
+
+test('universal merge accepts the official native pairs inside the hidden runtime but rejects unlisted binaries', async () => {
+  const {minimatch} = createRequire(desktopRequire.resolve('@electron/universal'))('minimatch');
+  const {MACOS_UNIVERSAL_NATIVE_ENTRIES, FORBIDDEN_MACOS_UNIVERSAL_ENTRIES} =
+    await import(pathToFileURL(join(desktopSource, 'scripts/mac-universal.ts')).href);
+  for (const {path} of MACOS_UNIVERSAL_NATIVE_ENTRIES) {
+    assert.equal(minimatch(packagedMacRuntime + '/' + path, macUniversalArchFiles, {matchBase: true}), true, path);
+  }
+  for (const path of [...FORBIDDEN_MACOS_UNIVERSAL_ENTRIES, 'node_modules/unlisted/binding.node']) {
+    assert.equal(minimatch(packagedMacRuntime + '/' + path, macUniversalArchFiles, {matchBase: true}), false, path);
+  }
+  assert.equal(minimatch('Contents/MacOS/DSH Project Desktop', macUniversalArchFiles, {matchBase: true}), false);
+});
 
 test('production staging preserves nested and optional runtime dependencies and licenses, without development tools or native build outputs', async () => {
   const root = mkdtempSync(join(tmpdir(), 'project-production-'));
