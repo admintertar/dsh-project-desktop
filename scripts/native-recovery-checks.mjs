@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {loadDesktop} from '../src/desktop-adapter/stable/modules.mjs';
+import {nativeWindow, click, confirm, restartRecovery} from './native-profile-recovery-case.mjs';
 
 async function until(check, label) {
   const deadline = Date.now() + 20000;
@@ -16,7 +17,7 @@ async function clickText(window, label) {
     if (!button) throw new Error(document.body.innerText); button.click();
   })()`);
 }
-export async function checkNativeRecovery({open, showGuide, workspace, session, manifests, userData, bravo}) {
+export async function checkNativeRecovery({electron, workspace, session, manifests, userData, bravo}) {
   await clickText(bravo.window, 'Desktop');
   await textReady(bravo.window, 'Enable desktop notifications');
   await textReady(bravo.window, 'Choose one plugin market for this project');
@@ -58,18 +59,18 @@ export async function checkNativeRecovery({open, showGuide, workspace, session, 
   alpha.window.webContents.forcefullyCrashRenderer();
   await until(() => workspace.failures().some(item => item.path === manifests[0]), 'renderer failure recorded');
   assert.equal((await bravo.host.request('/api/project/snapshot')).status, 200);
-  assert.equal(session.get(manifests[0]).phase, 'failed');
+  let recoveryWindow = await nativeWindow(electron, 'recovery');
+  assert.equal(session.get(manifests[0]).phase, 'recovering');
   const settings = join(alpha.host.result.homeDir, 'settings.yaml');
   writeFileSync(settings, 'invalid-settings: [');
-  const guide = await showGuide(); guide.showInactive();
-  await textReady(guide, 'Alpha');
-  const chinese = (await guide.webContents.executeJavaScript('document.documentElement.lang')) === 'zh';
-  await clickText(guide, chinese ? '恢复项目配置' : 'Recover project settings');
-  await textReady(guide, chinese ? '健康检查点' : 'Healthy checkpoint');
-  writeFileSync(join(userData, 'project-recovery.png'), (await guide.webContents.capturePage()).toPNG());
-  await clickText(guide, chinese ? '恢复并打开' : 'Restore and open');
-  await until(async () => guide.webContents.executeJavaScript(`Boolean(document.querySelector('[role=dialog]'))`), 'restore confirmation');
-  await guide.webContents.executeJavaScript(`[...document.querySelectorAll('[role=dialog] button')].at(-1).click()`);
+  const chinese = (await recoveryWindow.webContents.executeJavaScript('document.body.innerText')).includes('快速恢复');
+  await click(recoveryWindow, chinese ? '回滚' : 'Rollback');
+  await textReady(recoveryWindow, chinese ? '恢复此检查点' : 'Restore this checkpoint');
+  writeFileSync(join(userData, 'project-recovery.png'), (await recoveryWindow.webContents.capturePage()).toPNG());
+  await click(recoveryWindow, chinese ? '恢复此检查点' : 'Restore this checkpoint');
+  await confirm(electron);
+  await until(() => !readFileSync(settings, 'utf8').includes('invalid-settings'), 'configuration restored');
+  await restartRecovery(electron, recoveryWindow);
   await until(() => workspace.projects.has(manifests[0]) && session.get(manifests[0]).phase === 'open', 'recovered project');
   const recovered = workspace.projects.get(manifests[0]);
   assert.notEqual(recovered.host.result.pid, oldPid);
@@ -80,7 +81,10 @@ export async function checkNativeRecovery({open, showGuide, workspace, session, 
   process.kill(recovered.host.result.pid, 'SIGKILL');
   await until(() => workspace.failures().some(item => item.path === manifests[0]), 'Host failure recorded');
   assert.equal((await bravo.host.request('/api/project/snapshot')).status, 200);
-  const retried = await open(manifests[0]); assert.notEqual(retried.host.result.pid, recovered.host.result.pid);
+  recoveryWindow = await nativeWindow(electron, 'recovery');
+  await restartRecovery(electron, recoveryWindow);
+  await until(() => workspace.projects.has(manifests[0]), 'Host restarted from recovery');
+  const retried = workspace.projects.get(manifests[0]); assert.notEqual(retried.host.result.pid, recovered.host.result.pid);
   assert.equal(retried.window.getNormalBounds().width, 980);
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
   const zip = await exportDiagnosticsZip(join(retried.host.stateDirectory, 'logs'), retried.host.stateDirectory, {appVersion: 'DSH Project Desktop native validation'});

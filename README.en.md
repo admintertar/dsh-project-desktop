@@ -11,6 +11,7 @@ An independent AI development desktop for projects spanning multiple repositorie
 - **Project startup:** restore the projects left open at exit; otherwise show a welcome screen with recent-project search, creation and opening.
 - **Project creation:** choose a composition, initialize the project and independent resource Git repositories, link existing directories or clone asynchronously with authentication UI.
 - **Window isolation:** one Electron main process with separate renderers, Hosts, Profiles, runtime data and browser partitions for each project.
+- **Multiple Profiles per project:** each project owns a DSH Home. Use the official windows under **Project Tools → Profiles…** to create or switch environments. Selection stays local; switching restarts only that project.
 - **Recovery and safe mode:** handle project failures, configuration checkpoints, dependency rebuilding and temporary safe mode without stopping other projects.
 - **Desktop integration:** native file menus, window restoration, notifications, diagnostics, shared light/dark preference and Chinese/English UI.
 
@@ -58,7 +59,7 @@ See [project directories and files](docs/project-directory-structure.md). Applic
 
 ## Checks and packaging
 
-`npm run check` covers application logic, source integrity, building, recovery, safe mode, project creation and real dual-Host smoke tests. Separate `smoke:native`, `smoke:resources` and `smoke:lifecycle` checks require a graphical session and are not part of headless checks.
+`npm run check` covers application logic, source integrity, building, recovery, safe mode, project creation and real dual-Host smoke tests. Separate `smoke:native`, `smoke:profiles`, `smoke:resources` and `smoke:lifecycle` checks require a graphical session and are not part of headless checks. `smoke:profiles` exercises the official Profile windows, Recovery Assistant and per-project recovery isolation.
 
 ```sh
 npm run package:mac

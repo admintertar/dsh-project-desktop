@@ -34,7 +34,7 @@ export function apply(ctx, config) {
     windowsMaterial: z.union(['off', 'acrylic', 'mica']).default('off'),
     logLevel: z.union(['debug', 'info', 'warn', 'error']).default('info'),
   }), {applies: 'restart'});
-  // Market choice belongs to this project's Profile and is consumed before the next Host starts.
+  // Market choice is shared within this project's Home and consumed before the next Host starts.
   ctx.settings.register('dsh-project-market', z.object({
     provider: z.union(['disabled', 'dsh-market']).default('dsh-market'),
   }), {applies: 'restart'});

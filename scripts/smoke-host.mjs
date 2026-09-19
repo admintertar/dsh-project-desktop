@@ -6,6 +6,7 @@ import {ProjectRegistry} from '../src/windows/project-registry.mjs';
 import {SharedTheme} from '../src/app/shared-theme.mjs';
 import {repository} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
+import {projectProfiles} from '../src/desktop-adapter/stable/project-profiles.mjs';
 
 verifyUpstream();
 mkdirSync(join(repository, '.runtime'), {recursive: true});
@@ -95,10 +96,19 @@ try {
   await theme.connect('alpha', await reopened.getTheme(), value => reopened.setTheme(value));
   await theme.select('system');
   assert.equal(await reopened.getTheme(), 'system'); assert.equal(await beta.getTheme(), 'system');
+  await registry.close('alpha');
+  const profiles = await projectProfiles({stateDirectory: join(root, 'state/alpha'), manifestPath: join(root, 'alpha/alpha.agent-project')});
+  profiles.create('review'); profiles.select('review');
+  const switched = await open('alpha');
+  assert.equal(switched.result.profileName, 'review');
+  assert.equal((await (await switched.request('/api/project/snapshot')).json()).root, join(root, 'alpha'));
+  assert.equal((await (await switched.request('/api/project/snapshot')).json()).memory[0].content, 'alpha updated knowledge');
+  assert.ok(switched.result.tools.includes('project_task_create'));
+  assert.equal((await beta.request('/api/project/snapshot')).status, 200);
   verifyUpstream();
   console.log(JSON.stringify({ok: true, desktop: '2.0.11', harness: '0.1.5-rc.2',
     checks: ['official-source-integrity', 'two-isolated-hosts', 'renderer-authentication', 'project-api',
       'project-task-tools', 'root-memory-read-edit-reopen', 'client-bundles', 'project-market-desktop-pnpm-bridge', 'project-market-profile-binding', 'project-market-disable-on-restart',
-      'disabled-official-updates', 'shared-theme', 'close-and-reopen-isolation'],
+      'disabled-official-updates', 'shared-theme', 'close-and-reopen-isolation', 'selected-profile-project-binding'],
     nativeWindowsTested: false, evidence: root}, null, 2));
 } finally {await registry.closeAll()}

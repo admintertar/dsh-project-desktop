@@ -3,7 +3,7 @@ import {loadDesktop, loadDependency} from './modules.mjs';
 /**
  * Expose only the immutable active Profile identity consumed by dsh-market's
  * documented Desktop package-operation bridge. This is deliberately not a
- * Profile manager: Project Desktop still owns one fixed Profile per project.
+ * Profile manager: the main process owns the project's native Profile chooser.
  */
 export function createProjectMarketProfileIdentity(profile) {
   if (typeof profile?.name !== 'string' || typeof profile?.dir !== 'string') {

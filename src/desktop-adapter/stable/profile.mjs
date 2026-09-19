@@ -21,14 +21,16 @@ export function readProjectMarketPreference(settingsPath) {
 }
 
 /** Runs only in the project's isolated process, before its Host starts. */
-export async function prepareProjectProfile(manifestPath, stateDirectory, {homeDir = join(stateDirectory, 'dsh'), safeMode = false} = {}) {
-  const profileDir = join(homeDir, 'profiles/desktop');
+export async function prepareProjectProfile(manifestPath, stateDirectory, {homeDir = join(stateDirectory, 'dsh'), safeMode = false, profileName = 'desktop'} = {}) {
+  const {assertDesktopProfileName} = await loadDesktop('profile-manager');
+  assertDesktopProfileName(profileName);
+  const profileDir = join(homeDir, 'profiles', profileName);
   const profileApi = await loadDesktop('profile');
   const {createDesktopWebProfile} = await loadDesktop('profile-manager');
   const fresh = !existsSync(join(profileDir, 'package.json'));
   const patch = join(profileDir, 'cordis.patch.yml');
   if (!fresh && !existsSync(patch + '.project-desktop-owner')) throw new Error('Refusing to overwrite an unowned Profile');
-  if (fresh) createDesktopWebProfile(homeDir, 'desktop');
+  if (fresh) createDesktopWebProfile(homeDir, profileName);
   if (existsSync(patch + '.project-desktop-owner') && readFileSync(patch + '.project-desktop-owner', 'utf8').trim() !== manifestPath) {
     throw new Error('Profile belongs to another project');
   }
@@ -91,7 +93,7 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
     runtimeLink(join(repository, '.cache/runtime/dsh-project-shell'), shellLink);
   }
   await profileApi.healDesktopProfileModuleFallback(homeDir);
-  const prepared = profileApi.prepareDesktopProfile('1', homeDir, process.platform, 'desktop',
+  const prepared = profileApi.prepareDesktopProfile('1', homeDir, process.platform, profileName,
     join(stateDirectory, 'plugin-management/state.json'),
     {requested: requestedMarket, effective: requestedMarket, legacyDefaulted: false},
     {lanAddresses: [], aaEnabled: false});
@@ -104,6 +106,8 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
   }
   // Apply product policy last, after official normalization and user profile layers.
   prepared.patches.push({id: 'desktop-updates', disabled: true}, {id: 'desktop-profiles', disabled: true});
+  // Every normal Profile belongs to the same project, regardless of user patch layers.
+  if (!safeMode) prepared.patches.push({id: 'project', disabled: false, config: {manifestPath, enabled: true}});
   if (safeMode) prepared.patches.push({id: 'desktop-pnpm', disabled: true}, {id: 'desktop-terminal', disabled: true},
     {id: 'desktop-notifications', disabled: true}, {id: 'session-telemetry-otel', disabled: true});
   const shellConfig = prepared.patches.findLast(patch => patch.id === 'desktop-shell' && patch.config)?.config;

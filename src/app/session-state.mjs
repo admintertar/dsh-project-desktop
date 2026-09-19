@@ -11,7 +11,7 @@ export class SessionState {
       const value = JSON.parse(readFileSync(file, 'utf8'));
       if (value.version !== 1 || !Array.isArray(value.projects) || value.projects.some(item =>
         !item || typeof item.path !== 'string' || !isAbsolute(item.path) || typeof item.title !== 'string'
-        || !['open', 'opening', 'failed'].includes(item.phase))) throw new Error('Invalid workspace session');
+        || !['open', 'opening', 'failed', 'recovering'].includes(item.phase))) throw new Error('Invalid workspace session');
       this.value = {...value, projects: [...new Map(value.projects.map(item => [item.path, item])).values()]};
     } catch {
       // Keep the unreadable record for diagnosis instead of overwriting it on the next open.

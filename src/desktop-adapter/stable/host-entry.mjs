@@ -89,7 +89,7 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   const pluginRequire = request.safeMode ? undefined : createRequire(join(prepared.profile.dir, '.project-plugin/package.json'));
   const projectSessionVersion = pluginRequire ? JSON.parse(readFileSync(pluginRequire.resolve('@deepseek-ai/dsh-session/package.json'), 'utf8')).version : null;
   const profileIdentity = host.get('desktopProfiles');
-  return {pid: process.pid, homeDir, profile: prepared.profile.dir, ...verifyRuntimeDependencies(), projectSessionVersion,
+  return {pid: process.pid, homeDir, profile: prepared.profile.dir, profileName: prepared.profile.name, ...verifyRuntimeDependencies(), projectSessionVersion,
     safeMode: Boolean(request.safeMode),
     tools: host.tools.schemas().map(tool => tool.name),
     policy: {

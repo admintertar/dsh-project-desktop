@@ -217,11 +217,21 @@ Git 保存文件，不保存空目录。因此 `.agent-project/.gitignore` 可�
 └── projects/
     └── <项目文件路径的哈希>/       # 该路径对应的独立运行环境
         ├── project-desktop.json  # 项目路径与运行目录的归属记录
-        ├── dsh/                  # DSH Home、Profile、设置及会话等运行数据
+        ├── profile-selection/
+        │   └── state.json        # 官方格式的本机 Profile 选择，不写入项目定义
+        ├── dsh/                  # 该项目的独立 DSH Home
+        │   ├── settings.yaml     # 项目内普通共享设置
+        │   └── profiles/         # 多个 Profile，同时只运行一个
+        │       ├── desktop/      # 默认 Profile，保留原有环境
+        │       └── <名称>/        # 官方模板创建的其他 Profile
+        ├── health-snapshots/      # 按 Profile 区分的官方三槽配置检查点
+        ├── project-recovery-pending*.json # 恢复未完成时出现，按 Profile 阻止启动
         └── logs/                 # Host 日志
 ```
 
 这些数据不属于项目 Git。复制或克隆项目可以带走已提交的项目内容，不会自动带走模型配置、会话历史或本机绑定。外部资源在另一台电脑上可以重新绑定。
+
+切换 Profile 不改变项目文件、Resources、Tasks 和 Memory。插件依赖和 Profile 补丁按环境分开；普通设置默认在同项目 Home 内共享。官方检查点也包含部分 Home 共享配置，回滚时会一并恢复，但不会回滚项目代码与资料。恢复助手只处理所属项目，欢迎页负责项目入口与丢失文件定位。
 
 当前运行环境按项目文件的实际绝对路径区分。移动或重命名项目文件后，应用会使用新路径对应的环境并保留旧运行数据；目前不会自动迁移旧会话。
 

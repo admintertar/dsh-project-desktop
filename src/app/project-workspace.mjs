@@ -99,6 +99,19 @@ export class ProjectWorkspace {
       this.#fail(path, error);
     });
   }
+  beginRecovery(path, {requested = false} = {}) {
+    return this.#run(path, async () => {
+      if (!this.session.get(path)) throw new Error('Unknown recovery project');
+      try {
+        await this.#stop(path);
+        if (requested) this.errors.delete(path);
+        this.#record(path, 'recovering');
+        let recovery = this.#recoveries.get(path);
+        if (!recovery) {recovery = await this.recovery(path); this.#recoveries.set(path, recovery)}
+        return recovery;
+      } catch (error) {this.#fail(path, error); throw error}
+    });
+  }
   recover(path, action = 'list', value) {
     return this.#run(path, async () => {
       if (!this.session.get(path)) throw new Error('Unknown recovery project');
@@ -126,7 +139,7 @@ export class ProjectWorkspace {
     return this.failures();
   }
   failures() {
-    return this.session.list().filter(item => item.phase === 'failed').map(item => ({...item, error: this.errors.get(item.path), safeMode: Boolean(this.projects.get(item.path)?.safeMode)}));
+    return this.session.list().filter(item => ['failed', 'recovering'].includes(item.phase)).map(item => ({...item, error: this.errors.get(item.path), safeMode: Boolean(this.projects.get(item.path)?.safeMode)}));
   }
   async shutdown() {
     this.#quitting = true;

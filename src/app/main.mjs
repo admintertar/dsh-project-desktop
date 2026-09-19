@@ -11,6 +11,8 @@ import {projectStatePath} from './project-state.mjs';
 import {RecentProjects, resolveProjectFile} from './project-files.mjs';
 import {openNativeProject} from '../desktop-adapter/native.mjs';
 import {createProjectRecovery, describeProjectError} from '../desktop-adapter/stable/recovery.mjs';
+import {projectProfiles} from '../desktop-adapter/stable/project-profiles.mjs';
+import {createProjectNativeWindow} from '../desktop-adapter/stable/project-native-windows.mjs';
 import {prepareSafeMode, cleanupSafeMode} from '../desktop-adapter/stable/safe-mode.mjs';
 import {cancelGuideCreations, createGuideWindow} from '../windows/guide-window.mjs';
 import {assertProjectCreationReady} from './project-bootstrap.mjs';
@@ -22,8 +24,9 @@ const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-
 const trayIcon = join(repository, 'assets', 'tray', process.platform === 'darwin' ? 'tray-iconTemplate.png' : 'tray-icon-blue.png');
 const smoke = process.argv.includes('--native-smoke') && !app.isPackaged;
 const lifecycleTest = process.argv.includes('--lifecycle-test') && !app.isPackaged;
+const profileRecoveryTest = process.argv.includes('--profile-recovery-test') && !app.isPackaged;
 const installationCheck = process.argv.includes('--verify-installation');
-const testing = smoke || lifecycleTest || installationCheck;
+const testing = smoke || lifecycleTest || profileRecoveryTest || installationCheck;
 app.setName('DSH Project Desktop');
 const userData = installationCheck ? mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))
   : testing ? resolve(process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA) : join(app.getPath('appData'), 'dsh-project-desktop');
@@ -53,8 +56,16 @@ async function run() {
   if (storedTheme) nativeTheme.themeSource = storedTheme;
   const report = error => {console.error(error); if (!testing) dialog.showErrorBox('DSH Project Desktop', error.message ?? String(error))};
   const perform = action => {void Promise.resolve().then(action).catch(report)};
+  const surfaces = new Map();
+  const preparedSafeModes = new Map();
   const workspace = new ProjectWorkspace({session, resolveProject: resolveProjectFile, create: createProject,
-    recovery: manifest => createProjectRecovery(projectStatePath(userData, manifest)), changed() {
+    recovery: async manifest => {
+      const state = projectStatePath(userData, manifest, {allowMissing: true});
+      const profiles = await projectProfiles(state);
+      return createProjectRecovery({...state, profileName: profiles.current(), openDirectory: async path => {
+        const error = await electron.shell.openPath(path); if (error) throw new Error(error);
+      }});
+    }, changed() {
       refreshMenus();
       if (guide && !guide.isDestroyed()) guide.webContents.send('project-desktop:state-changed');
     }});
@@ -66,6 +77,8 @@ async function run() {
   const liveProjects = () => [...projects.values()].filter(project => !project.window.isDestroyed());
   const showApplication = () => {
     if (!startupComplete) return;
+    const surface = surfaces.get(session.value.activePath) ?? [...surfaces.values()][0];
+    if (surface) return surface.opening.then(handle => handle.show());
     const preferred = active() ?? projects.get(session.value.activePath);
     const project = preferred && !preferred.window.isDestroyed() ? preferred : liveProjects()[0];
     if (project) project.focus(); else return showGuide();
@@ -80,9 +93,9 @@ async function run() {
       recent, open, hidden: testing, defaultDirectory: app.getPath('documents'),
       openNewProject: showProjectCreate,
       recentChanged: refreshMenus,
-      getFailures: () => workspace.failures(), warning: session.warning ?? recent.warning,
-      forget: path => close(path), recover: (path, action, value) => workspace.recover(path, action, value),
-      safeMode: path => workspace.safeMode(path), exitSafeMode: path => workspace.exitSafeMode(path),
+      getFailures: () => workspace.failures().filter(item => !surfaces.has(item.path) && !projects.has(item.path)),
+      warning: session.warning ?? recent.warning,
+      forget: path => close(path),
       async relocate(path, replacement) {
         const canonical = resolveProjectFile(replacement);
         await open(canonical);
@@ -117,28 +130,99 @@ async function run() {
     if (!result.canceled) await open(result.filePaths[0]);
   }
   async function close(id, {showWelcome = true} = {}) {
+    await dismissSurface(id);
     await workspace.close(id);
-    if (showWelcome && !quitting && !projects.size) await showGuide();
+    if (showWelcome && !quitting && !projects.size && !surfaces.size) await showGuide();
   }
   async function open(target, {showWelcomeOnError = true} = {}) {
+    let manifest;
     try {
       if (quitting) throw new Error('Application is shutting down');
-      assertProjectCreationReady(resolveProjectFile(target));
-      const project = await workspace.open(target);
+      manifest = resolveProjectFile(target);
+      assertProjectCreationReady(manifest);
+      if (surfaces.has(manifest)) {const handle = await surfaces.get(manifest).opening; handle.show(); return}
+      const project = await workspace.open(manifest);
       const previousGuide = guide;
       setImmediate(() => {if (previousGuide && !previousGuide.isDestroyed() && !workspace.failures().length) previousGuide.close()});
       return project;
-    } catch (error) {if (showWelcomeOnError && startupComplete && !quitting) await showGuide(); throw error}
+    } catch (error) {
+      if (manifest && session.get(manifest) && !quitting) {await recover(manifest, {requested: false, error}); return}
+      if (showWelcomeOnError && startupComplete && !quitting) await showGuide();
+      throw error;
+    }
   }
-  async function recover(manifest) {
-    try {await workspace.recover(manifest)} finally {await showGuide()}
+  async function dismissSurface(manifest) {
+    const entry = surfaces.get(manifest);
+    if (!entry) return;
+    entry.closing = true;
+    const handle = await entry.opening.catch(() => undefined);
+    await handle?.close();
+    await entry.done;
+    if (surfaces.get(manifest) === entry) surfaces.delete(manifest);
+  }
+  async function restart(manifest) {
+    const locale = projects.get(manifest)?.locale ?? session.get(manifest)?.locale;
+    await dismissSurface(manifest);
+    try {return await workspace.restart(manifest)}
+    catch (error) {if (!quitting) await recover(manifest, {requested: false, error, locale})}
+  }
+  async function recover(manifest, {requested = true, error, locale} = {}) {
+    return showProfileSurface(manifest, {recoveryMode: true, requested, error, locale});
+  }
+  async function showProfileSurface(manifest, {recoveryMode = false, requested = false, error, locale} = {}) {
+    if (quitting) return;
+    let existing = surfaces.get(manifest);
+    if (existing?.recoveryMode === recoveryMode) {const handle = await existing.opening; handle.show(); return handle}
+    if (existing) await dismissSurface(manifest);
+    const project = projects.get(manifest);
+    const entry = {recoveryMode, closing: false, locale: locale ?? (!project?.safeMode ? project?.locale : undefined)
+      ?? session.get(manifest)?.locale ?? language()};
+    session.update(manifest, {locale: entry.locale});
+    surfaces.set(manifest, entry);
+    entry.opening = (async () => {
+      const state = projectStatePath(userData, manifest, {allowMissing: true});
+      let recovery, readOnly = false;
+      if (recoveryMode) {
+        try {recovery = await workspace.beginRecovery(manifest, {requested})}
+        catch (cause) {
+          // If shutdown or ownership validation failed, show official diagnostics without mutation capabilities.
+          readOnly = true; requested = false; error = cause;
+          recovery = {profileName: (await projectProfiles(state)).current(), waitIdle: async () => {}};
+        }
+      }
+      const handle = await createProjectNativeWindow({...state, locale: entry.locale, recovery, requested, readOnly,
+        failureDetail: error ? await describeProjectError(error) : workspace.errors.get(manifest),
+        failureStage: error?.failureStage ?? 'host-boot', isClosing: () => quitting || entry.closing,
+        enterSafeMode: async () => {
+          preparedSafeModes.set(manifest, await prepareSafeMode(state.stateDirectory));
+        }});
+      entry.handle = handle;
+      entry.done = handle.result.then(async result => {
+        if (surfaces.get(manifest) === entry) surfaces.delete(manifest);
+        if (entry.closing || quitting) return;
+        if (result === 'restart') await restart(manifest);
+        else if (result === 'safe-mode') {
+          try {await workspace.safeMode(manifest)} catch (cause) {await recover(manifest, {requested: false, error: cause})}
+        } else if (recoveryMode) await close(manifest);
+      }).catch(report).finally(() => {
+        if (surfaces.get(manifest) === entry) surfaces.delete(manifest);
+      });
+      await handle.ready;
+      if (entry.closing) await handle.close();
+      else if (recoveryMode && guide && !guide.isDestroyed()) guide.close();
+      return handle;
+    })().catch(error => {if (surfaces.get(manifest) === entry) surfaces.delete(manifest); throw error});
+    return entry.opening;
   }
   async function createProject(manifest, _signal, {safeMode = false} = {}) {
       const state = projectStatePath(userData, manifest, {allowMissing: safeMode});
       let detach, stop, temporary;
       let value;
       try {
-        if (safeMode) temporary = await prepareSafeMode(state.stateDirectory);
+        if (safeMode) {
+          temporary = preparedSafeModes.get(manifest) ?? await prepareSafeMode(state.stateDirectory);
+          preparedSafeModes.delete(manifest);
+        }
         else await cleanupSafeMode(state.stateDirectory);
         const title = basename(manifest, '.agent-project');
         value = await openNativeProject(electron, {...state, projectRoot: dirname(manifest), ...temporary,
@@ -149,12 +233,12 @@ async function run() {
           onFocus: () => session.focus(manifest),
           onFailure: error => perform(async () => {
             if (quitting) return;
+            const locale = value?.locale;
             error.message = await describeProjectError(error);
-            await workspace.fail(manifest, error); await showGuide();
+            await workspace.fail(manifest, error); await recover(manifest, {requested: false, error, locale});
           }),
-          close: () => perform(async () => {if (safeMode) {await workspace.exitSafeMode(manifest); await showGuide()} else await close(manifest)}), restart: async () => {
-            try {return await workspace.restart(manifest)} catch (error) {await showGuide(); throw error}
-          }, recover: () => recover(manifest),
+          close: () => perform(async () => {if (safeMode) {await workspace.exitSafeMode(manifest); await recover(manifest)} else await close(manifest)}),
+          restart: () => restart(manifest), recover: () => recover(manifest),
           windows: {list: () => [...projects].map(([id, project]) => ({id, title: project.window.getTitle(), current: id === manifest})),
             open: async () => {await showGuide()}, focus: id => projects.get(id)?.focus(), quit: () => perform(() => close(manifest))},
           async connectTheme(host) {
@@ -165,7 +249,7 @@ async function run() {
         const nativeClose = value.close;
         value.safeMode = safeMode;
         value.close = async () => {stop?.(); await detach?.(); await nativeClose(); temporary?.cleanup()};
-        if (!safeMode) recent.remember({path: manifest, title});
+        if (!safeMode) {recent.remember({path: manifest, title}); session.update(manifest, {locale: value.locale})}
         return value;
       } catch (error) {
         stop?.(); await detach?.();
@@ -204,12 +288,16 @@ async function run() {
       {label: zh ? '项目工具' : 'Project Tools', submenu: [...tools,
         command(zh ? '打开项目终端' : 'Open Project Terminal', () => active()?.terminal(), {enabled: Boolean(current) && !current.safeMode}),
         command(zh ? '导出项目诊断…' : 'Export Project Diagnostics…', () => active()?.diagnostics(), {enabled: Boolean(current)}),
+        command(zh ? 'Profile…' : 'Profiles…', () => {
+          const entry = [...projects].find(([, value]) => value === active());
+          if (entry) return showProfileSurface(entry[0]);
+        }, {enabled: Boolean(current) && !current.safeMode}),
         {type: 'separator'},
         command(zh ? '重启当前项目' : 'Restart Current Project', () => active()?.restart(), {enabled: Boolean(current)}),
         command(current?.safeMode ? (zh ? '退出安全模式' : 'Exit Safe Mode') : (zh ? '在安全模式中打开' : 'Open in Safe Mode'), async () => {
           const entry = [...projects].find(([, value]) => value === active()); if (!entry) return;
-          if (entry[1].safeMode) {await workspace.exitSafeMode(entry[0]); await showGuide()}
-          else await workspace.safeMode(entry[0]);
+          if (entry[1].safeMode) {await workspace.exitSafeMode(entry[0]); await recover(entry[0])}
+          else {await dismissSurface(entry[0]); await workspace.safeMode(entry[0])}
         }, {enabled: Boolean(current)}),
         command(zh ? '项目恢复…' : 'Project Recovery…', () => active()?.recover(), {enabled: Boolean(current)})]},
       roles.window,
@@ -233,7 +321,12 @@ async function run() {
   app.on('before-quit', event => {
     if (quitReady) return;
     event.preventDefault(); if (quitting) return; quitting = true;
-    void cancelGuideCreations().then(() => workspace.shutdown()).then(() => {quitReady = true; tray?.destroy(); app.exit(process.exitCode ?? 0)}).catch(error => {
+    void cancelGuideCreations().then(async () => {
+      await Promise.all([...surfaces.keys()].map(dismissSurface));
+      for (const temporary of preparedSafeModes.values()) temporary.cleanup();
+      preparedSafeModes.clear();
+      await workspace.shutdown();
+    }).then(() => {quitReady = true; tray?.destroy(); app.exit(process.exitCode ?? 0)}).catch(error => {
       quitting = false; report(error); perform(showGuide);
     });
   });
@@ -254,6 +347,15 @@ async function run() {
   tray = new Tray(icon); tray.setToolTip('DSH Project Desktop');
   tray.on('click', () => perform(showApplication));
   refreshMenus();
+  if (profileRecoveryTest) {
+    startupComplete = true;
+    try {await (await import('../../scripts/native-profile-recovery-case.mjs')).runProfileRecoveryCase({electron, open, close,
+      showProfiles: manifest => showProfileSurface(manifest), recover, restart, workspace, session, userData,
+      hasGuide: () => Boolean(guide && !guide.isDestroyed())})}
+    catch (error) {console.error(error); process.exitCode = 1}
+    finally {app.quit()}
+    return;
+  }
   if (installationCheck) {
     startupComplete = true;
     try {await (await import('../../scripts/install-check.mjs')).verifyInstallation({electron, open, close, workspace, showGuide, userData})}
@@ -269,11 +371,16 @@ async function run() {
     return;
   }
   await workspace.restore();
+  for (const failure of workspace.failures()) {
+    try {resolveProjectFile(failure.path)} catch {continue}
+    await recover(failure.path, {requested: failure.phase === 'recovering', error: new Error(failure.error ?? 'Previous project startup failed')});
+  }
   while (startupFiles.length) await Promise.allSettled(startupFiles.splice(0).map(open));
   startupComplete = true;
-  if (!projects.size || workspace.failures().length) await showGuide();
+  if ((!projects.size && !surfaces.size) || workspace.failures().some(item => !surfaces.has(item.path))) await showGuide();
   if (lifecycleTest) {
-    try {await (await import('../../scripts/native-lifecycle-case.mjs')).runLifecycleCase({electron, open, close, showGuide, projects, userData, workspace, session, hasGuide: () => Boolean(guide)});}
+    try {await (await import('../../scripts/native-lifecycle-case.mjs')).runLifecycleCase({electron, open, close, showGuide, dismissSurface,
+      projects, userData, workspace, session, hasGuide: () => Boolean(guide)});}
     catch (error) {console.error(error); process.exitCode = 1}
     finally {app.quit()}
   }

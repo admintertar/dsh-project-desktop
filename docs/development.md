@@ -80,6 +80,7 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 | `npm run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
 | `npm run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
 | `npm run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
+| `npm run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
 | `npm run smoke:resources` | Native resource status and remote-association checks |
 | `npm run smoke:lifecycle` | Native lifecycle and single-instance behavior |
 | `npm run test:recovery:network` | Network dependency recovery with an isolated test registry |

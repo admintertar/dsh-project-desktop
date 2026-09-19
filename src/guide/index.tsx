@@ -18,16 +18,14 @@ const copy = {
     remoteBranch: '分支', remoteBranchHint: '留空使用仓库的默认分支。', defaultBranch: '默认分支', saveAndClone: '保存并克隆', saving: '正在保存…', unlinkRemote: '取消关联',
     remoteUrlHint: '支持 HTTPS 或 SSH，需要时会提示认证。', remoteUrlRequired: '请输入仓库地址。', remoteUrlInvalid: '请输入不含密码或令牌的 HTTPS 或 SSH 仓库地址。', remoteBranchInvalid: '请输入有效分支名，不可包含空格、.. 或 ~ ^ : ? * [ \\ 等字符。',
     cloneReady: '克隆完成', clonePending: '正在准备克隆…', cloneWaiting: '等待克隆完成后即可创建项目。',
-    safeMode: '在安全模式中打开', exitSafeMode: '退出安全模式', safeActive: '安全模式正在运行。临时环境不会加载此项目的插件、配置或密钥；关闭后清理临时数据。',
     choose: '选择项目文件夹…', open: '打开已有项目…', recent: '最近项目', create: '创建并打开', existing: '打开项目', addResource: '添加资源', removeResource: '移除资源',
     projectName: '项目名称', projectPath: '项目路径', template: '项目组合', fullstack: 'Web 应用', admin: '管理系统', miniapp: '小程序项目', app: '移动应用', desktop: '桌面应用', emptyTemplate: '空项目', resources: '资源', resourceName: '资源名称', emptyResource: '将新建本地 Git 仓库', localResource: '关联本地文件', remoteResource: '关联远程仓库', linkLocal: '关联本地文件', linkRemote: '关联远程仓库', remoteUrl: 'Git 仓库地址', remoteUrlPlaceholder: 'https://github.com/org/repository.git', renameResource: '双击修改资源名称',
     folder: '项目文件夹', file: '项目文件', back: '重新选择', busy: '正在打开项目…', retry: '重试', resourceHint: '未关联的资源将在创建项目时初始化为独立的本地 Git 仓库；也可关联远程仓库或本地文件夹。',
     hint: '项目会创建在这个路径下，项目名称作为项目文件夹名。', browse: '浏览…', cancel: '取消',
     search: '搜索项目', new: '新建项目', openShort: '打开', openRecent: '打开项目', recentActions: '项目操作', removeRecent: '从最近项目中移除', empty: '开始你的第一个项目', noMatches: '没有找到匹配的项目',
     footer: '退出应用时保留打开的项目，下次启动时自动恢复。', recovery: '需要处理的项目', retryOpen: '重试打开',
-    locate: '重新定位', forget: '不再恢复', checkpoints: '恢复项目配置', noCheckpoints: '还没有可用的健康检查点。可以重试打开，或重新定位项目文件。',
-    restore: '恢复并打开', restoreTitle: '恢复项目配置？', restoreBody: '将恢复该检查点中的设置与插件配置。项目文件、会话和任务内容保持原样。',
-    details: '查看详情', checkpoint: '健康检查点', pending: '项目尚未打开，可以重试或选择健康检查点。',
+    locate: '重新定位', forget: '不再自动打开',
+    details: '查看详情', pending: '项目尚未打开，可以重试或重新定位项目文件。',
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
     unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。'},
   en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.',
@@ -36,16 +34,14 @@ const copy = {
     remoteBranch: 'Branch', remoteBranchHint: 'Leave empty to use the repository’s default branch.', defaultBranch: 'Default branch', saveAndClone: 'Save and clone', saving: 'Saving…', unlinkRemote: 'Unlink repository',
     remoteUrlHint: 'HTTPS or SSH. Authentication is requested when needed.', remoteUrlRequired: 'Enter a repository URL.', remoteUrlInvalid: 'Enter an HTTPS or SSH repository URL without a password or token.', remoteBranchInvalid: 'Enter a valid branch name without spaces, .. or ~ ^ : ? * [ \\ characters.',
     cloneReady: 'Clone complete', clonePending: 'Preparing clone…', cloneWaiting: 'Finish cloning resources before creating the project.',
-    safeMode: 'Open in Safe Mode', exitSafeMode: 'Exit Safe Mode', safeActive: 'Safe Mode is running. This temporary environment does not load this project’s plugins, configuration or credentials. Its data is removed on close.',
     choose: 'Choose project folder…', open: 'Open existing project…', recent: 'Recent projects', create: 'Create and open', existing: 'Open project', addResource: 'Add resource', removeResource: 'Remove resource',
     projectName: 'Project name', projectPath: 'Project path', template: 'Project composition', fullstack: 'Web application', admin: 'Admin system', miniapp: 'Mini-program project', app: 'Mobile application', desktop: 'Desktop application', emptyTemplate: 'Empty project', resources: 'Resources', resourceName: 'Resource name', emptyResource: 'Will create a local Git repository', localResource: 'Link local files', remoteResource: 'Link remote repository', linkLocal: 'Link local files', linkRemote: 'Link remote repository', remoteUrl: 'Git repository URL', remoteUrlPlaceholder: 'https://github.com/org/repository.git', renameResource: 'Double-click to rename resource',
     folder: 'Project folder', file: 'Project file', back: 'Choose again', busy: 'Opening project…', retry: 'Retry', resourceHint: 'Unlinked resources become independent local Git repositories when the project is created. You can also link a remote repository or local folder.',
     hint: 'The project is created under this path, using the project name as its folder.', browse: 'Browse…', cancel: 'Cancel',
     search: 'Search projects', new: 'New Project', openShort: 'Open', openRecent: 'Open project', recentActions: 'Project actions', removeRecent: 'Remove from Recent Projects', empty: 'Start your first project', noMatches: 'No matching projects',
     footer: 'Open projects are remembered when you quit and restored on your next launch.', recovery: 'Projects needing attention', retryOpen: 'Retry opening',
-    locate: 'Locate project', forget: 'Stop restoring', checkpoints: 'Recover project settings', noCheckpoints: 'No healthy checkpoint is available yet. Retry opening or locate the project file.',
-    restore: 'Restore and open', restoreTitle: 'Restore project settings?', restoreBody: 'Restore settings and plugin configuration from this checkpoint. Project files, conversations and tasks remain unchanged.',
-    details: 'Show details', checkpoint: 'Healthy checkpoint', pending: 'This project is not open. Retry or select a healthy checkpoint.',
+    locate: 'Locate project', forget: 'Stop opening automatically',
+    details: 'Show details', pending: 'This project is not open. Retry or locate the project file.',
     interrupted: 'The app exited while this project was starting. Retry manually to avoid a repeated startup failure.',
     unreadable: 'The last window record could not be read. The original file was preserved. Reopen a recent project to continue.', historyUnreadable: 'Recent history could not be read. The original file was preserved. You can still open project files.', backProjects: 'Back to projects', sameConfig: 'The current settings match this checkpoint.'},
 };
@@ -169,8 +165,6 @@ function Guide() {
   const [query, setQuery] = useState('');
   const [warning, setWarning] = useState('');
   const [version, setVersion] = useState('');
-  const [recovery, setRecovery] = useState<any>();
-  const [preview, setPreview] = useState<any>();
   const [details, setDetails] = useState<string>();
   const [selection, setSelection] = useState<any>();
   const [templateId, setTemplateId] = useState('fullstack');
@@ -222,19 +216,16 @@ function Guide() {
       const result = await api.invoke(action, value);
       if ((action === 'new' || action === 'choose') && result && typeof result === 'object') {
         const name = action === 'new' ? '' : result.name ?? '';
-        setSelection(result); setProjectName(name); setTemplateId('fullstack'); setDraftResources(makeResources(name || 'project', 'fullstack')); setRecovery(undefined)
+        setSelection(result); setProjectName(name); setTemplateId('fullstack'); setDraftResources(makeResources(name || 'project', 'fullstack'));
       }
       if (action === 'browse-location' && result) setSelection((current: any) => current ? {...current, directory: result} : current);
       if (action === 'pick-resource' && result && value && typeof value.id === 'string') {
         setDraftResources(items => items.map(item => item.id === value.id ? {...item, mode: 'link', path: result, type: undefined, url: '', branch: ''} : item));
       }
       if (action === 'remove-recent' && Array.isArray(result)) setRecent(result);
-      if (action === 'recovery') setRecovery({path: value.path, slots: result});
-      if (action === 'preview') setPreview({...result, path: value.path});
-      if (action === 'restore') {setPreview(undefined); setRecovery(undefined)}
-      if (['forget', 'retry', 'restore', 'relocate', 'safe-mode', 'exit-safe-mode'].includes(action)) {await refresh(); setRecovery(undefined)}
+      if (['forget', 'retry', 'relocate'].includes(action)) await refresh();
     }
-    catch (e) {setError((e as Error).message); if (action === 'restore') setPreview(undefined)} finally {setBusy(false)}
+    catch (e) {setError((e as Error).message)} finally {setBusy(false)}
   }
   const filtered = recent.filter(item => `${item.title} ${item.path}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const selectTemplate = (id: string) => {setTemplateId(id); setDraftResources(makeResources(projectName || selection?.name || 'project', id))};
@@ -259,7 +250,7 @@ function Guide() {
     onRemove={() => removeResource(index)}/>);
   const resourcesReady = draftResources.every(item => item.mode !== 'remote' || clones.some(clone => clone.id === item.id
     && clone.url === item.url && clone.branch === (item.branch ?? '') && clone.status === 'completed'));
-  const reset = () => {void api.invoke('clone-retain', {ids: []}).catch(() => {}); setSelection(undefined); setRecovery(undefined); setError(''); setDraftResources([])};
+  const reset = () => {void api.invoke('clone-retain', {ids: []}).catch(() => {}); setSelection(undefined); setError(''); setDraftResources([])};
   const dialogs = <><GuideResourceAuth controller={auth} t={rt}/>{addingResource && <AddResourceModal resources={draftResources} t={rt}
     pickDirectory={() => api.invoke('pick-resource', {id: addingResource, inspect: true})} onClose={() => setAddingResource(undefined)}
     onSave={async (resource: any) => {
@@ -325,17 +316,12 @@ function Guide() {
         </>}</>
         : <>{failures.length > 0 && <section className="failures"><h2><IconWarningOutline16/> {t.recovery}</h2>{failures.map(item =>
           <article className="failure" key={item.path}><h3>{item.title}</h3><p className="path">{item.path}</p>
-            <p>{item.safeMode ? t.safeActive : item.error === 'startup-interrupted' ? t.interrupted : t.pending}</p>
+            <p>{item.error === 'startup-interrupted' ? t.interrupted : t.pending}</p>
             <div className="actions"><Button variant="outline" disabled={busy} onClick={() => run('retry', {path: item.path})}>{t.retryOpen}</Button>
-              <Button disabled={busy} onClick={() => run('recovery', {path: item.path})}>{t.checkpoints}</Button>
-              <Button disabled={busy} onClick={() => run(item.safeMode ? 'exit-safe-mode' : 'safe-mode', {path: item.path})}>{item.safeMode ? t.exitSafeMode : t.safeMode}</Button>
               <Button disabled={busy} onClick={() => run('relocate', {path: item.path})}>{t.locate}</Button>
               <Button disabled={busy} onClick={() => run('forget', {path: item.path})}>{t.forget}</Button>
               {item.error && item.error !== 'startup-interrupted' && <Button aria-expanded={details === item.path} onClick={() => setDetails(details === item.path ? undefined : item.path)}>{t.details}</Button>}</div>
             {details === item.path && <pre className="errorDetail">{item.error}</pre>}
-            {recovery?.path === item.path && <div className="checkpoints">{!recovery.slots.length ? <p>{t.noCheckpoints}</p> : recovery.slots.map((slot: any) =>
-              <div className="setting" key={slot.id}><div><h3>{t.checkpoint}</h3><p>{new Date(slot.capturedAt).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')}</p></div>
-                <Button disabled={busy} variant="outline" onClick={() => run('preview', {path: item.path, id: slot.id})}>{t.restore}</Button></div>)}</div>}
           </article>)}</section>}
         <section className="recent"><h1>{t.recent}</h1>{filtered.map(item => <RecentProjectRow key={item.path} item={item} busy={busy} t={t}
           onOpen={() => run('recent', item.path)} onRemove={() => run('remove-recent', item.path)}/>)}
@@ -346,12 +332,6 @@ function Guide() {
       <footer>{selection ? <><Button disabled={busy} onClick={reset}>{t.cancel}</Button>
         <Button variant="primary" disabled={busy || (!selection.existing && (!projectName.trim() || !selection.directory.trim() || !resourcesReady))} onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}>{selection.existing ? t.existing : t.create}</Button></> : <p>{t.footer}</p>}</footer>
     </div>
-    <Modal open={Boolean(preview)} title={t.restoreTitle} closeLabel={t.cancel} onClose={() => {if (!busy) setPreview(undefined)}}
-      description={t.restoreBody} footer={<><Button disabled={busy} onClick={() => setPreview(undefined)}>{t.cancel}</Button>
-        <Button variant="primary" disabled={busy} onClick={() => run('restore', {path: preview.path, id: preview.previewId})}>{t.restore}</Button></>}>
-      {preview && <><p>{new Date(preview.capturedAt).toLocaleString()}</p><p>{preview.changedFiles.length ? preview.changedFiles.join(', ') : t.sameConfig}</p></>}
-      {error && <p role="alert" className="error">{error}</p>}
-    </Modal>
     {dialogs}
   </main>;
 }

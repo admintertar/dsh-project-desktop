@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {parse} from 'yaml';
 import {runtimePackage} from '../src/desktop-adapter/paths.mjs';
+import {nativeWindow, restartRecovery} from './native-profile-recovery-case.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label) {
@@ -119,7 +120,8 @@ export async function checkNativeRestart({electron, workspace, manifests, userDa
     assert.equal(project.window.isDestroyed(), true);
     assert.equal(workspace.projects.has(manifests[0]), false);
     assert.equal((await bravo.host.request('/api/project/snapshot')).status, 200);
-    await workspace.open(manifests[0]);
+    await restartRecovery(electron, await nativeWindow(electron, 'recovery'));
+    await until(() => workspace.projects.has(manifests[0]), 'official recovery restarted project');
     const result = {ok: true, materialTested: items.length > 1, checks: [...(items.length > 1 ? ['material-native-confirmation', 'cancel-keeps-saved-settings', 'confirmed-restart-applies-material'] : []),
       'settings-menu-restart-confirmation', 'settings-menu-recovery-confirmation', 'current-window-locale',
       'coalesced-restart-requests', 'other-project-unaffected', 'official-dialog-rendered', 'official-dialog-keyboard-cancel', 'official-dialog-light-dark'],

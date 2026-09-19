@@ -4,6 +4,7 @@ import {existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync} from 'n
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {captureProjectCheckpoint, createProjectRecovery, assertProjectRecoveryComplete} from '../src/desktop-adapter/stable/recovery.mjs';
+import {projectProfiles, profileSelectionPath} from '../src/desktop-adapter/stable/project-profiles.mjs';
 
 function fixture() {
   const stateDirectory = mkdtempSync(join(tmpdir(), 'project-checkpoint-'));
@@ -12,6 +13,7 @@ function fixture() {
   mkdirSync(profile, {recursive: true});
   writeFileSync(join(stateDirectory, 'project-desktop.json'), JSON.stringify({schemaVersion: 1, manifestPath}));
   writeFileSync(join(profile, 'package.json'), JSON.stringify({name: 'fixture', private: true, dependencies: {}, dsh: {profile: {bundles: []}}}));
+  writeFileSync(join(profile, 'cordis.patch.yml.project-desktop-owner'), manifestPath + '\n');
   writeFileSync(join(home, 'settings.yaml'), 'locale:\n  preference: en\n');
   return {stateDirectory, manifestPath, home, profile};
 }
@@ -63,4 +65,50 @@ test('early bundled-only checkpoint without a lockfile can complete real depende
     assert.equal(existsSync(join(data.profile, 'pnpm-lock.yaml')), true);
     assertProjectRecoveryComplete(data.stateDirectory);
   } finally {recovery.dispose()}
+});
+
+test('official selection is project-local and missing selected Profiles do not silently fall back', async () => {
+  const first = fixture(), second = fixture();
+  for (const data of [first, second]) {
+    writeFileSync(join(data.profile, 'cordis.patch.yml.project-desktop-owner'), data.manifestPath + '\n');
+  }
+  const one = await projectProfiles(first), two = await projectProfiles(second);
+  one.create('review'); one.select('review');
+  assert.equal(one.startup().name, 'review'); assert.equal(two.current(), 'desktop');
+  assert.equal((await projectProfiles(first)).current(), 'review');
+  assert.throws(() => one.create('../escape'));
+  assert.throws(() => one.create('review'));
+  writeFileSync(profileSelectionPath(first.stateDirectory), JSON.stringify({version: 2, active: 'missing'}));
+  assert.throws(() => one.startup()); assert.equal(one.current(), 'missing');
+});
+
+test('a failed restore blocks only its Profile and changing the selected Profile invalidates previews', async () => {
+  const data = fixture();
+  const secondProfile = join(data.home, 'profiles/review'); mkdirSync(secondProfile);
+  writeFileSync(join(secondProfile, 'package.json'), readFileSync(join(data.profile, 'package.json')));
+  writeFileSync(join(secondProfile, 'cordis.patch.yml.project-desktop-owner'), data.manifestPath + '\n');
+  await captureProjectCheckpoint(data.stateDirectory);
+  await captureProjectCheckpoint(data.stateDirectory, 'review');
+  let failure = true;
+  const recovery = await createProjectRecovery({...data, profileName: 'review', materialize: async () => {if (failure) throw new Error('offline')}});
+  writeFileSync(join(secondProfile, 'package.json'), JSON.stringify({name: 'changed'}));
+  await assert.rejects(recovery.controller.executeCheckpointRestore((await recovery.controller.previewCheckpointRestore('slot-1')).previewId));
+  assert.throws(() => assertProjectRecoveryComplete(data.stateDirectory, 'review'), /incomplete/);
+  assertProjectRecoveryComplete(data.stateDirectory, 'desktop');
+  failure = false;
+  await recovery.controller.executeCheckpointRestore((await recovery.controller.previewCheckpointRestore('slot-1')).previewId);
+  assertProjectRecoveryComplete(data.stateDirectory, 'review');
+  const preview = await recovery.controller.previewCheckpointRestore('slot-1');
+  mkdirSync(join(data.stateDirectory, 'profile-selection'));
+  writeFileSync(profileSelectionPath(data.stateDirectory), JSON.stringify({version: 2, active: 'desktop'}));
+  await assert.rejects(recovery.controller.executeCheckpointRestore(preview.previewId));
+  assertProjectRecoveryComplete(data.stateDirectory, 'review');
+  recovery.dispose();
+});
+
+test('recovery refuses a Profile bound to another project', async () => {
+  const data = fixture(); await captureProjectCheckpoint(data.stateDirectory);
+  writeFileSync(join(data.profile, 'cordis.patch.yml.project-desktop-owner'), '/other/Other.agent-project\n');
+  await assert.rejects(createProjectRecovery(data), /not owned/);
+  assertProjectRecoveryComplete(data.stateDirectory);
 });

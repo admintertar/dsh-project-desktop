@@ -21,7 +21,11 @@
 
 上游源码从固定 Git 对象导出到 `.upstream/`。重算 tree hash 可检测文件内容、增删、可执行位与符号链接变化；源码内不放依赖和构建产物。构建输出在 `.cache/runtime/`，包身份保持官方原值，独立应用将另设自身身份。
 
-Host 通过自有 `bootProjectHost()` 组合官方 Harness `boot()`、Profile 解析器、日志、命令环境与原生动作服务。刻意不实例化官方应用的 Profile、market 和 DesktopSettingsController，避免仅隐藏菜单后仍保留切换入口。图形应用使用 Electron `utilityProcess`，无图形检查使用 Node 子进程；两者共享同一入口和 RPC。`DSH_HOME` 与 cwd 在创建进程时确定，Profile 使用官方模板，状态根只接受本应用明确拥有的目录。
+Host 通过自有 `bootProjectHost()` 组合官方 Harness `boot()`、Profile 解析器、日志、命令环境与原生动作服务。不实例化应用级 Profile、market 和 DesktopSettingsController；Profile 管理由主进程按项目接入官方选择／创建窗口与 `profile-manager`。图形应用使用 Electron `utilityProcess`，无图形检查使用 Node 子进程；两者共享同一入口和 RPC。`DSH_HOME` 与 cwd 在创建进程时确定，Profile 使用官方模板，状态根只接受本应用明确拥有的目录。
+
+每个项目拥有独立 DSH Home，其中可包含多个 Profile，但同一时间只有一个正常 Host。`projects/<项目路径哈希>/profile-selection/state.json` 使用官方 `{version: 2, active}` 记录本机选择，不修改共享项目文件。默认 `desktop` 保留既有数据；新建 Profile 使用官方 Web 模板并加入项目所有权标记，每次启动统一接入自有 Shell、Project 插件及同一项目文件。Profile 选择保存后当前 Host 身份不变，重启当前项目才加载新选择。所选非默认 Profile 缺失时进入恢复助手，不静默换回其他环境。项目工具菜单提供官方 Profile 选择窗口；恢复助手内也可切换／新建。
+
+Profile 分隔插件依赖、补丁和检查点，不代表整个 Home 独立。普通设置默认仍位于项目 Home 的 `settings.yaml`，市场 provider 选择也是项目共享设置；市场包操作绑定实际运行的 Profile。官方检查点包含 Home 的 `settings.yaml`／`cordis.patch.yml`，回滚可能影响同项目其他 Profile 的共享配置，项目资料与会话不在配置检查点内。
 
 原生能力桥使用官方 `HostRpc`、`createHostRuntime`、`bindNativeRuntime`。我们给自己提供的 runtime 增加项目窗口能力，官方桥和源码保持不变。每个窗口使用唯一 Chromium partition、官方 sandbox/contextIsolation preload，在该 Session 内换取官方认证 Cookie；专属访问头只注入所属 Renderer 的同源 HTTP/WebSocket，不随外链或 iframe 泄漏。
 
@@ -29,7 +33,7 @@ Host 通过自有 `bootProjectHost()` 组合官方 Harness `boot()`、Profile �
 
 Harness 的模型插件把设置页面和首次弹窗注册放在同一个入口中，因此使用约 30 行自有组合，直接导入固定的 ModelsSection、store、operations、schema 和 locale，实现原始模型页面与刷新订阅。源文件与 CSS 保持原样，只不注册 `settings.onboarding` 两个条目。不存在 CSS 隐藏、修改上游 bundle 或伪造 onboarding 完成状态。
 
-预 Host 的欢迎窗口使用本地 CSP 页面、隔离 preload、限选 IPC，包含最近项目搜索和失败项目恢复。欢迎页及原生菜单的新建入口复用一个独立 BrowserWindow，使用单独 Chromium partition 和 `?mode=create` 页面，只显示左侧项目组合与右侧创建表单；再次打开时聚焦已有窗口并保留草稿，取消只关闭创建窗口。新建项目的父目录可输入或通过原生选择器取得，由主进程 bootstrap 校验；关联资源目录及项目重新定位文件仍由主进程原生选择器取得；恢复只能操作主进程已登记的失败项目及确认 token。项目创建由自有 bootstrap 事务负责：根目录初始化一个 Git 仓库，新建资源各自初始化独立 Git 仓库并写入 `AGENT.md`，根 Git 精确忽略子资源目录；已有外部资源只记录本机绑定，不初始化、不覆盖、不删除。Host 通过自有 Shell 适配器在每次项目上下文组装时读取根目录和资源根目录的 `AGENT.md`，单文件和总上下文都有大小上限；外部资源有就读取，没有就跳过。复用插件构建出的项目文件工具，以排他创建方式落盘；失败后重试会复用唯一已有项目。控件、图标、theme CSS 和 LocaleRuntime 来自同一固定 Harness；独立打包时强制 React/ReactDOM 使用同一份 stable 实例。
+预 Host 的欢迎窗口使用本地 CSP 页面、隔离 preload、限选 IPC，负责最近项目、新建／打开和丢失项目文件的重新定位，不再承载检查点／安全模式操作。欢迎页及原生菜单的新建入口复用一个独立 BrowserWindow，使用单独 Chromium partition 和 `?mode=create` 页面，只显示左侧项目组合与右侧创建表单；再次打开时聚焦已有窗口并保留草稿，取消只关闭创建窗口。新建项目的父目录可输入或通过原生选择器取得，由主进程 bootstrap 校验；关联资源目录及项目重新定位文件仍由主进程原生选择器取得。项目创建由自有 bootstrap 事务负责：根目录初始化一个 Git 仓库，新建资源各自初始化独立 Git 仓库并写入 `AGENT.md`，根 Git 精确忽略子资源目录；已有外部资源只记录本机绑定，不初始化、不覆盖、不删除。Host 通过自有 Shell 适配器在每次项目上下文组装时读取根目录和资源根目录的 `AGENT.md`，单文件和总上下文都有大小上限；外部资源有就读取，没有就跳过。复用插件构建出的项目文件工具，以排他创建方式落盘；失败后重试会复用唯一已有项目。控件、图标、theme CSS 和 LocaleRuntime 来自同一固定 Harness；独立打包时强制 React/ReactDOM 使用同一份 stable 实例。
 
 项目创建中的 Git 初始化、检查和远程克隆通过异步子进程执行，网络等待不会阻塞 Electron 主进程。每次操作保留五分钟超时及有界输出；关闭创建窗口或退出应用会取消尚未完成的创建，先停止 Git 及其传输子进程，再异步清理本次新建的目录。应用退出等待清理完成。创建期间禁止重复创建或提前打开该项目，完成后的 Host 启动失败仍可复用项目文件重试。
 
@@ -41,17 +45,21 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 `ProjectRegistry` 管理同一项目并发打开、启动取消和关闭。若 Host 停止未确认，继续保留所有权并拒绝再次打开，避免两个 Host 同时写一个 Profile。
 
-`ProjectWorkspace` 在 Registry 上增加每项目独立的操作队列，把打开、关闭、重启和恢复串行化。`workspace-session.json` 保存恢复集合、最近激活项目及独立窗口布局，和 `recent-projects.json` 的历史记录分开。打开前记 `opening`，完整健康后记 `open`，异常记 `failed`；正常退出关闭资源但保留集合，主动关闭项目才删除集合成员。下次启动并行恢复 `open`，`opening/failed` 留在欢迎页等待显式操作。每项目恢复独立，窗口恢复完成后激活上次使用的项目。
+`ProjectWorkspace` 在 Registry 上增加每项目独立的操作队列，把打开、关闭、重启和恢复串行化。`workspace-session.json` 保存恢复集合、最近激活项目及独立窗口布局，和 `recent-projects.json` 的历史记录分开。打开前记 `opening`，完整健康后记 `open`，异常记 `failed`，恢复窗口使用 `recovering`；主动进入恢复不记为故障。正常退出关闭资源但保留集合，主动关闭项目才删除集合成员。下次启动并行恢复 `open`，有效项目的 `opening/failed/recovering` 自动进入官方恢复助手，丢失项目文件留在欢迎页。每项目恢复独立，等待用户操作不占用生命周期队列，退出应用可正常关闭恢复窗口。
 
-检查点适配器只在完整 Host/Renderer 健康后调用官方 `captureHealthy()`，保留三槽轮换及恢复后跳过覆盖的规则。恢复入口先停止所属 Host，持有该项目队列，然后使用官方控制器的代际绑定、短期预览 token、文件校验及恢复。依赖声明变化时调用官方 materializer；自有 pending 文件跨进程保留恢复未完成状态，在成功恢复和依赖重建前拒绝启动。主进程的恢复 UI 不依赖失败项目的 Host、Renderer 或插件。项目内容和会话存储不在配置检查点范围内。
+检查点适配器只在完整 Host/Renderer 健康后调用官方 `captureHealthy()`，保留每 Profile 三槽轮换及恢复后跳过覆盖的规则。恢复入口先停止所属 Host，然后使用官方 `DesktopStartupRecoveryWindow`、`startup-recovery-controller` 的代际绑定、短期预览 token、文件校验及恢复。依赖声明变化时调用官方 materializer；自有 pending 文件按 Profile 跨进程保留恢复未完成状态，只阻止相应 Profile 启动。旧 `desktop` journal 保持原路径。选择另一 Profile 后旧预览失效，不能再写入旧 Profile。插件卸载委托官方 `removeRecoveryPlugin`，自带 Project 插件仍受开发依赖边界保护。
+
+手动恢复、启动失败、Host／Renderer 崩溃均打开所属项目的官方恢复助手，语言沿用该项目。修复后重启／安全模式／关闭仅作用于该项目；安全模式关闭后返回恢复助手。未确认 Host 停止或状态所有权时，仅提供官方诊断界面，不授予配置、Profile 切换或恢复写入能力。应用级 DSH Home 迁移和工厂重置不提供能力，官方对应页显示不可用。恢复 UI 不依赖失败项目的 Host、Renderer 或插件。
+
+`project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.11 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
 
 桌面设置通过原始 settingsScope / settings.section 注册，复用官方 Button/Menu/Switch。仅组合通知、材质、日志和当前项目原生操作，不注册原来的模式/Profile/应用更新页面。设置页头通过框架正式的 `settings.action` 插槽复用固定 Desktop 的原生操作组件，提供导出诊断、打开 DSH 终端及重新加载/重启/恢复模式菜单；通用设置框架继续提供打开配置文件。所有重启操作由项目窗口自己的 runtime 处理，不影响其他项目。Switch 尺寸按未导出的 DesktopSettingsSection.ToggleRow 最小适配；日志直接接入官方 FileExporter 的阈值。模型、主题、语言等其他页面仍由已有官方服务提供。
 
 材质保存后沿用官方设置监听流程，异步请求所属项目的重启确认。设置页菜单、原生菜单和 Host 发起的重启／恢复请求共用该确认入口：直接调用 `desktop-dialog-window.showDesktopMessageBox` 和原始 `DesktopDialogWindow`，使用官方 `desktop-dialog` 页面、组件、图标、字体与主题样式，不调用系统 `dialog.showMessageBox`。构建在临时目录通过官方 Vite/React/Tailwind 配置编译原封不动的 native-ui 源文件，产物放在官方模块预期的 `lib/native-ui/`，随运行时一同打包。文案复用 `tray-locale.desktopRestartConfirmationCopy`，仅将应用级描述适配为当前项目，默认聚焦取消。取消保留已保存设置和当前窗口；确认后才停止该项目 Host 并重建窗口或进入恢复界面。同一项目的并发请求合并为一次确认，关闭期间不再执行重启；日志、通知与主题的即时更新不触发该弹窗。
 
-插件市场选择属于项目 Profile。stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当前项目设置中关闭；官方 Profile 组合负责过滤未选中的 provider，并把 `dsh-market` 显式绑定到项目的 `desktop` Profile。Shell 向市场提供只读的当前 Profile 身份，使其使用官方 `desktopPnpm` 可恢复包操作服务；该身份不提供创建、选择或删除 Profile 的能力。产品自带 Project 插件使用 `devDependencies` 本地 link，市场只管理普通依赖，不能从市场误卸载产品核心插件。`dsh-community-market` 当前要求 DSH 0.1.6 alpha，在 stable 页面中只展示为不可用选项。
+stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当前项目设置中关闭；官方 Profile 组合负责过滤未选中的 provider，并把 `dsh-market` 显式绑定到实际运行的 Profile。Shell 向市场提供只读的当前 Profile 身份，使其使用官方 `desktopPnpm` 可恢复包操作服务；该身份不提供创建、选择或删除 Profile 的能力，Profile 窗口由主进程管理。产品自带 Project 插件使用 `devDependencies` 本地 link，市场只管理普通依赖，不能从市场误卸载产品核心插件。`dsh-community-market` 当前要求 DSH 0.1.6 alpha，在 stable 页面中只展示为不可用选项。
 
-欢迎窗口只承载应用级入口，不创建共享 Host。模型与项目配置属于各自 Profile；应用共享明暗主题，其他设置保持项目独立。
+欢迎窗口只承载应用级入口，不创建共享 Host。普通设置默认在项目 Home 内共享；不同项目保持独立，应用只共享明暗主题。
 
 `SharedTheme` 拥有应用级 preference，只同步 `system/light/dark`。各 Host 的官方 `settings/updated` 事件触发协调，原子保存应用 theme.json 后统一更新 Electron nativeTheme 及所有 Host 的 ui-theme；广播写入不再广播。不共享字体、语言、模型；菜单语言随当前项目窗口改变。
 
@@ -59,7 +67,7 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 新增恢复规则：初始 Profile 及早期无锁检查点，仅在依赖恰为自带 Project 的本地 link 时生成锁文件，不自动解析任意新增依赖。其他恢复必须使用冻结锁文件。固定 pnpm 11 的损坏缓存复用问题由自有适配器规避：通过官方 materializer 的 embedder spawn 接口附加新临时 store、force 和 copy 参数，重新校验下载内容，结束后清理该次 store；不改全局 pnpm 设置。失败保留 pending 和官方脱敏诊断。
 
-安全模式只复用官方 `safe-mode` 的路径/标记/reset/cleanup，不调用 compatibility 或首次向导入口。每项目停止确认后创建临时 dsh-home、desktop-state 和空白工作目录，仅加载官方基础 Profile 与自有 advanced Shell。Host 环境采用允许列表，阻止继承 API key、代理、npm hook 和 DSH 路径覆盖。Renderer 使用随机非持久 Session。退出等待 Host 停止后清除 Session 和临时目录；下次启动在所有 Host 创建前清理遗留临时树。故障项目保持 failed，不自动重开；安全模式不捕获正常检查点、不覆盖正常窗口布局，主题不传播到正常项目。
+安全模式复用官方 `safe-mode` 的路径/标记/reset/cleanup，并接入恢复助手的原始入口与确认窗口，不调用 compatibility 或首次向导入口。每项目停止确认后创建临时 dsh-home、desktop-state 和空白工作目录，仅加载官方基础 Profile 与自有 advanced Shell。Host 环境采用允许列表，阻止继承 API key、代理、npm hook 和 DSH 路径覆盖。Renderer 使用随机非持久 Session。退出等待 Host 停止后清除 Session 和临时目录，再打开原项目恢复助手；下次启动在所有 Host 创建前清理遗留临时树。故障项目不自动启动正常 Host；安全模式不捕获正常检查点、不覆盖正常窗口布局，主题不传播到正常项目。
 
 原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。欢迎页聚焦时沿用最近项目语言。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
 
@@ -78,6 +86,8 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
 | `profile-checkpoint`、`startup-recovery-controller` | 健康配置检查点、预览与确认 token、恢复校验，不调用官方应用级重启 |
+| `startup-recovery-window`、`profile-selection-window`、`profile-create-window` 及其 native-ui 页面 | 完整复用官方恢复／选择／创建界面与交互，回调限定当前项目；仅补生命周期归属 |
+| `recovery-plugin-uninstall` | 在确认 Host 停止后通过官方 CLI 移除当前 Profile 的第三方依赖 |
 | `profile-materializer`、`mask-secrets` | 恢复后的依赖重建，以及展示启动错误时的脱敏 |
 | `safe-mode` 的 paths/reset/cleanup | 临时环境路径及清理；不使用官方 compatibility 默认组合或应用启动 |
 | Desktop client 的 `desktop-settings-api`、`DesktopTerminalSettingsAction`、locale 与 settings styles | 原生 preload 动作协议及设置页头正式操作组件；只使用终端、诊断及单项目重新加载/重启/恢复方法 |
@@ -85,17 +95,17 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |
 | Project resource-clones、project-resources、resource-auth、resource-git（含 inspectResourceGit）及认证客户端／设置组件／styles／locales | 预 Host 克隆、认证及本地 Git 检测复用；固定提交直接构建，Shell 适配临时存储、原生选择、IPC 和创建前草稿／事务衔接 |
 
-编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。目前仅额外构建独立确认窗口 `desktop-dialog.html`，未构建官方向导/恢复 HTML，也不使用官方 `main`、`bin` 或 fork 的 `workbench`。
+编译官方顶层库时使用独立输出目录，以保留官方基于 `import.meta.url` 的资源定位。原样构建 `desktop-dialog.html`、`recovery.html`、`profile-create.html`、`profile-selector.html`，不使用官方 `main`、`bin` 或 fork 的 `workbench`。
 
 ## 功能取舍
 
 - 自己的创建项目引导取代官方首次向导；不写伪造的 completed/skipped 标记。
 - 官方 `desktop-updates` 从 Host 组合中关闭，不检查或安装官方应用更新。
-- 官方 `desktop-profiles` 条目禁用，对应 Profile 服务和 DesktopSettingsController 不实例化，应用设置页面不注册。
+- 官方 `desktop-profiles` 的应用级 Host 菜单条目禁用；主进程使用项目范围的官方 Profile 窗口／管理函数，DesktopSettingsController 和应用设置页面不实例化。
 - 不实例化官方全局 Market Controller 或 Profile 管理器；市场 provider 从项目设置读取，在该项目启动前交给官方 Profile 组合。只读 Profile 身份仅用于让市场绑定当前项目并选择 `desktopPnpm` 包操作通道。
 - fixed advanced、随机 loopback 端口、禁止 ordinary browser/LAN，由正式 settings schema 校验；非法变更在持久化前被拒绝。
 - 模型页面与项目页保留；强制模型首次弹窗不参与组合。通知、终端、诊断、材质和日志已经接入自有设置及菜单。
-- 已实现项目集合/窗口布局恢复、崩溃处理、配置检查点、临时安全模式和本地 macOS x64 打包流程。插件卸载/工厂重置、环境迁移、Developer ID 签名公证和正式分发仍为后续工作。
+- 已实现项目集合/窗口布局恢复、项目内多 Profile、官方恢复助手、配置检查点、第三方插件卸载接入、临时安全模式和本地 macOS x64 打包流程。工厂重置、环境迁移、Developer ID 签名公证和正式分发仍为后续工作。
 
 ## 升级策略
 

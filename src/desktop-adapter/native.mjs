@@ -34,9 +34,11 @@ export async function openNativeProject(electron, options) {
   let healthTimer;
   let ready = false;
   let bootFailure;
+  let failureStage = 'host-boot';
   let saveWindow;
   const failed = error => {
     if (disposed) return;
+    error.failureStage ??= failureStage;
     if (!ready) {bootFailure = error; health.reject(error)}
     else options.onFailure?.(error);
   };
@@ -71,7 +73,7 @@ export async function openNativeProject(electron, options) {
       if (!host) throw new Error('Project is still starting');
       openDesktopTerminal({platform: process.platform, appExecutable: process.execPath,
         dshBootstrapPath: join(runtimePackage, 'lib/desktop-cli.js'), pnpmBinPath: join(dirname(desktopRequire.resolve('pnpm')), 'bin/pnpm.mjs'),
-        electronVersion: process.versions.electron, profileName: 'desktop', productVersion: lock.desktop.version,
+        electronVersion: process.versions.electron, profileName: host.result.profileName, productVersion: lock.desktop.version,
         profileDir: host.result.profile, homeDir: host.result.homeDir, stateDir: join(options.stateDirectory, 'terminal')});
     },
     reloadRenderer() {window?.webContents.reload()},
@@ -103,7 +105,8 @@ export async function openNativeProject(electron, options) {
     if (options.safeMode && chromiumSession) await chromiumSession.clearStorageData();
   };
   try {
-    host = await startProjectHost({...options, onUnexpectedExit: failed, nativeRuntime: runtime, spawnHost: (...args) => spawnUtility(electron, ...args)});
+    host = await startProjectHost({...options, onUnexpectedExit: error => {error.failureStage = 'host-boot'; failed(error)}, nativeRuntime: runtime, spawnHost: (...args) => spawnUtility(electron, ...args)});
+    failureStage = 'renderer-startup';
     const preferences = advancedWindowOptions(specification, nativeImage.createFromPath(specification.iconPath), process.platform, join(runtimePackage, 'lib/preload.cjs'));
     preferences.webPreferences.partition = options.partition ?? `persist:project-${basename(options.stateDirectory)}`;
     if (options.hidden) preferences.webPreferences.backgroundThrottling = false;
@@ -157,7 +160,7 @@ export async function openNativeProject(electron, options) {
     healthTimer = setTimeout(() => health.reject(new Error('Project renderer boot timed out')), 45000);
     await window.loadURL(specification.url);
     await health.promise;
-    if (!options.safeMode) try {await captureProjectCheckpoint(options.stateDirectory)} catch (error) {options.onWarning?.(error)}
+    if (!options.safeMode) try {await captureProjectCheckpoint(options.stateDirectory, host.result.profileName)} catch (error) {options.onWarning?.(error)}
     if (bootFailure) throw bootFailure;
     ready = true;
     locale = specification.readLocalePreference?.() ?? locale;
@@ -166,6 +169,7 @@ export async function openNativeProject(electron, options) {
       restart: runtime.requestRestart, recover: runtime.requestRecoveryRestart,
       terminal: runtime.openTerminal, diagnostics: runtime.exportDiagnostics};
   } catch (error) {
+    error.failureStage ??= failureStage;
     try {await close()} catch (shutdown) {
       const failure = new AggregateError([error, shutdown], 'Project window failed and Host shutdown is unconfirmed');
       failure.projectResource = {close}; throw failure;

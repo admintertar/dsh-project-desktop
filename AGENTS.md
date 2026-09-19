@@ -6,6 +6,7 @@
 - Support only the stable combination in `upstream.lock.json`. Recompute source trees and installed versions before adopting an upgrade.
 - Keep official internal APIs in `src/desktop-adapter/` and build scripts. Record additions in `docs/architecture.md`.
 - One Electron main process owns isolated per-project Renderers, Hosts, DSH homes, Profiles and Chromium partitions. Recovery and closure must not affect other projects.
+- A project owns one DSH Home containing multiple Profiles, with at most one running Profile. Persist selection in its local application state using the official Profile manager; do not add the current selection to the shared project manifest. Reuse official Profile creation/selection and Recovery Assistant windows. The welcome window only manages project opening/creation/history and missing project locations.
 - Use the shell's own project-creation guide. Do not falsify official onboarding completion or merely hide disabled capabilities with CSS.
 - The companion plugin owns Resources, Tasks, Memory, skills and MCP. Build its pinned commit; do not copy plugin source into this repository or change running Profiles during setup.
 - Project entry files live at the root. Memory lives under root `memory/`; share `.agent-project/` metadata while precisely excluding machine-local and temporary records. Never silently choose among multiple project definitions or overwrite an existing project.

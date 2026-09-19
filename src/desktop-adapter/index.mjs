@@ -9,12 +9,18 @@ import {claimProjectState} from '../app/project-state.mjs';
 import {verifyRuntimeDependencies} from './stable/verify.mjs';
 import {assertProjectRecoveryComplete} from './stable/recovery.mjs';
 import {safeHostEnvironment} from './stable/safe-mode.mjs';
+import {projectProfiles} from './stable/project-profiles.mjs';
 
 /** One supervisor, with Node transport for headless checks and UtilityProcess for the app. */
 export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit}) {
   verifyRuntimeDependencies();
   claimProjectState(stateDirectory, manifestPath);
-  assertProjectRecoveryComplete(stateDirectory);
+  let profileName = 'desktop';
+  if (!safeMode) {
+    try {profileName = (await projectProfiles({stateDirectory, manifestPath, homeDir})).startup().name}
+    catch (error) {error.failureStage = 'profile-selection'; throw error}
+  }
+  if (!safeMode) assertProjectRecoveryComplete(stateDirectory, profileName);
   const {HostRpc} = await loadDesktop('host-rpc');
   const {bindNativeRuntime, runtimeSnapshot} = await loadDesktop('host-runtime-bridge');
   let specification;
@@ -83,7 +89,7 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
     rpc.handle('project:windows:list', () => windows.list?.() ?? [{id: manifestPath, title: projectRoot, current: true}]);
     rpc.handle('project:windows:open', () => windows.open?.());
     rpc.handle('project:windows:focus', ([id]) => windows.focus?.(id));
-    const result = await rpc.call('boot', [{manifestPath, stateDirectory, homeDir, safeMode}, runtimeSnapshot(runtime), randomBytes(32).toString('base64url')]);
+    const result = await rpc.call('boot', [{manifestPath, stateDirectory, homeDir, safeMode, profileName}, runtimeSnapshot(runtime), randomBytes(32).toString('base64url')]);
     if (!specification) throw new Error('Official Host did not register its renderer');
     const headers = {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value};
     const auth = await fetch(specification.authenticationUrl, {headers, redirect: 'manual'});

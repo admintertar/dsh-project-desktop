@@ -23,7 +23,7 @@ export async function cancelGuideCreations() {
 }
 
 export async function createGuideWindow(electron, {repository, iconPath, locale, getLocale, recent, open, hidden = false, mode = 'welcome',
-  chooseDirectory, defaultDirectory, openNewProject, recentChanged = () => {}, getFailures = () => [], warning, forget, recover, relocate, safeMode, exitSafeMode,
+  chooseDirectory, defaultDirectory, openNewProject, recentChanged = () => {}, getFailures = () => [], warning, forget, relocate,
   createClonePool = () => GuideClones.create(electron.app.getPath('userData'))}) {
   const {BrowserWindow, dialog} = electron;
   const html = join(repository, 'dist/guide/index.html');
@@ -146,15 +146,10 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         recentChanged();
         return recent.list();
       }
-      if (['retry', 'forget', 'relocate', 'recovery', 'preview', 'restore', 'safe-mode', 'exit-safe-mode'].includes(action)) {
+      if (['retry', 'forget', 'relocate'].includes(action)) {
         const path = value?.path;
-        if (typeof path !== 'string' || !getFailures().some(item => item.path === path)) throw new Error('Unknown recovery project');
+        if (typeof path !== 'string' || !getFailures().some(item => item.path === path)) throw new Error('Unknown project');
         if (action === 'forget') {await forget(path); return true}
-        if (action === 'safe-mode') {await safeMode(path); return true}
-        if (action === 'exit-safe-mode') {await exitSafeMode(path); return true}
-        if (action === 'recovery') return recover(path, 'list');
-        if (action === 'preview') return recover(path, 'preview', value.id);
-        if (action === 'restore') await recover(path, 'restore', value.id);
         if (action === 'retry') await open(path);
         if (action === 'relocate') {
           const result = await dialog.showOpenDialog(window, {properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}],

@@ -82,6 +82,21 @@ test('recovery waits for confirmed shutdown, serializes reopen and leaves other 
   await workspace.shutdown();
 });
 
+test('manual recovery is a persisted non-failure state and releases the queue while its window is open', async () => {
+  let stops = 0, disposed = 0;
+  const {workspace, session, file} = fixture(async () => ({focus() {}, close: async () => {stops++}}),
+    async () => ({dispose() {disposed++}}));
+  await workspace.open(a); await workspace.open(b);
+  const recovery = await workspace.beginRecovery(a, {requested: true});
+  assert.equal(session.get(a).phase, 'recovering'); assert.equal(workspace.errors.has(a), false);
+  assert.equal(workspace.projects.has(a), false); assert.ok(workspace.projects.has(b));
+  assert.equal(stops, 1);
+  assert.equal(await workspace.beginRecovery(a, {requested: true}), recovery);
+  assert.equal(new SessionState(file).get(a).phase, 'recovering');
+  await workspace.open(a); assert.equal(disposed, 1); assert.equal(session.get(a).phase, 'open');
+  await workspace.shutdown();
+});
+
 test('failed application quit allows close retry and new work without losing the restore set', async () => {
   let fail = true;
   const {workspace, session} = fixture(async () => ({focus() {}, close: async () => {if (fail) throw new Error('Cannot stop')}}));

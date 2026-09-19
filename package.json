@@ -13,6 +13,7 @@
     "start": "node scripts/start.mjs",
     "setup:electron": "node scripts/setup-electron.mjs",
     "smoke:native": "node scripts/smoke-native.mjs",
+    "smoke:profiles": "node scripts/smoke-profiles.mjs",
     "smoke:resources": "node scripts/smoke-resource-states.mjs",
     "smoke:lifecycle": "node scripts/smoke-lifecycle.mjs",
     "setup": "node scripts/setup.mjs",

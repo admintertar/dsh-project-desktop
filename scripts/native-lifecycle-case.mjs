@@ -4,8 +4,9 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {repository} from '../src/desktop-adapter/paths.mjs';
 import {createProjectInDirectory} from '../src/app/project-files.mjs';
+import {nativeWindow} from './native-profile-recovery-case.mjs';
 
-export async function runLifecycleCase({electron, open, close, showGuide, projects, userData, workspace, session, hasGuide}) {
+export async function runLifecycleCase({electron, open, close, showGuide, dismissSurface, projects, userData, workspace, session, hasGuide}) {
   const phase = process.env.DSH_PROJECT_DESKTOP_TEST_PHASE;
   const manifests = await Promise.all(['Alpha', 'Bravo'].map(name => {
     const folder = join(userData, 'fixtures', name); mkdirSync(folder, {recursive: true}); return createProjectInDirectory(folder);
@@ -48,11 +49,13 @@ export async function runLifecycleCase({electron, open, close, showGuide, projec
     writeFileSync(join(userData, 'safe-path.json'), JSON.stringify(safe.host.stateDirectory));
     assert.equal(session.get(manifests[0]).phase, 'failed');
   } else if (['safe-relaunch', 'safe-cleanup'].includes(phase)) {
-    assert.equal(projects.size, 0); assert.ok(hasGuide());
+    assert.equal(projects.size, 0); assert.equal(hasGuide(), false);
+    await nativeWindow(electron, 'recovery');
     assert.equal(existsSync(JSON.parse(readFileSync(join(userData, 'safe-path.json')))), false);
-    assert.equal(session.get(manifests[0]).phase, 'failed');
-    if (phase === 'safe-cleanup') {await open(manifests[0]); await close(manifests[0])}
+    assert.equal(session.get(manifests[0]).phase, 'recovering');
+    if (phase === 'safe-cleanup') {await dismissSurface(manifests[0]); await open(manifests[0]); await close(manifests[0])}
   } else if (phase === 'safe-abandon') {
+    await dismissSurface(manifests[0]);
     const safe = await workspace.safeMode(manifests[0]);
     writeFileSync(join(userData, 'safe-path.json'), JSON.stringify(safe.host.stateDirectory));
   } else throw new Error('Unknown lifecycle test phase');
