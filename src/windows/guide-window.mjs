@@ -73,7 +73,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
   contents.on('will-attach-webview', event => event.preventDefault());
   contents.session.setPermissionRequestHandler((_sender, _permission, callback) => callback(false));
   contents.session.setPermissionCheckHandler(() => false);
-  const handle = async (event, action, value) => {
+  const handle = async (event, action, value, operationId) => {
     if (!trustedSender(event, contents, expectedUrl, true)) throw new Error('Untrusted guide sender');
     if (action === 'state') {
       locale = getLocale?.() ?? locale;
@@ -98,6 +98,12 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
     }
     if (busy) throw new Error('A project operation is already in progress');
     busy = true;
+    const progress = phase => {
+      if (typeof operationId === 'string' && operationId.length <= 64 && !contents.isDestroyed()) {
+        contents.send('project-desktop:guide-progress', {id: operationId, phase});
+      }
+    };
+    const openProject = target => {progress('opening'); return open(target)};
     try {
       if (action === 'cancel' && createOnly) {
         // Let the renderer receive the IPC result before its window is destroyed.
@@ -154,17 +160,18 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         const path = value?.path;
         if (typeof path !== 'string' || !getFailures().some(item => item.path === path)) throw new Error('Unknown project');
         if (action === 'forget') {await forget(path); return true}
-        if (action === 'retry') await open(path);
+        if (action === 'retry') await openProject(path);
         if (action === 'relocate') {
           const result = await dialog.showOpenDialog(window, {properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}],
             message: locale === 'zh' ? '选择项目文件。其他路径使用各自的项目环境，原有运行数据会保留。' : 'Select a project file. Other locations use their own project environment; existing runtime data is preserved.'});
           if (result.canceled) return null;
+          progress('opening');
           await relocate(path, result.filePaths[0]);
         }
       } else if (action === 'confirm') {
         await operations;
         if (!selection) throw new Error('Select a project folder first');
-        if (selection.existing) await open(selection.existing);
+        if (selection.existing) await openProject(selection.existing);
         else {
           const draft = value && typeof value === 'object' ? value : {};
           const resources = Array.isArray(draft.resources) ? draft.resources.map(item => {
@@ -175,6 +182,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
               ...(mode === 'remote' ? {url: item?.url, branch: item?.branch} : mode === 'link' ? {type: item?.type, url: item?.url} : {})};
           }) : undefined;
           // Use the submitted location so both typing and the native picker edit the actual destination.
+          progress('creating');
           const operation = {controller: creationController, promise: createProjectFromPlan({
             location: draft.location ?? selection.directory, name: draft.name, templateId: draft.templateId, resources,
           }, {signal: creationController.signal, installRemote: async (item, target, signal) => (await pool()).install(item, target, signal)})};
@@ -182,17 +190,17 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
           let manifest;
           try {manifest = await operation.promise} finally {creations.delete(operation)}
           creationController.signal.throwIfAborted();
-          await open(manifest);
+          await openProject(manifest);
         }
       } else if (action === 'open') {
         const result = await dialog.showOpenDialog(window, {properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}]});
         if (result.canceled) return null;
-        await open(result.filePaths[0]);
+        await openProject(result.filePaths[0]);
       } else if (action === 'recent') {
         const item = typeof value === 'string' ? recent.list().find(item => item.path === value) : undefined;
         if (!item) throw new Error('Unknown recent project');
         if (item.available === false) throw new Error('Recent project is unavailable');
-        await open(item.path);
+        await openProject(item.path);
       } else throw new Error('Unsupported guide action');
       // Give the invoke response time to settle before destroying its Renderer.
       setImmediate(() => {if (!window.isDestroyed() && (createOnly || !getFailures().length)) window.close()});

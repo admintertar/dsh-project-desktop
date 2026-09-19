@@ -1,7 +1,7 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState, type ComponentProps} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Button, Input, Menu, Modal, IconEllipsisOutline16, IconFolderOpenOutline16, IconLinkOutline16, IconProjectAddOutline16, IconSearchOutline16, IconPlusOutline16,
-  IconChevronLeftOutline14, IconChevronDownOutline14, IconWarningOutline16, IconTrashOutline16, IconBranchOutline16, IconEditOutline16, IconCloseOutline16, Tag, Tooltip} from '@deepseek-ai/dsh-client-ui-primitives';
+  IconChevronLeftOutline14, IconChevronDownOutline14, IconWarningOutline16, IconTrashOutline16, IconBranchOutline16, IconEditOutline16, IconCloseOutline16, IconLoadingOutline16, Tag, Tooltip} from '@deepseek-ai/dsh-client-ui-primitives';
 import './style.css';
 import {createGuideLocale} from '../desktop-adapter/stable/guide-locale';
 import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResourceCopy, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
@@ -14,6 +14,8 @@ import {GuideFrame} from '../desktop-adapter/stable/GuideFrame';
 
 const copy = {
   zh: {title: '项目', body: '会话、资料、记忆和任务，都从这里开始。', resizeSidebar: '调整侧栏宽度',
+    opening: '打开中…', creating: '创建中…', openingRecent: '正在打开…', preparing: '正在准备新项目…',
+    creatingDetail: '正在创建项目文件和本地仓库…', openingDetail: '正在打开项目窗口…',
     roleBackend: '服务端', roleWeb: 'Web 前端', roleMiniapp: '小程序', roleApp: '移动端', roleAdmin: '管理后台', roleDesktop: '桌面端',
     linkResource: '关联资源', resourceSource: '资源来源', sourceRemote: '远程仓库', sourceLocal: '本地文件夹', unlinkResource: '取消关联', editRemote: '编辑仓库地址和分支', editLocal: '更换本地文件夹',
     remoteBranch: '分支', remoteBranchHint: '留空使用仓库的默认分支。', defaultBranch: '默认分支', saveAndClone: '保存并克隆', saving: '正在保存…', unlinkRemote: '取消关联',
@@ -21,7 +23,7 @@ const copy = {
     cloneReady: '克隆完成', clonePending: '正在准备克隆…', cloneWaiting: '等待克隆完成后即可创建项目。',
     choose: '选择项目文件夹…', open: '打开已有项目…', recent: '最近项目', create: '创建并打开', existing: '打开项目', addResource: '添加资源', removeResource: '移除资源',
     projectName: '项目名称', projectPath: '项目路径', template: '项目组合', fullstack: 'Web 应用', admin: '管理系统', miniapp: '小程序项目', app: '移动应用', desktop: '桌面应用', emptyTemplate: '空项目', resources: '资源', resourceName: '资源名称', emptyResource: '将新建本地 Git 仓库', localResource: '关联本地文件', remoteResource: '关联远程仓库', linkLocal: '关联本地文件', linkRemote: '关联远程仓库', remoteUrl: 'Git 仓库地址', remoteUrlPlaceholder: 'https://github.com/org/repository.git', renameResource: '双击修改资源名称',
-    folder: '项目文件夹', file: '项目文件', back: '重新选择', busy: '正在打开项目…', retry: '重试', resourceHint: '未关联的资源将在创建项目时初始化为独立的本地 Git 仓库；也可关联远程仓库或本地文件夹。',
+    folder: '项目文件夹', file: '项目文件', back: '重新选择', retry: '重试', resourceHint: '未关联的资源将在创建项目时初始化为独立的本地 Git 仓库；也可关联远程仓库或本地文件夹。',
     hint: '项目会创建在这个路径下，项目名称作为项目文件夹名。', browse: '浏览…', cancel: '取消',
     search: '搜索项目', new: '新建项目', openShort: '打开', openRecent: '打开项目', recentActions: '项目操作', removeRecent: '从最近项目中移除', empty: '开始你的第一个项目', noMatches: '没有找到匹配的项目',
     footer: '退出应用时保留打开的项目，下次启动时自动恢复。', recovery: '需要处理的项目', retryOpen: '重试打开',
@@ -30,6 +32,8 @@ const copy = {
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
     unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。'},
   en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.', resizeSidebar: 'Resize sidebar',
+    opening: 'Opening…', creating: 'Creating…', openingRecent: 'Opening…', preparing: 'Preparing a new project…',
+    creatingDetail: 'Creating project files and local repositories…', openingDetail: 'Opening the project window…',
     roleBackend: 'Backend', roleWeb: 'Web frontend', roleMiniapp: 'Mini program', roleApp: 'Mobile app', roleAdmin: 'Admin panel', roleDesktop: 'Desktop app',
     linkResource: 'Link resource', resourceSource: 'Resource source', sourceRemote: 'Remote repository', sourceLocal: 'Local folder', unlinkResource: 'Unlink resource', editRemote: 'Edit repository URL and branch', editLocal: 'Change local folder',
     remoteBranch: 'Branch', remoteBranchHint: 'Leave empty to use the repository’s default branch.', defaultBranch: 'Default branch', saveAndClone: 'Save and clone', saving: 'Saving…', unlinkRemote: 'Unlink repository',
@@ -37,7 +41,7 @@ const copy = {
     cloneReady: 'Clone complete', clonePending: 'Preparing clone…', cloneWaiting: 'Finish cloning resources before creating the project.',
     choose: 'Choose project folder…', open: 'Open existing project…', recent: 'Recent projects', create: 'Create and open', existing: 'Open project', addResource: 'Add resource', removeResource: 'Remove resource',
     projectName: 'Project name', projectPath: 'Project path', template: 'Project composition', fullstack: 'Web application', admin: 'Admin system', miniapp: 'Mini-program project', app: 'Mobile application', desktop: 'Desktop application', emptyTemplate: 'Empty project', resources: 'Resources', resourceName: 'Resource name', emptyResource: 'Will create a local Git repository', localResource: 'Link local files', remoteResource: 'Link remote repository', linkLocal: 'Link local files', linkRemote: 'Link remote repository', remoteUrl: 'Git repository URL', remoteUrlPlaceholder: 'https://github.com/org/repository.git', renameResource: 'Double-click to rename resource',
-    folder: 'Project folder', file: 'Project file', back: 'Choose again', busy: 'Opening project…', retry: 'Retry', resourceHint: 'Unlinked resources become independent local Git repositories when the project is created. You can also link a remote repository or local folder.',
+    folder: 'Project folder', file: 'Project file', back: 'Choose again', retry: 'Retry', resourceHint: 'Unlinked resources become independent local Git repositories when the project is created. You can also link a remote repository or local folder.',
     hint: 'The project is created under this path, using the project name as its folder.', browse: 'Browse…', cancel: 'Cancel',
     search: 'Search projects', new: 'New Project', openShort: 'Open', openRecent: 'Open project', recentActions: 'Project actions', removeRecent: 'Remove from Recent Projects', empty: 'Start your first project', noMatches: 'No matching projects',
     footer: 'Open projects are remembered when you quit and restored on your next launch.', recovery: 'Projects needing attention', retryOpen: 'Retry opening',
@@ -58,13 +62,33 @@ function nextResourceId(items: any[]) {
   while (items.some(item => item.id === `resource-${number}`)) number += 1;
   return `resource-${number}`;
 }
-function RecentProjectRow({item, busy, t, onOpen, onRemove}: any) {
+type GuidePhase = 'creating' | 'opening';
+type GuideOperation = {id: string; action: string; target?: string; phase?: GuidePhase};
+
+// The pinned official Button has no loading prop. Compose its exported loading
+// icon and reserve all label widths while retaining official button interaction.
+function GuideActionButton({label, phase, allowCreate = false, t, ...props}: Omit<ComponentProps<typeof Button>, 'children' | 'icon'> & {
+  label: string; phase?: GuidePhase; allowCreate?: boolean; t: Record<string, string>;
+}) {
+  const labels = [{id: 'idle', text: label}, ...(allowCreate ? [{id: 'creating', text: t.creating}] : []), {id: 'opening', text: t.opening}];
+  return <Button {...props} aria-busy={Boolean(phase)} aria-label={phase ? t[phase] : label}>
+    <span className="guideActionLabel">{labels.map(item => <span key={item.id} aria-hidden={item.id !== (phase ?? 'idle')}
+      style={{visibility: item.id === (phase ?? 'idle') ? 'visible' : 'hidden'}}>
+      {item.id !== 'idle' && <IconLoadingOutline16 className="guideLoadingIcon"/>}{item.text}
+    </span>)}</span>
+  </Button>;
+}
+
+function RecentProjectRow({item, busy, opening, t, onOpen, onRemove}: any) {
   const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {if (busy) setMenuOpen(false)}, [busy]);
   const unavailable = item.available === false;
-  return <article className="recentProject" data-menu-open={menuOpen ? 'true' : undefined} data-unavailable={unavailable ? 'true' : undefined}>
+  return <article className="recentProject" aria-busy={opening} data-menu-open={menuOpen ? 'true' : undefined} data-unavailable={unavailable ? 'true' : undefined}>
     <Button className="recentItem" variant="toolbar" disabled={busy || unavailable} icon={<IconFolderOpenOutline16/>} onClick={() => {if (!unavailable) onOpen()}}>
       <span>{item.title}<small>{item.path}</small></span>
     </Button>
+    <div className="recentTrailing" data-opening={opening || undefined}>
+    <span className="recentOpening" aria-hidden={!opening}><IconLoadingOutline16 className="guideLoadingIcon"/>{t.openingRecent}</span>
     <Menu open={menuOpen} onClose={() => setMenuOpen(false)} align="end" portal dense items={[
       {id: 'open', label: t.openRecent, icon: <IconFolderOpenOutline16/>, disabled: unavailable},
       {type: 'separator', id: 'recent-project-separator'},
@@ -72,6 +96,7 @@ function RecentProjectRow({item, busy, t, onOpen, onRemove}: any) {
     ]} onSelect={id => {setMenuOpen(false); if (id === 'open' && !unavailable) onOpen(); if (id === 'remove') onRemove();}}
       anchor={<button type="button" className="recentMore" aria-label={`${t.recentActions}: ${item.title}`} aria-expanded={menuOpen}
         disabled={busy} onClick={() => setMenuOpen(value => !value)}><IconEllipsisOutline16/></button>}/>
+    </div>
   </article>;
 }
 function ResourceDraftCard({item, busy, t, rt, clone, onRename, onEditRemote, onPickLocal, onUnlink, onCancelClone, onRemove}: any) {
@@ -176,7 +201,10 @@ function Guide() {
   const [addingResource, setAddingResource] = useState<string>();
   const [clones, setClones] = useState<any[]>([]);
   const [auth] = useState(() => createGuideAuthController(api.invoke));
-  const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState<GuideOperation>();
+  const operationId = useRef<string>();
+  const busy = Boolean(operation);
+  const [progressId, setProgressId] = useState<string>();
   const [error, setError] = useState('');
   const runRef = useRef(run);
   runRef.current = run;
@@ -193,10 +221,23 @@ function Guide() {
     const update = () => {void refresh().catch((e: Error) => setError(e.message))}; update();
     const offState = api.onStateChanged(update);
     const offCommand = api.onCommand((action: string) => {void runRef.current(action)});
+    const offProgress = api.onProgress((progress: {id: string; phase: GuidePhase}) => {
+      if (progress.id !== operationId.current || !['creating', 'opening'].includes(progress.phase)) return;
+      setOperation(current => current?.id === progress.id ? {...current, phase: progress.phase} : current);
+    });
     const media = matchMedia('(prefers-color-scheme: dark)');
     const apply = () => {document.body.toggleAttribute('data-ds-dark-theme', media.matches); document.documentElement.style.colorScheme = media.matches ? 'dark' : 'light'};
-    apply(); media.addEventListener('change', apply); return () => {offState(); offCommand(); media.removeEventListener('change', apply)};
+    apply(); media.addEventListener('change', apply); return () => {offState(); offCommand(); offProgress(); media.removeEventListener('change', apply)};
   }, []);
+  useEffect(() => {
+    setProgressId(undefined);
+    if (!operation?.phase) return;
+    const timer = setTimeout(() => setProgressId(operation.id), 1000);
+    return () => clearTimeout(timer);
+  }, [operation?.id, Boolean(operation?.phase)]);
+  const progressText = operation?.id === progressId && operation?.phase ? t[`${operation.phase}Detail`] : '';
+  const actionPhase = (action: string, target?: string) => operation?.action === action
+    && (target === undefined || operation.target === target) ? operation.phase : undefined;
   useEffect(() => {if (createOnly) void runRef.current('new')}, [createOnly]);
   useEffect(() => {
     let closed = false, loading = false;
@@ -214,9 +255,15 @@ function Guide() {
     if (selection && !selection.existing) void api.invoke('clone-retain', {ids: JSON.parse(remoteIds)}).catch((e: Error) => setError(e.message));
   }, [remoteIds, selection?.existing]);
   async function run(action: string, value?: any) {
-    setBusy(true); setError('');
+    // Lock synchronously too: native menu commands and rapid clicks may arrive
+    // before React renders the disabled controls.
+    if (operationId.current) return;
+    const id = crypto.randomUUID(); operationId.current = id;
+    setOperation({id, action, target: typeof value === 'string' ? value : value?.path,
+      phase: ['recent', 'retry'].includes(action) ? 'opening' : action === 'confirm' ? selection?.existing ? 'opening' : 'creating' : undefined});
+    setError('');
     try {
-      const result = await api.invoke(action, value);
+      const result = await api.invoke(action, value, id);
       if ((action === 'new' || action === 'choose') && result && typeof result === 'object') {
         const name = action === 'new' ? '' : result.name ?? '';
         setSelection(result); setProjectName(name); setTemplateId('fullstack'); setDraftResources(makeResources(name || 'project', 'fullstack'));
@@ -228,7 +275,7 @@ function Guide() {
       if (action === 'remove-recent' && Array.isArray(result)) setRecent(result);
       if (['forget', 'retry', 'relocate'].includes(action)) await refresh();
     }
-    catch (e) {setError((e as Error).message)} finally {setBusy(false)}
+    catch (e) {setError((e as Error).message)} finally {operationId.current = undefined; setOperation(undefined)}
   }
   const filtered = recent.filter(item => `${item.title} ${item.path}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const selectTemplate = (id: string) => {setTemplateId(id); setDraftResources(makeResources(projectName || selection?.name || 'project', id))};
@@ -281,7 +328,7 @@ function Guide() {
     <div className="createContent">
     <header className="toolbar"><h1>{t[templates.find(item => item.id === templateId)!.key]}</h1></header>
     <section className="guideBody" aria-busy={busy}>
-      {!selection ? <p role="status">{t.busy}</p> : selection.existing ? <div className="setting"><div><h2>{t.folder}</h2><p>{selection.directory}</p></div></div> : <>
+      {!selection ? <p role="status">{t.preparing}</p> : selection.existing ? <div className="setting"><div><h2>{t.folder}</h2><p>{selection.directory}</p></div></div> : <>
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} autoFocus disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
         <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
@@ -291,9 +338,12 @@ function Guide() {
       </>}
       {error && <p className="error" role="alert">{error}</p>}
       {!resourcesReady && <p>{t.cloneWaiting}</p>}
-      {busy && <p role="status">{t.busy}</p>}
     </section>
-    <footer><Button disabled={busy} onClick={() => run('cancel')}>{t.cancel}</Button><Button variant="primary" disabled={busy || !projectName.trim() || !selection?.directory.trim() || !resourcesReady || Boolean(selection?.existing)} onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}>{t.create}</Button></footer>
+    <footer><Button disabled={busy} onClick={() => run('cancel')}>{t.cancel}</Button>
+      <p className="guideProgress" role="status" title={progressText}>{progressText}</p>
+      <GuideActionButton variant="primary" label={t.create} phase={actionPhase('confirm')} allowCreate t={t}
+        disabled={busy || !projectName.trim() || !selection?.directory.trim() || !resourcesReady || Boolean(selection?.existing)}
+        onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}/></footer>
     </div>
   </GuideFrame>;
   return <GuideFrame {...frameProps} className="welcome" sidebar={
@@ -306,7 +356,7 @@ function Guide() {
         : <><div className="search"><Input icon={<IconSearchOutline16/>} placeholder={t.search} aria-label={t.search} value={query}
           onChange={event => setQuery(event.target.value)}/></div><div className="actions">
           <Button variant="outline" icon={<IconPlusOutline16/>} disabled={busy} onClick={() => run('new')}>{t.new}</Button>
-          <Button variant="outline" disabled={busy} onClick={() => run('open')}>{t.openShort}</Button></div></>}</header>
+          <GuideActionButton variant="outline" label={t.openShort} phase={actionPhase('open')} t={t} disabled={busy} onClick={() => run('open')}/></div></>}</header>
       <section className="guideBody" aria-busy={busy}>
       {warning && <p role="status">{warning === 'history-unreadable' ? t.historyUnreadable : t.unreadable}</p>}
       {selection ? <>{selection.existing ? <><div className="setting"><div><h2>{t.folder}</h2><p>{selection.directory}</p></div>
@@ -322,20 +372,23 @@ function Guide() {
         : <>{failures.length > 0 && <section className="failures"><h2><IconWarningOutline16/> {t.recovery}</h2>{failures.map(item =>
           <article className="failure" key={item.path}><h3>{item.title}</h3><p className="path">{item.path}</p>
             <p>{item.error === 'startup-interrupted' ? t.interrupted : t.pending}</p>
-            <div className="actions"><Button variant="outline" disabled={busy} onClick={() => run('retry', {path: item.path})}>{t.retryOpen}</Button>
-              <Button disabled={busy} onClick={() => run('relocate', {path: item.path})}>{t.locate}</Button>
+            <div className="actions"><GuideActionButton variant="outline" label={t.retryOpen} phase={actionPhase('retry', item.path)} t={t} disabled={busy} onClick={() => run('retry', {path: item.path})}/>
+              <GuideActionButton label={t.locate} phase={actionPhase('relocate', item.path)} t={t} disabled={busy} onClick={() => run('relocate', {path: item.path})}/>
               <Button disabled={busy} onClick={() => run('forget', {path: item.path})}>{t.forget}</Button>
               {item.error && item.error !== 'startup-interrupted' && <Button aria-expanded={details === item.path} onClick={() => setDetails(details === item.path ? undefined : item.path)}>{t.details}</Button>}</div>
             {details === item.path && <pre className="errorDetail">{item.error}</pre>}
           </article>)}</section>}
-        <section className="recent"><h1>{t.recent}</h1>{filtered.map(item => <RecentProjectRow key={item.path} item={item} busy={busy} t={t}
+        <section className="recent"><h1>{t.recent}</h1>{filtered.map(item => <RecentProjectRow key={item.path} item={item} busy={busy} opening={actionPhase('recent', item.path) === 'opening'} t={t}
           onOpen={() => run('recent', item.path)} onRemove={() => run('remove-recent', item.path)}/>)}
           {!filtered.length && <div className="empty"><IconFolderOpenOutline16 size={32}/><h2>{recent.length ? t.noMatches : t.empty}</h2><p>{recent.length ? query : t.body}</p></div>}</section></>}
       {error && <p className="error" role="alert">{error}</p>}
-      {busy && <p role="status">{t.busy}</p>}
       </section>
       <footer>{selection ? <><Button disabled={busy} onClick={reset}>{t.cancel}</Button>
-        <Button variant="primary" disabled={busy || (!selection.existing && (!projectName.trim() || !selection.directory.trim() || !resourcesReady))} onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}>{selection.existing ? t.existing : t.create}</Button></> : <p>{t.footer}</p>}</footer>
+        <p className="guideProgress" role="status" title={progressText}>{progressText}</p>
+        <GuideActionButton variant="primary" label={selection.existing ? t.existing : t.create} phase={actionPhase('confirm')}
+          allowCreate={!selection.existing} t={t} disabled={busy || (!selection.existing && (!projectName.trim() || !selection.directory.trim() || !resourcesReady))}
+          onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}/></>
+        : <p className="guideWelcomeHint" role="status">{progressText || t.footer}</p>}</footer>
     </div>
   </GuideFrame>;
 }

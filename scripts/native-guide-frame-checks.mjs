@@ -7,11 +7,16 @@ import {createGuideWindow} from '../src/windows/guide-window.mjs';
 const evaluate = (window, script) => window.webContents.executeJavaScript(script);
 async function wait(window, condition) {
   const deadline = Date.now() + 10000;
-  while (!await evaluate(window, condition)) {
+  while (true) {
+    if (await evaluate(window, condition)) {
+      await delay(450);
+      // Programmatic scrolling may dispatch its scroll event after the first
+      // sample. Recheck after layout settles instead of returning stale state.
+      if (await evaluate(window, condition)) return;
+    }
     if (Date.now() > deadline) throw new Error('Guide frame timeout: ' + condition);
     await delay(40);
   }
-  await delay(450);
 }
 const sidebarWidth = window => evaluate(window, 'Math.round(document.querySelector(".dshDesktopSidebarSurface").getBoundingClientRect().width)');
 const savedWidths = userData => JSON.parse(readFileSync(join(userData, 'guide-window-state.json'), 'utf8')).sidebarWidths;

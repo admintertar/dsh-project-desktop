@@ -6,6 +6,7 @@ import {checkGuideFrame} from './native-guide-frame-checks.mjs';
 import {checkGuide} from './native-guide-checks.mjs';
 import {checkGuideRemote} from './native-guide-remote-checks.mjs';
 import {checkGuideAdd} from './native-guide-add-checks.mjs';
+import {checkGuideLoading} from './native-guide-loading-checks.mjs';
 import {cancelGuideCreations} from '../src/windows/guide-window.mjs';
 
 if (electron.app.isPackaged || !process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA) throw new Error('A dedicated guide test directory is required');
@@ -16,6 +17,7 @@ void electron.app.whenReady().then(async () => {
 try {
   electron.app.focus({steal: true});
   const context = {electron, repository, userData};
+  await checkGuideLoading(context);
   await checkGuideFrame(context);
   await checkGuide(context);
   await checkGuideRemote(context);
@@ -25,6 +27,7 @@ try {
       'separate-persisted-widths-and-migration', 'transparent-divider-hover-and-drag', 'compact-navigation-and-form-scroll',
       'equal-content-insets-and-spaced-scrollbar-gutter', 'compact-footers-and-zero-bottom-padding', 'compact-create-title-hidden',
       'consistent-resource-and-browse-buttons', 'stable-scrollbar-layout', 'scrollbar-show-on-scroll-and-idle-fade',
+      'loading-at-action-location-and-real-creation-phases', 'loading-stable-layout-picker-cancellation-and-failure-recovery',
       'guide-creation-and-retry', 'resource-menus-modals-and-authentication', 'english-chinese-light-dark']};
   writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

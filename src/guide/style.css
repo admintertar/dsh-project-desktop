@@ -40,6 +40,13 @@ p {line-height:1.6;font-size:14px;color:var(--dsw-alias-label-secondary);overflo
 .welcomeContent {--guide-inset:24px;padding:24px var(--guide-inset) 0}
 .welcomeContent .toolbar {padding:0 0 24px;border-bottom:0}
 .actions {display:flex;flex-wrap:wrap;gap:8px}
+/* Compose the official Button and loading icon; hidden labels reserve width so
+   state changes do not move neighbouring controls or wrap the toolbar. */
+.guideActionLabel {display:grid}
+.guideActionLabel>span {grid-area:1/1;display:inline-flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}
+.guideLoadingIcon {flex:none;animation:guide-loading-spin 1s linear infinite}
+@keyframes guide-loading-spin {to {transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce) {.guideLoadingIcon {animation:none}}
 .setting {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}
 .setting>div {min-width:0}.setting button {flex-shrink:0}
 .recent {display:flex;flex-direction:column;gap:8px}.recent h1 {margin-bottom:12px;color:var(--dsw-alias-label-secondary)}
@@ -47,12 +54,21 @@ p {line-height:1.6;font-size:14px;color:var(--dsw-alias-label-secondary);overflo
 .recentItem {flex:1;min-width:0;width:auto;height:auto!important;justify-content:flex-start!important;text-align:left;padding:14px 12px 14px 16px!important;gap:16px!important;border:0!important;border-radius:12px!important;background:transparent!important}
 .recentItem span {min-width:0;overflow-wrap:anywhere}.recentItem small {display:block;font-size:12px;color:var(--dsw-alias-label-secondary);margin-top:4px}
 .recentMore {display:flex;align-items:center;justify-content:center;flex:none;width:40px;margin:8px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:.72}.recentMore:hover:not(:disabled),.recentMore:focus-visible {background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);opacity:1}.recentMore:focus-visible {outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.recentMore:disabled {cursor:default;opacity:.35}
+.recentTrailing {flex:none;display:grid;align-items:center;padding-right:12px}
+.recentTrailing>* {grid-area:1/1;justify-self:end}
+.recentMore {align-self:stretch;margin-right:0}
+.recentOpening {display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary);white-space:nowrap;visibility:hidden}
+.recentTrailing[data-opening] .recentOpening {visibility:visible}
+.recentTrailing[data-opening] .recentMore {visibility:hidden}
 .recentProject[data-unavailable=true]:not([data-menu-open=true]):hover {border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-bg-layer-1)}
 .recentProject[data-unavailable=true] .recentItem {color:var(--dsw-alias-label-tertiary);cursor:not-allowed;opacity:.55}
 .recentProject[data-unavailable=true] .recentItem small {color:var(--dsw-alias-label-tertiary)}
 .error {color:var(--dsw-alias-status-danger, #b42318)}
 footer {min-height:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 28px;border-top:.5px solid var(--dsw-alias-border-l2)}
 .createContent>footer,.welcomeContent>footer {padding:0;min-height:65px}
+.createContent>footer>button,.welcomeContent>footer>button {flex:none}
+footer .guideProgress {order:-1;flex:1;min-width:0;width:auto}
+footer .guideProgress,footer .guideWelcomeHint {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:36px}
 footer p {font-size:12px;margin:0;width:100%;line-height:1.5}.empty {min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;color:var(--dsw-alias-label-secondary)}.empty p {margin:0}
 .failures {margin-bottom:28px}.failures>h2 {display:flex;align-items:center;gap:8px}.failure {padding:20px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}.failure p {margin:8px 0 12px}.path {font-size:12px}
 .errorDetail {font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.checkpoints {margin-top:16px}

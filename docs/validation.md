@@ -143,5 +143,36 @@ Native guide acceptance on macOS x64, 2026-09-19:
 Windows Mica follows the unchanged official capability gate; Windows graphical
 acceptance and a new installer were not run for this change.
 
+## Loading feedback in project guides
+
+`npm run check` passed for the loading update: 47 application tests, seven
+recovery tests, one safe-mode test, project-file checks and dual-Host smoke.
+Host evidence: `.runtime/smoke-ueQzNy`.
+`npm run smoke:guide` also passed, including frame, creation, resource-menu and
+authentication regressions. Result: `.runtime/guide-frame-P3ag4Q/result.json`.
+
+The native loading checks exercise real welcome/create windows, their preload
+and main-process progress events, and real project-file creation. Held picker
+and startup callbacks make cancellation, slow opening and failure deterministic;
+these callbacks do not constitute new native file-picker or Host-boot acceptance.
+English/Chinese and light/dark checks cover:
+
+- Loading only on the selected recent card or triggering button; no extra
+  loading paragraph in the scroll body. Cards, button widths, form positions
+  and footer geometry remain identical while waiting, including 420px windows.
+- File-picker cancellation and directory browsing without false opening state;
+  duplicate clicks/native commands are ignored during an operation.
+- Main-process `creating` then `opening` events with the same operation id,
+  actual created files, form locking, and the delayed fixed-footer explanation.
+- Startup failure restores controls and preserves the form; stale progress
+  events cannot reactivate loading after completion.
+
+Screenshots: `.runtime/guide-frame-P3ag4Q/*-loading-*.png`. English welcome and
+Chinese narrow welcome/create plus English dark creation captures were visually
+inspected on the same application build in `.runtime/guide-frame-WxLTKh`.
+The frame test now rechecks its condition after settling: a queued programmatic
+scroll event can invalidate the first idle sample before the old fixed delay
+ends. The actual scrollbar visibility and geometry assertions remain intact.
+
 Source snapshots, dependency caches, logs and runtime data remain ignored.
 No remote repository, release or package was created or published by these checks.

@@ -9,8 +9,13 @@ contextBridge.exposeInMainWorld('projectGuide', Object.freeze({
     ipcRenderer.on('project-desktop:command', listener);
     return () => ipcRenderer.removeListener('project-desktop:command', listener);
   },
-  async invoke(action, value) {
-    const result = await ipcRenderer.invoke('project-desktop:guide', action, value);
+  onProgress(callback) {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('project-desktop:guide-progress', listener);
+    return () => ipcRenderer.removeListener('project-desktop:guide-progress', listener);
+  },
+  async invoke(action, value, operationId) {
+    const result = await ipcRenderer.invoke('project-desktop:guide', action, value, operationId);
     if (!result.ok) throw new Error(result.error);
     return result.value;
   },
