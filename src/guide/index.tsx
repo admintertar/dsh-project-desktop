@@ -10,9 +10,10 @@ import {AddResourceModal} from './AddResourceModal';
 import {defaultResourceTarget, draftResourceTarget} from '../shared/resource-draft.mjs';
 import {PROJECT_COMPOSITIONS as templates, RESOURCE_ROLE_KEYS} from '../shared/project-templates.mjs';
 import {useModalBoundary} from './useModalBoundary';
+import {GuideFrame} from '../desktop-adapter/stable/GuideFrame';
 
 const copy = {
-  zh: {title: '项目', body: '会话、资料、记忆和任务，都从这里开始。',
+  zh: {title: '项目', body: '会话、资料、记忆和任务，都从这里开始。', resizeSidebar: '调整侧栏宽度',
     roleBackend: '服务端', roleWeb: 'Web 前端', roleMiniapp: '小程序', roleApp: '移动端', roleAdmin: '管理后台', roleDesktop: '桌面端',
     linkResource: '关联资源', resourceSource: '资源来源', sourceRemote: '远程仓库', sourceLocal: '本地文件夹', unlinkResource: '取消关联', editRemote: '编辑仓库地址和分支', editLocal: '更换本地文件夹',
     remoteBranch: '分支', remoteBranchHint: '留空使用仓库的默认分支。', defaultBranch: '默认分支', saveAndClone: '保存并克隆', saving: '正在保存…', unlinkRemote: '取消关联',
@@ -28,7 +29,7 @@ const copy = {
     details: '查看详情', pending: '项目尚未打开，可以重试或重新定位项目文件。',
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
     unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。'},
-  en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.',
+  en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.', resizeSidebar: 'Resize sidebar',
     roleBackend: 'Backend', roleWeb: 'Web frontend', roleMiniapp: 'Mini program', roleApp: 'Mobile app', roleAdmin: 'Admin panel', roleDesktop: 'Desktop app',
     linkResource: 'Link resource', resourceSource: 'Resource source', sourceRemote: 'Remote repository', sourceLocal: 'Local folder', unlinkResource: 'Unlink resource', editRemote: 'Edit repository URL and branch', editLocal: 'Change local folder',
     remoteBranch: 'Branch', remoteBranchHint: 'Leave empty to use the repository’s default branch.', defaultBranch: 'Default branch', saveAndClone: 'Save and clone', saving: 'Saving…', unlinkRemote: 'Unlink repository',
@@ -165,6 +166,7 @@ function Guide() {
   const [query, setQuery] = useState('');
   const [warning, setWarning] = useState('');
   const [version, setVersion] = useState('');
+  const [frameState, setFrameState] = useState<any>();
   const [details, setDetails] = useState<string>();
   const [selection, setSelection] = useState<any>();
   const [templateId, setTemplateId] = useState('fullstack');
@@ -184,6 +186,7 @@ function Guide() {
   const t = Object.fromEntries(Object.keys(copy.en).map(key => [key, translate(key)]));
   async function refresh() {const state = await api.invoke('state');
     setLocale(state.locale); setRecent(state.recent); setFailures(state.failures ?? []); setWarning(state.warning ?? ''); setVersion(state.version);
+    setFrameState({chrome: state.chrome, sidebarWidth: state.sidebarWidth});
     document.documentElement.lang = state.locale;
   }
   useEffect(() => {
@@ -266,12 +269,15 @@ function Guide() {
       setClones(items => [...items.filter(item => item.id !== operation.id), operation]);
       setDraftResources(items => items.map(item => item.id === remoteDraft.id ? {...item, ...remote, type: undefined, mode: 'remote', path: draftResourceTarget(item)} : item));
     }} onUnlink={() => unlinkResource(remoteDraft.id)}/>}</>;
-  if (createOnly) return <main className="createWindow">
-    <aside className="createNav"><h1>{t.new}</h1><nav className="templateList" aria-label={t.template}><h2>{t.template}</h2>
+  if (!frameState) return null;
+  const frameProps = {chrome: frameState.chrome, initialWidth: frameState.sidebarWidth, resizeLabel: t.resizeSidebar,
+    onWidthChange: (width: number) => {void api.invoke('sidebar-width', width).catch((e: Error) => setError(e.message))}, overlay: dialogs};
+  if (createOnly) return <GuideFrame {...frameProps} defaultWidth={190} className="createWindow" sidebar={
+    <div className="createNav"><h1>{t.new}</h1><nav className="templateList" aria-label={t.template}><h2>{t.template}</h2>
       {templates.map(item => <Button key={item.id} className="templateItem" data-template-id={item.id} variant="toolbar"
-        aria-pressed={templateId === item.id} disabled={busy} onClick={() => selectTemplate(item.id)}>{t[item.key]}</Button>)}
+        aria-pressed={templateId === item.id} disabled={busy} onClick={() => selectTemplate(item.id)}><span className="templateItemLabel">{t[item.key]}</span></Button>)}
     </nav><div className="createTemplateSelect"><h2>{t.template}</h2><ProjectSelect label={t.template} value={templateId}
-      disabled={busy} options={templates.map(item => ({value: item.id, label: t[item.key]}))} onChange={selectTemplate}/></div></aside>
+      disabled={busy} options={templates.map(item => ({value: item.id, label: t[item.key]}))} onChange={selectTemplate}/></div></div>}>
     <div className="createContent">
     <header className="toolbar"><h1>{t[templates.find(item => item.id === templateId)!.key]}</h1></header>
     <section className="guideBody" aria-busy={busy}>
@@ -279,7 +285,7 @@ function Guide() {
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} autoFocus disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
         <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
-        <section className="resourceEditor" aria-labelledby="create-resources-title"><div className="resourceEditorHeading"><div><h2 id="create-resources-title">{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" size="sm" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
+        <section className="resourceEditor" aria-labelledby="create-resources-title"><div className="resourceEditorHeading"><div><h2 id="create-resources-title">{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}
         </section>
       </>}
@@ -289,13 +295,12 @@ function Guide() {
     </section>
     <footer><Button disabled={busy} onClick={() => run('cancel')}>{t.cancel}</Button><Button variant="primary" disabled={busy || !projectName.trim() || !selection?.directory.trim() || !resourcesReady || Boolean(selection?.existing)} onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}>{t.create}</Button></footer>
     </div>
-    {dialogs}
-  </main>;
-  return <main className="welcome">
-    <aside className="welcomeNav"><div className="brand"><IconProjectAddOutline16 size={30}/><div><strong>DSH Project</strong><small>Desktop · {version}</small></div></div>
+  </GuideFrame>;
+  return <GuideFrame {...frameProps} className="welcome" sidebar={
+    <div className="welcomeNav"><div className="brand"><IconProjectAddOutline16 size={42}/><div><strong>DSH Project</strong><small>Desktop · {version}</small></div></div>
       <Button className="projectNav" variant="toolbar" icon={<IconFolderOpenOutline16/>} disabled={busy} onClick={reset} aria-current="page">{t.title}</Button>
-      {selection && !selection.existing && <div className="templateList"><h2>{t.template}</h2>{templates.map(item => <Button key={item.id} className="templateItem" data-template-id={item.id} variant="toolbar" aria-pressed={templateId === item.id} disabled={busy} onClick={() => selectTemplate(item.id)}>{t[item.key]}</Button>)}</div>}
-      <p className="navCaption">{t.body}</p></aside>
+      {selection && !selection.existing && <div className="templateList"><h2>{t.template}</h2>{templates.map(item => <Button key={item.id} className="templateItem" data-template-id={item.id} variant="toolbar" aria-pressed={templateId === item.id} disabled={busy} onClick={() => selectTemplate(item.id)}><span className="templateItemLabel">{t[item.key]}</span></Button>)}</div>}
+      <p className="navCaption">{t.body}</p></div>}>
     <div className="welcomeContent">
       <header className="toolbar">{selection ? <><Button icon={<IconChevronLeftOutline14/>} disabled={busy} onClick={reset}>{t.backProjects}</Button><h1>{t.new}</h1></>
         : <><div className="search"><Input icon={<IconSearchOutline16/>} placeholder={t.search} aria-label={t.search} value={query}
@@ -310,7 +315,7 @@ function Guide() {
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
         <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
-        <section className="resourceEditor"><div className="resourceEditorHeading"><div><h2>{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" size="sm" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
+        <section className="resourceEditor"><div className="resourceEditorHeading"><div><h2>{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}
         </section>
         </>}</>
@@ -332,7 +337,6 @@ function Guide() {
       <footer>{selection ? <><Button disabled={busy} onClick={reset}>{t.cancel}</Button>
         <Button variant="primary" disabled={busy || (!selection.existing && (!projectName.trim() || !selection.directory.trim() || !resourcesReady))} onClick={() => run('confirm', {name: projectName, location: selection.directory, templateId, resources: draftResources})}>{selection.existing ? t.existing : t.create}</Button></> : <p>{t.footer}</p>}</footer>
     </div>
-    {dialogs}
-  </main>;
+  </GuideFrame>;
 }
 createRoot(document.getElementById('root')!).render(<Guide/>);

@@ -63,6 +63,14 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 `SharedTheme` 拥有应用级 preference，只同步 `system/light/dark`。各 Host 的官方 `settings/updated` 事件触发协调，原子保存应用 theme.json 后统一更新 Electron nativeTheme 及所有 Host 的 ui-theme；广播写入不再广播。不共享字体、语言、模型；菜单语言随当前项目窗口改变。
 
+欢迎窗口默认 900×640，新建窗口默认 980×720。二者通过 `guide-window-options` 直接调用官方 `advancedWindowOptions`，复用主窗口的 native traffic lights、32px 拖动区域及 macOS sidebar vibrancy；Windows 使用官方能力校验后的 Mica，不支持时使用实体背景。入口窗口材质不依赖项目 Profile，明暗由应用共享 `nativeTheme` 驱动。
+
+`GuideFrame` 是官方 `AdvancedFrame.tsx` 的双栏最小适配：直接复用 `installDesktopOwnedStyles`、原始 pointer-capture／RAF 拖拽和原生标题栏布局，补充键盘调整与取消清理。固定 stable 的 1024px 自动折叠阈值、`DesktopLayoutState` 与列宽计算的侧栏上下限不可配置，私有 ResizeHandle 也未导出，因此适配器仅保留左右面板，并将侧栏上下限按官方值的三分之二独立管理：范围 176–280px，欢迎页默认 187px、新建页默认 190px；双击分隔线恢复各自默认值。保护右侧至少 400px；小于 576px 时转为顶部导航，新建页保留官方下拉选择项目组合。分隔线沿用官方透明悬停，仅键盘聚焦时提供焦点提示。扩宽恢复偏好宽度，拖拽结束／键盘调整分别保存 welcome、create 的本机宽度到 `guide-window-state.json`；v2 将旧 v1 宽度按三分之二一次性迁移。欢迎页品牌采用左侧 42×42px 图标、右侧标题与版本上下两行的排列，图文间距 4px，在侧栏和顶部导航中保持一致；底部说明下边距为 0。组合名称按需换行，适应更窄的导航。正文与导航各自使用稳定滚动槽，正文独立滚动，底部操作固定；不启动 Host、不修改官方源码。
+
+内容区统一左右 24px 留白、底部 padding 为 0；正文的右侧留白分为组件与滚动槽之间 8px、官方滚动槽 8px、槽外 8px，稳定槽保持表单宽度不随溢出变化。标题、表单和 footer 共用同一左右边界，两个窗口 footer 均为 0 padding、最小高度 65px。新建页进入顶部下拉导航后隐藏重复的正文 header，恢复双栏时重新显示；添加资源与浏览使用同尺寸的官方 outline Button。分隔线显式区分鼠标与键盘焦点：从输入框点击分隔线时，不继承 Chromium 的 `:focus-visible` 高亮；按下、拖动与松开都保持透明，键盘操作仍有焦点提示。
+
+正文与左侧导航保留官方滚动条的尺寸、形状和主题色，仅适配可见性：真实 scroll 事件立即显示，停止 800ms 后用 180ms 淡出，拖住滑块时保持可见。固定 stable 未提供自动隐藏控制器，因此由 GuideFrame 捕获本窗口的滚动事件并在卸载时清理计时器；CSS 注册透明度变量完成淡出，减少动态效果偏好下直接隐藏。隐藏不改变 overflow、滚动槽或组件宽度，不影响主项目窗口和官方弹窗。
+
 ## 官方内部接入清单
 
 新增恢复规则：初始 Profile 及早期无锁检查点，仅在依赖恰为自带 Project 的本地 link 时生成锁文件，不自动解析任意新增依赖。其他恢复必须使用冻结锁文件。固定 pnpm 11 的损坏缓存复用问题由自有适配器规避：通过官方 materializer 的 embedder spawn 接口附加新临时 store、force 和 copy 参数，重新校验下载内容，结束后清理该次 store；不改全局 pnpm 设置。失败保留 pending 和官方脱敏诊断。
@@ -82,6 +90,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `desktop-runtime-environment`、`launch-environment` | 命令环境与项目环境变量 |
 | `index` 的 Config/desktopRendererUrl、`window-material`、`renderer-boot` | 原始窗口参数、URL 标记与健康报告协议 |
 | `window-options`、`preload`、`renderer-actions-dispatch` | 安全窗口配置、文件拖放/原生命令及重启先应答语义 |
+| `window-material`、`client/layout-state`、`client/styles`，私有 `AdvancedFrame.ResizeHandle` 最小适配 | 欢迎／新建窗口的官方玻璃、内嵌标题栏、双栏拖拽和紧凑布局；固定版本升级时检查适配 |
 | `tray-locale` 的 `desktopRestartConfirmationCopy` | 原生重启／恢复警告文案，按当前项目语言与操作范围适配 |
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |

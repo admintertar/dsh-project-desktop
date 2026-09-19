@@ -1,21 +1,20 @@
 html, body, #root {height:100%;margin:0;overflow:hidden}
-body {font-family:system-ui,sans-serif;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base)}
+body {font-family:system-ui,sans-serif;color:var(--dsw-alias-label-primary);background:transparent}
 * {box-sizing:border-box}
-.welcome {height:100%;display:grid;grid-template-columns:260px minmax(0,1fr);background:var(--dsw-alias-bg-base)}
-.welcomeNav {padding:32px 18px;display:flex;flex-direction:column;gap:24px;border-right:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-specific-sidebar-fill)}
-.brand {display:flex;align-items:center;gap:12px}.brand strong {font-size:19px;font-weight:600}.brand small {display:block;font-size:13px;color:var(--dsw-alias-label-secondary);margin-top:6px}
-.projectNav {width:100%;justify-content:flex-start!important;height:40px;border-radius:10px}.projectNav[aria-current=page] {background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}.navCaption {margin-top:auto;font-size:12px;line-height:1.6}
+.welcomeNav {height:100%;min-height:0;padding:28px calc(18px - var(--dsh-scrollbar-width,8px)) 24px 18px;display:flex;flex-direction:column;gap:24px;overflow-y:auto;scrollbar-gutter:stable}
+.brand {display:flex;align-items:center;gap:4px}.brand strong {display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap}.brand small {display:block;font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary);margin-top:4px;white-space:nowrap}
+.projectNav {width:100%;justify-content:flex-start!important;height:40px;border-radius:10px}.projectNav[aria-current=page] {background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}.navCaption {margin-top:auto;margin-bottom:0;font-size:12px;line-height:1.6}
 .templateList {display:flex;flex-direction:column;gap:8px}.templateList h2 {color:var(--dsw-alias-label-secondary);margin-bottom:4px}.templateItem {width:100%;justify-content:flex-start!important;text-align:left}
-.welcomeContent {display:flex;flex-direction:column;min-height:0;min-width:0}
-.createWindow {height:100%;display:grid;grid-template-columns:240px minmax(0,1fr);min-width:0;background:var(--dsw-alias-bg-base)}
-.createNav {min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:28px calc(18px - var(--dsh-scrollbar-width, 8px)) 28px 18px;border-right:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-specific-sidebar-fill)}
+.welcomeContent {height:100%;display:flex;flex-direction:column;min-height:0;min-width:0}
+.createNav {height:100%;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:28px calc(18px - var(--dsh-scrollbar-width, 8px)) 24px 18px}
 .createTemplateSelect {display:none}
 .createNav>h1 {font-size:22px;line-height:30px;margin-bottom:34px}
 .createNav .templateList h2 {font-size:12px;font-weight:500;color:var(--dsw-alias-label-tertiary);margin:0 8px 8px}
-.createNav .templateItem,.welcomeNav .templateItem {box-sizing:border-box;min-height:40px;height:40px;border-radius:10px!important;justify-content:flex-start!important;padding:0 12px!important;background:transparent!important;color:var(--dsw-alias-label-secondary)!important;font-weight:400}
+.createNav .templateItem,.welcomeNav .templateItem {box-sizing:border-box;min-height:40px;height:auto;border-radius:10px!important;justify-content:flex-start!important;padding:8px 12px!important;background:transparent!important;color:var(--dsw-alias-label-secondary)!important;font-weight:400}
+.templateItemLabel {min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:20px}
 .createNav .templateItem:hover:not(:disabled),.welcomeNav .templateItem:hover:not(:disabled) {background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}
 .createNav .templateItem[aria-pressed=true],.welcomeNav .templateItem[aria-pressed=true] {background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important;font-weight:600}
-.createContent {display:flex;flex-direction:column;min-height:0;min-width:0;padding:28px clamp(32px,4vw,56px) 24px}
+.createContent {--guide-inset:24px;height:100%;display:flex;flex-direction:column;min-height:0;min-width:0;padding:24px var(--guide-inset) 0}
 .createWindow .toolbar {justify-content:flex-start;padding:0 0 24px;border-bottom:0}
 .createWindow .setting>div {width:100%}.createWindow .setting h2 {margin-bottom:10px}
 .createWindow .setting>div>span,.createWindow .resourceDraft>span {width:100%}
@@ -23,10 +22,23 @@ body {font-family:system-ui,sans-serif;color:var(--dsw-alias-label-primary);back
 .search {flex:1;min-width:160px}.search>span {width:100%}
 h1 {font-size:16px;font-weight:600;margin:0} h2,h3 {font-size:14px;font-weight:500;margin:0}
 p {line-height:1.6;font-size:14px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
-.guideBody {flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:24px calc(28px - var(--dsh-scrollbar-width, 8px)) 24px 28px}
-.welcomeContent {padding:28px clamp(20px,4vw,48px)}
+/* Divide the 24px right inset into an 8px content gap, the official 8px
+   scrollbar and 8px outside it. Stable gutters preserve header/footer alignment. */
+.guideBody {--guide-scroll-gap:8px;flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:0 var(--guide-scroll-gap) 20px 0;margin-right:calc(-1 * (var(--guide-scroll-gap) + var(--dsh-scrollbar-width,8px)))}
+/* Official ui-theme/styles/scrollbar.css owns geometry and theme colors. Animate
+   a registered alpha on the scroll container; Chromium scrollbar pseudo-elements
+   do not reliably animate background-color themselves. Keep the gutter intact. */
+@property --guide-scrollbar-alpha {syntax:"<number>";inherits:true;initial-value:0}
+.guideFrame :is(.guideBody,.welcomeNav,.createNav) {--guide-scrollbar-alpha:0;transition:--guide-scrollbar-alpha .18s}
+.guideFrame :is(.guideBody,.welcomeNav,.createNav)[data-guide-scrolling] {--guide-scrollbar-alpha:1;transition-duration:0s}
+.guideFrame :is(.guideBody,.welcomeNav,.createNav)::-webkit-scrollbar-thumb {background:color-mix(in srgb,var(--dsh-scrollbar-thumb) calc(var(--guide-scrollbar-alpha) * 100%),transparent)}
+.guideFrame :is(.guideBody,.welcomeNav,.createNav)::-webkit-scrollbar-thumb:hover {background:color-mix(in srgb,var(--dsh-scrollbar-thumb-hover) calc(var(--guide-scrollbar-alpha) * 100%),transparent)}
+.guideFrame :is(.guideBody,.welcomeNav,.createNav)::-webkit-scrollbar-thumb:active {background:var(--dsh-scrollbar-thumb-hover)}
+@media (prefers-reduced-motion:reduce) {
+  .guideFrame :is(.guideBody,.welcomeNav,.createNav) {transition:none}
+}
+.welcomeContent {--guide-inset:24px;padding:24px var(--guide-inset) 0}
 .welcomeContent .toolbar {padding:0 0 24px;border-bottom:0}
-.welcomeContent .guideBody {padding:0 calc(8px - var(--dsh-scrollbar-width, 8px)) 0 0}
 .actions {display:flex;flex-wrap:wrap;gap:8px}
 .setting {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}
 .setting>div {min-width:0}.setting button {flex-shrink:0}
@@ -40,6 +52,7 @@ p {line-height:1.6;font-size:14px;color:var(--dsw-alias-label-secondary);overflo
 .recentProject[data-unavailable=true] .recentItem small {color:var(--dsw-alias-label-tertiary)}
 .error {color:var(--dsw-alias-status-danger, #b42318)}
 footer {min-height:70px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 28px;border-top:.5px solid var(--dsw-alias-border-l2)}
+.createContent>footer,.welcomeContent>footer {padding:0;min-height:65px}
 footer p {font-size:12px;margin:0;width:100%;line-height:1.5}.empty {min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;color:var(--dsw-alias-label-secondary)}.empty p {margin:0}
 .failures {margin-bottom:28px}.failures>h2 {display:flex;align-items:center;gap:8px}.failure {padding:20px 0;border-bottom:.5px solid var(--dsw-alias-border-l2)}.failure p {margin:8px 0 12px}.path {font-size:12px}
 .errorDetail {font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.checkpoints {margin-top:16px}
@@ -87,6 +100,38 @@ footer p {font-size:12px;margin:0;width:100%;line-height:1.5}.empty {min-height:
 .remoteRepositoryField p {margin:6px 0 0;font-size:12px}
 .remoteUnlink {margin-right:auto}
 .remoteRepositoryForm .project-setting-row:last-child {border-bottom:0}
-@media(max-width:700px) {.welcome {grid-template-columns:1fr}.welcomeNav {padding:16px 24px;border-right:0;border-bottom:.5px solid var(--dsw-alias-border-l2);gap:0}.brand strong {font-size:16px}.brand small {display:inline;margin-left:8px}.projectNav,.navCaption {display:none!important}.toolbar {padding:20px 24px;gap:12px}.search {flex-basis:100%}}
-@media(max-width:500px) {.setting {align-items:flex-start;flex-direction:column}.guideBody {padding-left:24px;padding-right:calc(24px - var(--dsh-scrollbar-width, 8px))}footer {padding-inline:24px}.brand small {display:block;margin:4px 0 0}.empty {min-height:180px}}
-@media(max-width:700px) {.createWindow {grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.createNav {padding:16px calc(24px - var(--dsh-scrollbar-width, 8px)) 16px 24px;border-right:0;border-bottom:.5px solid var(--dsw-alias-border-l2)}.createNav>h1 {margin-bottom:12px}.createNav .templateList {display:none}.createTemplateSelect {display:flex;align-items:center;justify-content:space-between;gap:12px}.createTemplateSelect h2 {flex:none;font-size:12px;color:var(--dsw-alias-label-tertiary)}.createWindow .toolbar {padding-block:0 16px}.createContent,.welcomeContent {padding:20px 24px}.welcomeContent .guideBody {padding:0}}
+/* The official frame owns glass surfaces, caption strips and drag exclusion. These
+   selectors only adapt two panels to compact guide windows; no extra backdrop. */
+.guideFrame .dshDesktopConversationSurface {container-type:inline-size}
+.guideFrame .dshDesktopOverlay:empty {display:none}
+.guideFrame .guideResizeHandle::after {content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent}
+.guideFrame .guideResizeHandle:focus-visible:not([data-pointer-focus])::after {background:var(--dsw-alias-label-tertiary)}
+.guideFrame .guideResizeHandle:focus-visible {outline:none}
+.guideFrame .brand>svg {flex:none}.guideFrame .brand>div {min-width:0}
+.guideFrame[data-desktop-platform="win32"] .dshDesktopUpstreamSidebar {padding-top:20px}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] {grid-template-rows:auto minmax(0,1fr);transition:none}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="darwin"],
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="win32"] {grid-template-rows:32px auto minmax(0,1fr)}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopSidebarSurface {grid-column:1;grid-row:1;border-right:0;border-bottom:1px solid var(--dsw-alias-border-l1)}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="darwin"] .dshDesktopSidebarSurface,
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="win32"] .dshDesktopSidebarSurface {grid-row:2}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopSidebarSurface::before {display:none}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopUpstreamSidebar {padding-top:0}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopConversationSurface {grid-column:1;grid-row:2}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="darwin"] .dshDesktopConversationSurface,
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact][data-desktop-platform="win32"] .dshDesktopConversationSurface {grid-row:3}
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopMacCaptionRow,
+body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDesktopWindowsCaptionRow {grid-column:1;grid-row:1;background:transparent}
+.guideFrame[data-guide-compact] .welcomeNav,.guideFrame[data-guide-compact] .createNav {padding:12px calc(24px - var(--dsh-scrollbar-width,8px)) 12px 24px;gap:0}
+.guideFrame[data-guide-compact] .projectNav,.guideFrame[data-guide-compact] .navCaption {display:none!important}
+.guideFrame[data-guide-compact] .createNav>h1 {font-size:16px;line-height:24px;margin-bottom:8px}
+.guideFrame[data-guide-compact] .createNav .templateList {display:none}
+.guideFrame[data-guide-compact] .createContent>.toolbar {display:none}
+.guideFrame[data-guide-compact] .createTemplateSelect {display:flex;align-items:center;justify-content:space-between;gap:12px}
+.guideFrame[data-guide-compact] .createTemplateSelect h2 {flex:none;font-size:12px;color:var(--dsw-alias-label-tertiary)}
+@container (max-width:520px) {
+  .createContent,.welcomeContent {padding-top:20px}
+  .toolbar {gap:12px}.search {flex-basis:100%}
+  .setting {align-items:flex-start;flex-direction:column}
+  .empty {min-height:180px}
+}

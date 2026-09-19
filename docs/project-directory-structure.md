@@ -214,6 +214,7 @@ Git 保存文件，不保存空目录。因此 `.agent-project/.gitignore` 可�
 ├── recent-projects.json          # 最近项目列表
 ├── workspace-session.json        # 待恢复项目、活动窗口及窗口布局
 ├── theme.json                    # 所有项目窗口共享的明暗主题偏好
+├── guide-window-state.json       # 欢迎和新建窗口各自的侧栏宽度，仅保存在本机
 └── projects/
     └── <项目文件路径的哈希>/       # 该路径对应的独立运行环境
         ├── project-desktop.json  # 项目路径与运行目录的归属记录

@@ -4,6 +4,8 @@ import {findProjectFile, createProjectFromPlan} from '../app/project-files.mjs';
 import {trustedSender} from './renderer-security.mjs';
 import {GuideClones} from '../app/guide-clones.mjs';
 import {inspectGuideResource} from '../desktop-adapter/stable/guide-resources.mjs';
+import {guideWindowOptions} from '../desktop-adapter/stable/guide-window-options.mjs';
+import {GuideLayoutState} from './guide-layout-state.mjs';
 
 const creations = new Set();
 const draftCleanups = new Set();
@@ -31,9 +33,9 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
   const title = createOnly ? (locale === 'zh' ? '新建项目' : 'New Project')
     : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop');
   const expectedUrl = `${pathToFileURL(html).href}${createOnly ? '?mode=create' : ''}`;
-  const window = new BrowserWindow({title, icon: iconPath, width: createOnly ? 1180 : 1020, height: createOnly ? 820 : 720,
-    minWidth: 420, minHeight: 460, show: false, webPreferences: {preload: join(repository, 'dist/guide/preload.cjs'), sandbox: true,
-      contextIsolation: true, nodeIntegration: false, webSecurity: true, backgroundThrottling: !hidden,
+  const layoutState = new GuideLayoutState(join(electron.app.getPath('userData'), 'guide-window-state.json'));
+  const {options, chrome} = await guideWindowOptions(electron, {mode, title, iconPath, preload: join(repository, 'dist/guide/preload.cjs')});
+  const window = new BrowserWindow({...options, webPreferences: {...options.webPreferences, backgroundThrottling: !hidden,
       partition: createOnly ? 'project-desktop-create' : 'project-desktop-guide'}});
   let selection;
   const pickedResources = new Map();
@@ -78,8 +80,10 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
       window.setTitle(createOnly ? (locale === 'zh' ? '新建项目' : 'New Project')
         : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop'));
       ready.resolve();
-      return {locale, recent: recent.list(), failures: getFailures(), warning, version: '0.1.0', mode};
+      return {locale, recent: recent.list(), failures: getFailures(), warning, version: '0.1.0', mode,
+        chrome, sidebarWidth: layoutState.width(mode)};
     }
+    if (action === 'sidebar-width') {layoutState.save(mode, value); return true}
     if (action === 'resource-auth') return clonePool ? (await clonePool).authentication(value) : {requests: []};
     if (action === 'clone-state') return clonePool ? (await clonePool).snapshot() : [];
     if (action === 'clone-start' || action === 'clone-cancel' || action === 'clone-retain') {

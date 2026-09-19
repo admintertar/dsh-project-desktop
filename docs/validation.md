@@ -77,5 +77,71 @@ Developer ID signing and platforms other than macOS x64 were not rerun for
 this change. A successful local plugin uninstall does not certify registry or
 network recovery. Their entry points and limitations are documented separately.
 
+## Compact welcome and project-creation windows
+
+Native guide acceptance on macOS x64, 2026-09-19:
+
+- Final `npm run check` passed: 47 application tests, seven recovery tests, one
+  safe-mode test, build/source integrity, project creation/history and dual-Host
+  checks. Local Host evidence: `.runtime/smoke-WEGT3L`.
+- `npm run smoke:guide` passed using isolated application data. Local evidence:
+  `.runtime/guide-frame-JJBPz2/result.json` and `guide-frame-layout.json`.
+- Verified default sizes of 900 × 640 and 980 × 720, official advanced chrome,
+  macOS native traffic-light position, transparent sidebar and opaque content.
+- Exercised actual Electron mouse events with pointer capture, minimum/maximum
+  widths, keyboard arrows/Home/End, double-click reset, independent saved widths
+  and reopening. Defaults are 187px for welcome and 190px for creation, with
+  bounds of 176–280px adapted from the main frame's geometry. Double-click reset
+  restores each window's own default. Saved v1 preferences shrink proportionally
+  once on migration to v2; reopening does not shrink them again. The divider
+  stays transparent on mouse hover, pointer down, drag and pointer up in both
+  themes, including focus transferred from an input. Keyboard resizing retains
+  its visible focus cue.
+  Both windows retain two columns below the main frame's 1024px breakpoint;
+  they preserve at least 400px for content and use compact navigation below
+  576px, restoring the preferred width when enlarged. Native frame tests ignore
+  physical mouse movement while injecting Electron pointer events to prevent
+  the user's cursor from interrupting automated pointer capture.
+- English/Chinese and light/dark checks cover default size, 700 × 560,
+  600 × 560, the 576px two-column boundary and
+  420 × 460, fixed footer visibility, vertical scrolling and no horizontal
+  overflow, including sidebar labels at their minimum width. Filtering from
+  overflowing to short content preserves positions and widths. Switching between
+  empty and full-stack compositions also preserves form geometry when overflow
+  disappears and returns. Content uses equal 24px left/right insets and zero
+  bottom padding. The right inset contains an 8px content gap, the official
+  8px scrollbar and an 8px outside gap. Header, body and footer content share
+  the same horizontal bounds. Both footers have zero padding and a 65px minimum
+  height. Compact creation windows hide the repeated content header; widening
+  restores it. Add resource and Browse use matching official button height,
+  font size, line height, radius and padding.
+  Real Electron wheel events verify that idle scrollbar thumbs are transparent,
+  become visible while scrolling and fade out after inactivity, with identical
+  content positions, widths and gutter sizes across those states. The official
+  scrollbar colors and dimensions are retained.
+  The existing guide creation, resource dialogs, authentication,
+  keyboard navigation, narrow menus and retry suites also passed.
+- Renderer captures were inspected for layout. They contain transparent pixels
+  in the glass region and omit native traffic lights; they do not by themselves
+  show the macOS-composited material. Native controls are additionally checked
+  through the actual BrowserWindow API.
+- Full native window captures were separately inspected, including macOS glass,
+  embedded traffic lights, compact footers, spaced scrollbars and the hidden
+  creation header in narrow windows. Chinese light/dark captures at default and
+  compact sizes, including visible and idle scrollbar pairs, are in
+  `.runtime/guide-native-preview-QgHZ2W`; English layouts
+  are also covered by the renderer captures and native interaction suite above.
+- Welcome branding places a 42 × 42px icon on the left and stacks the title above
+  the version on the right, with equal icon/text-block height and a 4px gap.
+  The bottom navigation caption has zero bottom margin. Focused native checks at
+  187px and 176px sidebar widths and 420 × 460 compact size confirm both text
+  lines remain fully visible without horizontal overflow. Final geometry and
+  captures: `.runtime/guide-brand-preview-b6CR5R/result.json`; the light/minimum
+  native capture was visually inspected. Earlier English/Chinese and light/dark
+  brand captures are in `.runtime/guide-brand-preview-gMzDwW`.
+
+Windows Mica follows the unchanged official capability gate; Windows graphical
+acceptance and a new installer were not run for this change.
+
 Source snapshots, dependency caches, logs and runtime data remain ignored.
 No remote repository, release or package was created or published by these checks.
