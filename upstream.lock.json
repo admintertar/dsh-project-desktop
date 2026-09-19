@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "desktop": {
+    "repository": "https://github.com/anywhere-labs/dsh-desktop.git",
+    "commit": "01fa59e6688d82fa34b59fc507e3a6f5d695fa17",
+    "version": "2.0.11",
+    "package": "dsh-plugin-desktop",
+    "tree": "2840b04334609734e21adeed431f4274c23c87a0"
+  },
+  "harness": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+    "commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
+    "version": "0.1.5-rc.2",
+    "inventoryTree": "6207c3c18f2100e42d3131efe71ae3436ee81697",
+    "guideSources": {
+      "packages/client/ui-theme/src/styles": "60a3d05361a8d2f73a964507d40be36b7deb5a18",
+      "packages/client/locale/src": "ca80e93357a5fff99567bf72566d12751c6ec7d8",
+      "packages/client/ui-settings-models/src": "821438b0f39727f1a27ad5656975fe4db6e55d39"
+    }
+  },
+  "project": {
+    "repository": "../dsh-plugin-project",
+    "commit": "1644f405ef8e20f8a00266cec2eec386a66ba9b8",
+    "tree": "200585190e5e29a0b9ca4be49beb6124961b97e1"
+  }
+}

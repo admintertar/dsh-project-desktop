@@ -1,0 +1,32 @@
+export function trustedSender(event, contents, expectedUrl, localFile = false) {
+  if (contents.isDestroyed() || event.sender !== contents || event.senderFrame !== contents.mainFrame) return false;
+  try {
+    const actual = new URL(event.senderFrame.url);
+    const expected = new URL(expectedUrl);
+    return localFile ? actual.href === expected.href : actual.origin === expected.origin;
+  } catch {return false}
+}
+
+/** Minimal adaptation of official electron-shell-generation.ts (private helpers). */
+export function rendererHeaders(details, webContentsId, origin, header) {
+  const headers = Object.fromEntries(Object.entries(details.requestHeaders)
+    .filter(([key]) => key.toLowerCase() !== header.name.toLowerCase()));
+  const ids = [details.webContentsId, details.webContents?.id].filter(id => id !== undefined);
+  if (!ids.length || ids.some(id => id !== webContentsId)) return headers;
+  let target;
+  try {target = new URL(details.url)} catch {return headers}
+  const socketOrigin = origin.replace(/^http/, 'ws');
+  if (target.origin !== origin && target.origin !== socketOrigin) return headers;
+  if (details.resourceType !== 'mainFrame') {
+    const frame = details.frame;
+    const top = frame?.top ?? (frame?.parent === null ? frame : undefined);
+    if (!frame || frame.detached || frame.origin !== origin || !top || top.detached || top.origin !== origin) return headers;
+  }
+  headers[header.name] = header.value;
+  return headers;
+}
+
+export function externalUrl(value) {
+  try {const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : undefined}
+  catch {return undefined}
+}
