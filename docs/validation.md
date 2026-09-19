@@ -229,6 +229,30 @@ An isolated macOS x64 app with the production dependency payload passed the real
 installation diagnostic: welcome, two independent project Hosts, official Renderer,
 Chinese menu, safe mode, cleanup and reopening. The diagnostic also caught the
 Shell's explicit Electron package-version lookup; staging retains that metadata
-without shipping the development Electron binary. Cloud Universal/arm64/Windows
-acceptance must still be read from the matching run; local x64 evidence alone does
-not certify the other architecture or the final merged disk image.
+without shipping the development Electron binary. The official compressed DMG
+target also produced and verified a 196,105,930-byte local thin-x64 probe; this is
+separate from the final Universal artifact.
+
+Cloud acceptance for commit `6dca083982a28cb41eb5e47826e95a1bd37f458a` is tracked in
+[Actions run 35447527224](https://github.com/admintertar/dsh-project-desktop/actions/runs/35447527224).
+Windows x64 passed source/recovery/safe-mode checks, NSIS PE validation, and actual
+launch of the extracted portable application outside the checkout. Its installed
+welcome, two independent Hosts, official Renderer, Chinese menu, safe mode,
+temporary cleanup and normal reopening checks all passed. The unsigned installer
+is 138,276,611 bytes and the portable ZIP is 222,431,040 bytes.
+
+The Universal DMG is 290,642,294 bytes (about 291 MB), with SHA-256
+`ba3da1fe413ac59aa74e31e94470cde411da3df69d57f1d3bcc911df77990529`.
+It passed all 18 official native-file architecture checks, universal executable
+checks, strict ad-hoc signature verification, disk-image verification and the
+same real installation checks on Apple Silicon. The previous ARM-only Actions
+download was 732,414,332 bytes; the new Universal download is 290,645,346 bytes,
+about 60% smaller. For comparison, the pinned official Desktop 2.0.11 Universal
+DMG is 282,912,868 bytes; the Shell adds about 7.7 MB in the compressed image.
+
+The Intel job downloaded that exact Universal artifact, verified its SHA-256,
+mounted the DMG and repeated the real installation checks with native x64 Electron.
+All jobs in the run succeeded. The macOS signature remained intact after launch
+on both architectures. Windows installer UI/upgrade/uninstall acceptance and
+Developer ID/notarization or Authenticode remain separate from these local unsigned
+distribution checks.
