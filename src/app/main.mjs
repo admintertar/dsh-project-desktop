@@ -271,9 +271,11 @@ async function run() {
     if (!app.isReady() || quitting) return;
     const zh = language() === 'zh';
     lastLocale = zh ? 'zh' : 'en';
-    const roles = nativeRoleMenus(lastLocale);
     const current = active();
     const command = (label, action, extra = {}) => ({label, click: () => perform(action), ...extra});
+    const updateCommand = () => command(updates?.label() ?? (zh ? '检查更新…' : 'Check for Updates…'),
+      () => updates?.checkNow(BrowserWindow.getFocusedWindow()), {id: 'project-check-for-updates', enabled: Boolean(updates) && !updates.busy});
+    const roles = nativeRoleMenus(lastLocale, process.platform, app.name, [updateCommand()]);
     const recentItems = recent.list().map(item => item.available === false
       ? {label: item.title, enabled: false}
       : command(item.title, () => open(item.path)));
@@ -304,8 +306,6 @@ async function run() {
         }, {enabled: Boolean(current)}),
         command(zh ? '项目恢复…' : 'Project Recovery…', () => active()?.recover(), {enabled: Boolean(current)})]},
       roles.window,
-      {label: zh ? '帮助' : 'Help', submenu: [command(updates?.label() ?? (zh ? '检查更新…' : 'Check for Updates…'),
-        () => updates?.checkNow(BrowserWindow.getFocusedWindow()), {enabled: Boolean(updates) && !updates.busy})]},
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
     tray?.setContextMenu(Menu.buildFromTemplate([

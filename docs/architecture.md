@@ -79,7 +79,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 安全模式复用官方 `safe-mode` 的路径/标记/reset/cleanup，并接入恢复助手的原始入口与确认窗口，不调用 compatibility 或首次向导入口。每项目停止确认后创建临时 dsh-home、desktop-state 和空白工作目录，仅加载官方基础 Profile 与自有 advanced Shell。Host 环境采用允许列表，阻止继承 API key、代理、npm hook 和 DSH 路径覆盖。Renderer 使用随机非持久 Session。退出等待 Host 停止后清除 Session 和临时目录，再打开原项目恢复助手；下次启动在所有 Host 创建前清理遗留临时树。故障项目不自动启动正常 Host；安全模式不捕获正常检查点、不覆盖正常窗口布局，主题不传播到正常项目。
 
-原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。欢迎页聚焦时沿用最近项目语言。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
+原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。macOS 应用名称菜单直接调用官方 `macApplicationMenuTemplate` 的应用分组，将应用级检查更新作为 additions 放在“关于”之后、“服务”之前；File 与项目工具仍由 Shell 组合。欢迎页聚焦时沿用最近项目语言。托盘与欢迎页继续提供更新入口；不额外建立帮助菜单或设置页版本浮层。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
 
 这些是编译自固定官方源码的库，不是上游承诺的稳定 API。只允许适配器导入。
 
@@ -94,6 +94,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `window-options`、`preload`、`renderer-actions-dispatch` | 安全窗口配置、文件拖放/原生命令及重启先应答语义 |
 | `window-material`、`client/layout-state`、`client/styles`，私有 `AdvancedFrame.ResizeHandle` 最小适配 | 欢迎／新建窗口的官方玻璃、内嵌标题栏、双栏拖拽和紧凑布局；固定版本升级时检查适配 |
 | `tray-locale` 的 `desktopRestartConfirmationCopy` | 原生重启／恢复警告文案，按当前项目语言与操作范围适配 |
+| `native-menu` 的 `macApplicationMenuTemplate` | 直接复用官方 macOS 应用名称菜单及 additions 插入位置，传入当前项目语言和自有品牌；其余项目菜单由 Shell 组合 |
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
 | `update-lifecycle`、`update-checker`、`update-download`、`native-dialog-copy` | 主进程仅创建一个官方更新生命周期。通过 request 适配自有 GitHub Release，保留官方版本比较、检查合并、通知去重、临时下载/原子替换及安装包清理。私有 ElectronRuntime 提示和平台交接在 `project-updates.mjs` 最小适配为自有品牌、动态所属窗口和全项目退出；上游源码及 bundle 不改写 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
@@ -103,7 +104,6 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `profile-materializer`、`mask-secrets` | 恢复后的依赖重建，以及展示启动错误时的脱敏 |
 | `safe-mode` 的 paths/reset/cleanup | 临时环境路径及清理；不使用官方 compatibility 默认组合或应用启动 |
 | Desktop client 的 `desktop-settings-api`、`DesktopTerminalSettingsAction`、locale 与 settings styles | 原生 preload 动作协议及设置页头正式操作组件；终端、诊断及单项目重新加载/重启/恢复方法 |
-| Desktop client 的 `DesktopVersionControl` 与 `installExtendedStyles` | 设置页头直接复用官方版本浮层及完整样式，显示 Shell 版本并调用应用级更新服务；原样式中的框架规则按模式限定，不改变 advanced 布局 |
 | Desktop `index.ts` 私有 `desktopLocalePreference` | Host 桥按官方逻辑只传递 `zh/en`；`system` 及扩展语言采用原生回退。启动读取和实时设置共用解析，避免未解析语言进入官方菜单或弹窗 |
 | Desktop client 的 advanced/window/boot-health/footer 模块 | 复用原始框架、主题、侧栏及生命周期 |
 | Harness locale、theme styles、ui-settings-models 源子树 | 预 Host 引导及无需首次弹窗的官方模型页；独立 tree 固定与校验 |

@@ -5,6 +5,7 @@ import {repository, desktopSource, projectSource, runtimePackage, projectPackage
 import {verifyUpstream} from './verify-upstream.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
 import {buildDesktopDialog} from './build-desktop-dialog.mjs';
+import {productVersion} from '../src/app/product.mjs';
 
 verifyUpstream();
 if (!existsSync(join(runtimePackage, 'node_modules/@deepseek-ai/dsh'))) throw new Error('Run npm run setup first');
@@ -58,7 +59,7 @@ writeFileSync(join(repository, 'dist/build.json'), JSON.stringify({desktop: lock
 const shellPackage = join(repository, '.cache/runtime/dsh-project-shell');
 mkdirSync(shellPackage, {recursive: true});
 const officialManifest = JSON.parse(readFileSync(join(runtimePackage, 'package.json'), 'utf8'));
-writeFileSync(join(shellPackage, 'package.json'), JSON.stringify({name: 'dsh-project-shell', version: '0.1.0', type: 'module',
+writeFileSync(join(shellPackage, 'package.json'), JSON.stringify({name: 'dsh-project-shell', version: productVersion, type: 'module',
   exports: {'.': './index.mjs', './client': './client.js', './package.json': './package.json'},
   dsh: {client: officialManifest.dsh.client}}, null, 2));
 writeFileSync(join(shellPackage, 'index.mjs'), "export * from '../../../src/desktop-adapter/stable/shell-host.mjs';\n");

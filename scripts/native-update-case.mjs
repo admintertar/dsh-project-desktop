@@ -15,6 +15,30 @@ async function until(check, label) {
  */
 export async function runUpdateCase({electron, open, close, showGuide, updates, userData, workspace, fixture}) {
   let captures = 0;
+  const updateMenuItem = () => electron.Menu.getApplicationMenu().getMenuItemById('project-check-for-updates');
+  function checkApplicationMenu() {
+    const menu = electron.Menu.getApplicationMenu();
+    assert.equal(menu.items.some(item => ['Help', '帮助'].includes(item.label)), false);
+    if (process.platform !== 'darwin') {assert.equal(updateMenuItem(), null); return}
+    const application = menu.items[0];
+    assert.equal(application.label, 'DSH Project Desktop');
+    const items = application.submenu.items;
+    const index = items.findIndex(item => item.id === 'project-check-for-updates');
+    assert.ok(index > items.findIndex(item => item.role === 'about'));
+    assert.ok(index < items.findIndex(item => item.role === 'services'));
+    assert.equal(items[index - 1].type, 'separator');
+    assert.equal(items[index + 1].type, 'separator');
+    const item = updateMenuItem();
+    assert.equal(item, items[index]);
+    assert.equal(item.label, updates.label());
+    assert.equal(item.enabled, !updates.busy);
+    return item;
+  }
+  async function checkSettings() {
+    await until(() => alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopNativeActions[data-placement=settings]"))'), 'official settings actions');
+    assert.equal(await alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopFrameVersion, .dshDesktopVersionCheckButton"))'), false,
+      'Settings must not add a version/update popover');
+  }
   const dialogWindows = () => electron.BrowserWindow.getAllWindows().filter(window => window.webContents.getURL().includes('/native-ui/desktop-dialog.html'));
   async function dialog(parent) {
     let window;
@@ -41,6 +65,7 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   await guide.webContents.executeJavaScript('document.querySelector("[data-check-updates]").click()');
   const failed = await dialog(guide); assert.equal(failed.options.type, 'warning'); await failed.choose(0);
   fixture.state.offline = false;
+  checkApplicationMenu();
   // Installed startup/restoration may have no focused welcome window. In that
   // case menu refresh immediately reads the project's native locale.
   guide.hide();
@@ -50,32 +75,41 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   alpha = await workspace.restart(paths[0]);
   for (const project of [alpha, bravo]) assert.ok(['zh', 'en'].includes(project.locale), `Invalid native locale: ${project.locale}`);
   const pids = [alpha.host.result.pid, bravo.host.result.pid];
-  alpha.focus();
+  electron.app.focus({steal: true}); alpha.focus();
   await until(() => alpha.window.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())))`), 'official settings entrance');
   await alpha.window.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())).click()`);
-  await until(() => alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopFrameVersion"))'), 'official version control');
-  const anchor = await alpha.window.webContents.executeJavaScript('(() => {const el=document.querySelector(".dshDesktopFrameVersion"),r=el.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),text:el.textContent}})()');
-  assert.equal(anchor.text, 'v' + productVersion);
-  alpha.window.webContents.sendInputEvent({type: 'mouseMove', x: anchor.x, y: anchor.y});
-  await until(() => alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopVersionCheckButton"))'), 'official version popover');
-  await pause(200);
-  writeFileSync(join(userData, 'official-version-popover.png'), (await alpha.window.webContents.capturePage()).toPNG());
-  await alpha.window.webContents.executeJavaScript('document.querySelector(".dshDesktopVersionCheckButton").click()');
+  await checkSettings();
+  if (process.platform === 'darwin') {
+    const item = checkApplicationMenu();
+    item.click(item, alpha.window, {});
+  } else await alpha.window.webContents.executeJavaScript('void window.dshDesktopActions.invoke("check-for-updates"); true');
   await (await dialog(alpha.window)).choose(0);
+  await until(() => !updates.busy, 'update menu re-enabled');
+  checkApplicationMenu();
   for (const locale of ['en', 'zh']) for (const theme of ['light', 'dark']) {
     alpha.focus();
     await alpha.host.updateShellSettings('locale', {preference: locale});
     await alpha.host.selectTheme(theme);
     await until(() => alpha.locale === locale, 'native update locale');
+    await checkSettings();
+    await alpha.window.webContents.executeJavaScript('document.fonts.ready.then(() => true)'); await pause(200);
+    writeFileSync(join(userData, `settings-${locale}-${theme}.png`), (await alpha.window.webContents.capturePage()).toPNG());
+    checkApplicationMenu();
+    writeFileSync(join(userData, `update-menu-${locale}-${theme}.json`), JSON.stringify(electron.Menu.getApplicationMenu().items.map(item =>
+      ({label: item.label, children: item.submenu?.items.map(child => ({id: child.id, label: child.label, role: child.role, type: child.type, enabled: child.enabled}))})), null, 2));
     assert.equal(new URL(alpha.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
-    await alpha.window.webContents.executeJavaScript('void window.dshDesktopActions.invoke("check-for-updates"); true');
+    if (process.platform === 'darwin' && theme === 'dark') {
+      const item = checkApplicationMenu(); item.click(item, alpha.window, {});
+    } else await alpha.window.webContents.executeJavaScript('void window.dshDesktopActions.invoke("check-for-updates"); true');
     const latest = await dialog(alpha.window);
+    checkApplicationMenu();
     const sameCheck = updates.checkNow(bravo.window);
     assert.equal(dialogWindows().length, 1, 'all project entrances share one dialog');
     assert.ok(latest.options.detail.includes(productVersion));
     latest.window.webContents.sendInputEvent({type: 'keyDown', keyCode: 'Escape'});
     await until(() => latest.window.isDestroyed(), 'Escape cancels official update dialog');
     await sameCheck;
+    checkApplicationMenu();
   }
   fixture.state.version = fixture.nextVersion;
   const pending = updates.checkNow(alpha.window);
@@ -107,8 +141,11 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   writeFileSync(join(userData, 'updates-welcome-narrow.png'), (await guide.webContents.capturePage()).toPNG());
   const check = updates.checkNow(guide); await (await dialog(guide)).choose(1); await check;
   assert.equal(workspace.projects.size, 0);
+  checkApplicationMenu();
   const result = {ok: true, platform: process.platform, realDialogsRendered: captures, savePickerAndInstallerHandoffSubstituted: true,
-    checks: ['welcome-without-host', 'offline-warning', 'system-locale-after-restart', 'official-version-popover', 'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
+    checks: ['welcome-without-host', 'offline-warning', 'system-locale-after-restart', 'settings-without-version-popover',
+      ...(process.platform === 'darwin' ? ['official-application-menu-placement', 'application-menu-action-and-busy-state'] : ['no-extra-help-menu']),
+      'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
       'keyboard-cancel', 'download-confirmation-and-later', 'verified-download', 'normal-projects-unaffected', 'narrow-welcome', 'all-projects-closed-update']};
   writeFileSync(join(userData, 'updates-result.json'), JSON.stringify(result, null, 2));
   console.log('Update UI checks passed:', JSON.stringify(result));

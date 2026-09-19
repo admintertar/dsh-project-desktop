@@ -327,3 +327,27 @@ were unchanged. The host already had Gatekeeper disabled and the command-line
 download had no quarantine attribute; security settings were not changed, and this
 is not notarization or browser-quarantine acceptance. Windows interactive installer,
 upgrade/uninstall and trusted signing still require their separate acceptance.
+
+## Update entry points (0.1.1)
+
+Local macOS 15.7.7 x64 acceptance passed `npm run check`: immutable upstream
+verification, production builds, 63 application tests, 7 recovery tests, the
+safe-mode test, project-file checks and real dual-Host smoke. Shell package metadata
+now takes its version from the application's package.json, which is 0.1.1.
+
+`npm run smoke:updates` passed with ten real official dialogs. The actual Electron
+application menu places Check for Updates in the macOS application-name group,
+between About and Services, using the pinned official template. The test invokes
+the installed menu command, checks its busy/ready states and verifies that the
+extra Help menu is absent. Settings retains the official native actions and no
+longer renders the added version control or update popover. English/Chinese and
+light/dark settings screenshots and native menu trees were captured; the settings
+and official dialog appearance were visually inspected.
+
+The same run retained renderer IPC, Escape/Later, verified download, welcome before
+any Host and after all projects close, 420px welcome layout and unaffected project
+Hosts. Release responses, save destination and installer handoff remain isolated
+test substitutes. This is local source/UI acceptance; Windows and macOS arm64,
+packaging and Intel DMG launch checks must pass in the tag-triggered release workflow
+before publication. The v0.1.1 packaging plan resolves both platform jobs and the
+unchanged stable source pins.

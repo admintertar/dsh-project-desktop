@@ -67,7 +67,7 @@ npm run package:mac
 npm run package:win
 ```
 
-安装包可从 [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest) 下载。本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；选择 `all` 并启用 `publish` 可在验收后发布。推送与 `package.json` 版本一致的 `v*` 标签会自动打包并发布；覆盖已有版本必须显式启用 `replace_existing`。macOS 使用 ad-hoc 签名、未公证，Windows 未签名。应用更新以 Shell 版本为准，欢迎页、帮助/托盘菜单和官方版本浮层共用检查入口。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。
+安装包可从 [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest) 下载。本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；选择 `all` 并启用 `publish` 可在验收后发布。推送与 `package.json` 版本一致的 `v*` 标签会自动打包并发布；覆盖已有版本必须显式启用 `replace_existing`。macOS 使用 ad-hoc 签名、未公证，Windows 未签名。应用更新以 Shell 版本为准，欢迎页、macOS 应用名称菜单和托盘菜单共用检查入口；设置页不额外显示版本号或更新浮层。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。
 
 ## 架构与权利
 

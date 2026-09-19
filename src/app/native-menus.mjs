@@ -1,15 +1,12 @@
+import {macApplicationMenu} from '../desktop-adapter/stable/native-menu.mjs';
+
 /** Explicit labels are necessary: Electron's role defaults follow the OS locale. */
-export function nativeRoleMenus(locale, platform = process.platform, product = 'DSH Project Desktop') {
+export function nativeRoleMenus(locale, platform = process.platform, product = 'DSH Project Desktop', applicationItems = []) {
   const zh = locale === 'zh';
   const role = (role, chinese, english) => ({role, label: zh ? chinese : english});
   const separator = {type: 'separator'};
   return {
-    application: platform === 'darwin' ? [{label: product, submenu: [
-      role('about', `关于 ${product}`, `About ${product}`), separator,
-      {...role('services', '服务', 'Services'), submenu: []}, separator,
-      role('hide', `隐藏 ${product}`, `Hide ${product}`), role('hideOthers', '隐藏其他应用', 'Hide Others'),
-      role('unhide', '显示全部', 'Show All'), separator, role('quit', `退出 ${product}`, `Quit ${product}`),
-    ]}] : [],
+    application: platform === 'darwin' ? [macApplicationMenu(locale, product, applicationItems)] : [],
     edit: {label: zh ? '编辑' : 'Edit', submenu: [
       role('undo', '撤销', 'Undo'), role('redo', '重做', 'Redo'), separator,
       role('cut', '剪切', 'Cut'), role('copy', '复制', 'Copy'), role('paste', '粘贴', 'Paste'),
