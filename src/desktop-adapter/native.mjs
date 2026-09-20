@@ -4,7 +4,7 @@ import {statSync} from 'node:fs';
 import {startProjectHost} from './index.mjs';
 import {loadDesktop, desktopRequire} from './stable/modules.mjs';
 import {runtimePackage, lock} from './paths.mjs';
-import {trustedSender, rendererHeaders, externalUrl, applyRendererPermissionPolicy} from '../windows/renderer-security.mjs';
+import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-security.mjs';
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
@@ -123,12 +123,14 @@ export async function openNativeProject(electron, options) {
     const origin = new URL(specification.url).origin;
     const session = contents.session;
     chromiumSession = session;
-    const removePermissionPolicy = applyRendererPermissionPolicy(session);
+    // No renderer permission handler on purpose: the official Desktop runtime
+    // installs none, and Electron's defaults keep navigator.clipboard.writeText
+    // working. A deny-all policy rejects that write as `clipboard-read`, and the
+    // official client swallows the rejection, so every copy button dies silently.
     const denyDownload = event => event.preventDefault();
     session.on('will-download', denyDownload);
     removeSessionPolicies = () => {
       session.removeListener('will-download', denyDownload);
-      removePermissionPolicy();
     };
     const auth = await session.fetch(specification.authenticationUrl, {credentials: 'include', cache: 'no-store',
       headers: {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value}});

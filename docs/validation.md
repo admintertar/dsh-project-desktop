@@ -441,3 +441,25 @@ Accepted on the macOS x64 baseline, 2026-09-20:
 - `npm run build`, 68 application tests, 7 recovery tests, 1 safe-mode test,
   project-file creation/history checks, immutable source verification and the real
   dual-Host smoke all passed. Local evidence: `.runtime/smoke-ycL4GO`.
+
+## Renderer permission alignment with official Desktop
+
+Accepted on the macOS x64 baseline, 2026-09-20:
+
+- The official `dsh-plugin-desktop` installs no renderer permission handler at
+  all: no `setPermissionRequestHandler`/`setPermissionCheckHandler` in its `src/`,
+  in the built `lib/`, or in the installed `/Applications/DSH Desktop.app`. Its
+  renderer boundary is `webPreferences` (`contextIsolation`, `nodeIntegration:
+  false`, `sandbox`, `webSecurity`), navigation/popup/webview blocking, the
+  dedicated partitions and the capability header — never a permission policy.
+- The Shell's deny-all handler was therefore a deviation, not a shared policy. It
+  is removed from both window modules; the clipboard allow-list helper and its
+  unit test are gone with it, replaced by an assertion that neither window module
+  installs a permission handler.
+- Native re-acceptance with the aligned build: `geolocation`, `notifications`,
+  `camera` and `microphone` report `granted` (Electron defaults, matching
+  official) instead of `denied`, and a real click on the message copy button still
+  switched it to `复制成功` with the exact message text on the clipboard.
+- `npm run build`, 68 application tests, 7 recovery tests, 1 safe-mode test,
+  immutable source verification, project-file checks and the real dual-Host smoke
+  all passed. Local evidence: `.runtime/smoke-7IFcuQ`.
