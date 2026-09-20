@@ -410,3 +410,34 @@ recorded separately from the published application; it does not change its updat
 or require another installation build. Same-version users must manually replace
 their previous 0.1.1 once. Windows installer wizard/upgrade/uninstall and trusted
 signing remain outside these automatic checks.
+
+## Renderer clipboard permission fix (0.1.2)
+
+Accepted on the macOS x64 baseline, 2026-09-20:
+
+- Root cause: `src/desktop-adapter/native.mjs` and
+  `src/windows/guide-window.mjs` installed
+  `setPermissionRequestHandler(() => false)` together with
+  `setPermissionCheckHandler(() => false)` on their windows' Sessions. Electron 43
+  routes `navigator.clipboard.writeText` through that handler as `clipboard-read`,
+  so every copy affordance of the official DSH client UI was rejected with
+  `NotAllowedError: Write permission denied.`; `writeClipboard` returns `false`
+  without any feedback, so the buttons silently did nothing. The official Desktop
+  runtime installs no permission handler at all, which is why copy works there.
+- Isolated Electron 43.3.0 probe, using the same `sandbox`/`contextIsolation`
+  window options as the Shell against a real loopback page with a focused
+  document: no handler → `ok`; allow `clipboard-read` → `ok`; allow only
+  `clipboard-sanitized-write` → denied; deny everything → denied.
+- Native acceptance with the fixed build: a real project window opened a real
+  session and a real `Input.dispatchMouseEvent` click on the message copy button
+  switched it to the copied state (`aria-label="复制成功"`) and left the exact
+  message text on the system clipboard, read back through
+  `navigator.clipboard.readText()` and `pbpaste`. Hover (`复制`) and copied
+  (`复制成功`) screenshots were inspected in the Chinese dark theme.
+- `npm run check` passed every stage except `tests/project-bootstrap-network.test.mjs`,
+  which hangs in this local environment inside its loopback Git fixture. The same
+  file hangs and times out identically on a pristine `HEAD` worktree with
+  `node_modules` and `dist` linked, and no changed file is in its import graph.
+- `npm run build`, 68 application tests, 7 recovery tests, 1 safe-mode test,
+  project-file creation/history checks, immutable source verification and the real
+  dual-Host smoke all passed. Local evidence: `.runtime/smoke-ycL4GO`.

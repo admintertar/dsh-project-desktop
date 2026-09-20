@@ -1,7 +1,7 @@
 import {basename, join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {findProjectFile, createProjectFromPlan} from '../app/project-files.mjs';
-import {trustedSender} from './renderer-security.mjs';
+import {trustedSender, applyRendererPermissionPolicy} from './renderer-security.mjs';
 import {GuideClones} from '../app/guide-clones.mjs';
 import {inspectGuideResource} from '../desktop-adapter/stable/guide-resources.mjs';
 import {guideWindowOptions} from '../desktop-adapter/stable/guide-window-options.mjs';
@@ -72,8 +72,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
   contents.setWindowOpenHandler(() => ({action: 'deny'}));
   contents.on('will-navigate', event => event.preventDefault());
   contents.on('will-attach-webview', event => event.preventDefault());
-  contents.session.setPermissionRequestHandler((_sender, _permission, callback) => callback(false));
-  contents.session.setPermissionCheckHandler(() => false);
+  applyRendererPermissionPolicy(contents.session);
   const handle = async (event, action, value, operationId) => {
     if (!trustedSender(event, contents, expectedUrl, true)) throw new Error('Untrusted guide sender');
     if (action === 'state') {
