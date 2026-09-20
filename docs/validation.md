@@ -379,4 +379,34 @@ packages, and validates anonymous latest/tag downloads plus public checksum file
 after promotion. `npm run smoke:updates:live` separately exercises the real published
 files and the official latest-version dialog through isolated Electron, without
 credentials, installer downloads or daily project state. Final CI and live public
-results are recorded after the same-version publication completes.
+results follow below.
+
+Final acceptance passed in [Actions run 35479406633](https://github.com/admintertar/dsh-project-desktop/actions/runs/35479406633)
+for commit `99e581cb5654f66d49070cb7bce1419b6b8477a1`: Windows x64 and macOS arm64
+source/native checks, both packaged applications, the same Universal DMG on Intel,
+publication and real anonymous public manifest/checksum verification. The public
+`v0.1.1` tag resolves to that build. Release `392269437` contains all seven assets;
+the previous release `392162808` is retained as the private backup draft
+`archived-v0.1.1-392162808`.
+
+| Package | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Universal DMG | 290,648,887 | `8e66ff886aade376872778181e3bd58f8b76655b61162b5378033f83e434db89` |
+| Windows x64 Setup | 138,275,308 | `69c3216ede4ac67d648ec224739561f834204587be8e9821f2e168cdaa181448` |
+| Windows x64 Portable ZIP | 222,439,889 | `5d49ad605d6c2ee3c4ea117b9776470f9d9f25cb3b610ba0130be37dffe6e020` |
+
+The 1,200-byte `update.json` has GitHub digest
+`sha256:5bd72d5cc75290c45971689dd1292384853f383178b3d09d31bc9779d2173cac`.
+Local macOS x64 `smoke:updates:live`, pinned to the published commit, fetched latest,
+the exact-version manifest and all three checksum files through Electron/system
+proxy with HTTP 200. The real official dialog displayed that 0.1.1 is up to date.
+No REST API, token, substituted response, installer download or daily project state
+was used. A separate native probe checked ten English/Chinese network, timeout,
+invalid-manifest, HTTP 403 and HTTP 429 dialogs, including wrapping and footer bounds.
+
+The live probe uses an app-ready callback and keeps Electron alive until its
+evidence is written after dialog closure. This diagnostic-script lifecycle fix is
+recorded separately from the published application; it does not change its updater
+or require another installation build. Same-version users must manually replace
+their previous 0.1.1 once. Windows installer wizard/upgrade/uninstall and trusted
+signing remain outside these automatic checks.

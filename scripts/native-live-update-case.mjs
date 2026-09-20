@@ -14,6 +14,7 @@ assert.ok(process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA);
 const userData = resolve(process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA);
 app.setPath('userData', userData);
 app.setName('DSH Project Update Check');
+app.on('window-all-closed', () => {});
 let updates;
 const requests = [];
 const request = async (url, init) => {
@@ -23,8 +24,9 @@ const request = async (url, init) => {
   requests.push({url, status: response.status});
   return response;
 };
-try {
-  await app.whenReady();
+// Electron waits for its ESM entry module before emitting ready. Keep that
+// module synchronous instead of awaiting app.whenReady() at top level.
+void app.whenReady().then(async () => {
   const response = await request(latestUpdateManifestUrl, {redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(20000)});
   assert.equal(response.status, 200);
   const manifest = parseUpdateManifest(await response.json());
@@ -55,5 +57,5 @@ try {
     githubApiUsed: false, authenticated: false, realPublicNetwork: true, officialDialogRendered: true, requests};
   writeFileSync(join(userData, 'live-update-result.json'), JSON.stringify(result, null, 2));
   console.log('Live update checks passed:', JSON.stringify(result));
-} catch (error) {console.error(error); process.exitCode = 1}
-finally {await updates?.dispose(); app.quit()}
+}).catch(error => {console.error(error); process.exitCode = 1})
+  .finally(async () => {await updates?.dispose(); app.quit()});
