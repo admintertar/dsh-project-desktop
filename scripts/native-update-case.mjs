@@ -193,7 +193,6 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
     }, 'welcome button download progress');
     assert.match(copy, /^(正在下载|Downloading) \d+%$/u);
     assert.equal(updates.phase, 'downloading');
-    assert.match(updates.label(), /\d+%$/u);
     if (process.platform === 'darwin') assert.equal(checkApplicationMenu().label, updates.label());
     const downloading = await guide.webContents.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth,button:document.querySelector("[data-check-updates]").getBoundingClientRect().right,width:innerWidth})');
     assert.equal(downloading.overflow, false); assert.ok(downloading.button <= downloading.width);

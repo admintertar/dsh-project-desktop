@@ -355,6 +355,8 @@ async function run() {
   updates = await createProjectUpdates(electron, {userData, locale: language,
     getWindow: () => {const focused = BrowserWindow.getFocusedWindow(); return focused?.getParentWindow() ?? focused ?? active()?.window ?? guide},
     changed: () => {refreshMenus(); for (const window of [guide, projectCreate]) if (window && !window.isDestroyed()) window.webContents.send('project-desktop:state-changed')},
+    // Download progress only feeds the welcome button, so it must not rebuild the native menus.
+    progressChanged: () => {for (const window of [guide, projectCreate]) if (window && !window.isDestroyed()) window.webContents.send('project-desktop:state-changed')},
     policy: {enabled: !testing},
     install: launch => new Promise((resolve, reject) => {updateExit = {launch, resolve, reject}; app.quit()}),
     ...(updateFixtures ? updateFixtures.options : {}),

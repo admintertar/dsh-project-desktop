@@ -22,7 +22,7 @@ function updateFailureDetail(failure, locale, fallback) {
 
 /** Shell-owned download progress. The official downloader exposes no progress callback, so the release
  * feed reports verified byte counts and this owner turns them into a phase plus a throttled percentage.
- * Refresh is throttled because every change rebuilds the application menu and the tray menu.
+ * Refresh is throttled so a large download does not flood its consumers with updates.
  */
 export function createUpdateProgress({intervalMs = 500, changed = () => {}, now = Date.now} = {}) {
   let downloadingVersion, progress, progressAt = 0;
@@ -52,7 +52,7 @@ export function createUpdateProgress({intervalMs = 500, changed = () => {}, now 
  * Native confirmation/save/install/cleanup follows electron-runtime.ts; those
  * private instance methods cannot own our multiple project windows or shutdown.
  */
-export async function createProjectUpdates(electron, {userData, locale, getWindow, changed = () => {}, install,
+export async function createProjectUpdates(electron, {userData, locale, getWindow, changed = () => {}, progressChanged = changed, install,
   request = (url, init) => electron.net.fetch(url, init), policy = {}, packaged = electron.app.isPackaged,
   openPath = path => electron.shell.openPath(path), notify} = {}) {
   const {startDesktopUpdateLifecycle} = await loadDesktop('update-lifecycle');
@@ -60,7 +60,7 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
   const platform = process.platform;
-  const progressState = createUpdateProgress({intervalMs: policy.progressIntervalMs ?? 500, changed});
+  const progressState = createUpdateProgress({intervalMs: policy.progressIntervalMs ?? 500, changed: progressChanged});
   const feed = createProjectReleaseFeed({request, platform, onProgress: update => progressState.report(update)});
   let registration, manual, requester, requestLocale, disposed = false, closing = false, cleanup, downloadController;
   const language = () => requestLocale ?? locale();
@@ -149,11 +149,9 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
     registerTrayItem(item) {registration = item; return {refresh: changed, dispose() {registration = undefined; changed()}}},
   });
   const service = {
-    label: () => {
-      const text = registration ? brand(registration.label()) : (locale() === 'zh' ? '检查更新…' : 'Check for Updates…');
-      const percent = progressState.snapshot?.percent;
-      return percent === undefined ? text : `${text} ${percent}%`;
-    },
+    // The application menu and tray keep the official label: macOS does not repaint an open native
+    // menu, so a percentage there only shows the value captured when the menu was opened.
+    label: () => registration ? brand(registration.label()) : (locale() === 'zh' ? '检查更新…' : 'Check for Updates…'),
     get busy() {return Boolean(manual)},
     get phase() {return progressState.downloading ? 'downloading' : manual ? 'checking' : 'idle'},
     get progress() {return progressState.snapshot},
