@@ -35,8 +35,11 @@ export function parseProjectRelease(value, platform) {
   return {version: manifest.version, url: manifest.releaseUrl, sourceCommit: manifest.sourceCommit, installer};
 }
 
-/** Adapt official request injection points; no traffic or installation identifiers go to upstream services. */
-export function createProjectReleaseFeed({request, platform}) {
+/** Adapt official request injection points; no traffic or installation identifiers go to upstream services.
+ * `onProgress` is a Shell addition: the official downloader exposes no progress callback, so the only
+ * reliable source is this verified stream (declared size plus per-chunk SHA-256).
+ */
+export function createProjectReleaseFeed({request, platform, onProgress}) {
   let latest, etag, lastFailure;
   async function readRelease(url, signal, conditional = false) {
     let response;
@@ -77,18 +80,21 @@ export function createProjectReleaseFeed({request, platform}) {
       const response = await request(release.installer.url, {signal: init.signal, redirect: 'follow', cache: 'no-store'});
       if (!response.ok || !response.body) throw new Error('Installer download failed');
       const hash = createHash('sha256'); let size = 0;
+      const total = release.installer.size;
+      onProgress?.({version, received: 0, total});
       // Verify before the official downloader atomically replaces the destination.
       const body = response.body.pipeThrough(new TransformStream({
         transform(chunk, controller) {
           size += chunk.byteLength;
-          if (size > release.installer.size) throw new Error('Installer size mismatch');
+          if (size > total) throw new Error('Installer size mismatch');
           hash.update(chunk); controller.enqueue(chunk);
+          onProgress?.({version, received: size, total});
         },
         flush() {
-          if (size !== release.installer.size || hash.digest('hex') !== release.installer.sha256) throw new Error('Installer SHA-256 mismatch');
+          if (size !== total || hash.digest('hex') !== release.installer.sha256) throw new Error('Installer SHA-256 mismatch');
         },
       }));
-      return new Response(body, {status: 200, headers: {'Content-Length': String(release.installer.size)}});
+      return new Response(body, {status: 200, headers: {'Content-Length': String(total)}});
     },
   };
 }

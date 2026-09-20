@@ -142,6 +142,34 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   } finally {electron.dialog.showSaveDialog = originalPicker}
   assert.deepEqual([alpha.host.result.pid, bravo.host.result.pid], pids);
   assert.equal((await bravo.host.request('/api/project/snapshot')).status, 200);
+  // The same download in English and light theme: the welcome copy follows the active project locale.
+  fixture.state.chunkSize = 128; fixture.state.chunkDelayMs = 500;
+  await alpha.host.selectTheme('light');
+  await alpha.host.updateShellSettings('locale', {preference: 'en'});
+  await until(() => alpha.locale === 'en', 'english locale for the welcome download');
+  guide = await showGuide(); guide.show();
+  const englishPicker = electron.dialog.showSaveDialog;
+  electron.dialog.showSaveDialog = async () => ({canceled: false, filePath: target});
+  try {
+    const englishDownload = updates.checkNow(guide);
+    await (await dialog(guide)).choose(0);
+    let english;
+    await until(async () => {
+      const text = await guide.webContents.executeJavaScript('document.querySelector("[data-check-updates]")?.innerText.trim() ?? ""');
+      if (!/^Downloading \d+%$/u.test(text)) return false;
+      english = text; return true;
+    }, 'english welcome download progress');
+    assert.match(english, /^Downloading \d+%$/u);
+    writeFileSync(join(userData, 'updates-welcome-downloading-en-light.png'), (await guide.webContents.capturePage()).toPNG());
+    await (await dialog(guide)).choose(0);
+    await englishDownload;
+  } finally {electron.dialog.showSaveDialog = englishPicker}
+  assert.equal(updates.phase, 'idle');
+  fixture.state.chunkSize = 0; fixture.state.chunkDelayMs = 0;
+  await alpha.host.selectTheme('dark');
+  await alpha.host.updateShellSettings('locale', {preference: 'zh'});
+  await until(() => alpha.locale === 'zh', 'chinese locale restored');
+  guide.hide();
   await Promise.all(paths.map(path => close(path)));
   guide = await showGuide(); guide.show();
   guide.setMinimumSize(360, 300); guide.setSize(420, 640);
@@ -149,6 +177,33 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   const geometry = await guide.webContents.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth,button:document.querySelector("[data-check-updates]").getBoundingClientRect().right,width:innerWidth})');
   assert.equal(geometry.overflow, false); assert.ok(geometry.button <= geometry.width);
   writeFileSync(join(userData, 'updates-welcome-narrow.png'), (await guide.webContents.capturePage()).toPNG());
+  // A real download over the verified feed: the welcome button and the application menu must both
+  // show the Shell-owned percentage while the official lifecycle is downloading.
+  fixture.state.chunkSize = 128; fixture.state.chunkDelayMs = 500;
+  const progressPicker = electron.dialog.showSaveDialog;
+  electron.dialog.showSaveDialog = async () => ({canceled: false, filePath: target});
+  try {
+    const progressDownload = updates.checkNow(guide);
+    await (await dialog(guide)).choose(0);
+    let copy;
+    await until(async () => {
+      const text = await guide.webContents.executeJavaScript('document.querySelector("[data-check-updates]")?.innerText.trim() ?? ""');
+      if (!/^(正在下载|Downloading) \d+%$/u.test(text)) return false;
+      copy = text; return true;
+    }, 'welcome button download progress');
+    assert.match(copy, /^(正在下载|Downloading) \d+%$/u);
+    assert.equal(updates.phase, 'downloading');
+    assert.match(updates.label(), /\d+%$/u);
+    if (process.platform === 'darwin') assert.equal(checkApplicationMenu().label, updates.label());
+    const downloading = await guide.webContents.executeJavaScript('({overflow:document.documentElement.scrollWidth>innerWidth,button:document.querySelector("[data-check-updates]").getBoundingClientRect().right,width:innerWidth})');
+    assert.equal(downloading.overflow, false); assert.ok(downloading.button <= downloading.width);
+    writeFileSync(join(userData, 'updates-welcome-downloading.png'), (await guide.webContents.capturePage()).toPNG());
+    await (await dialog(guide)).choose(process.platform === 'darwin' ? 0 : 1);
+    await progressDownload;
+  } finally {electron.dialog.showSaveDialog = progressPicker}
+  assert.equal(updates.phase, 'idle');
+  assert.equal(updates.progress, undefined);
+  fixture.state.chunkSize = 0; fixture.state.chunkDelayMs = 0;
   const check = updates.checkNow(guide); await (await dialog(guide)).choose(1); await check;
   assert.equal(workspace.projects.size, 0);
   checkApplicationMenu();
@@ -159,7 +214,7 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
     checks: ['welcome-without-host', 'offline-warning', 'system-locale-after-restart', 'settings-without-version-popover',
       ...(process.platform === 'darwin' ? ['official-application-menu-placement', 'application-menu-action-and-busy-state'] : ['no-extra-help-menu']),
       'static-manifest-no-rest-api', 'network-and-http-error-details', 'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
-      'keyboard-cancel', 'download-confirmation-and-later', 'verified-download', 'normal-projects-unaffected', 'narrow-welcome', 'all-projects-closed-update']};
+      'keyboard-cancel', 'download-confirmation-and-later', 'verified-download', 'welcome-download-progress', 'welcome-download-progress-english-light', 'normal-projects-unaffected', 'narrow-welcome', 'all-projects-closed-update']};
   writeFileSync(join(userData, 'updates-result.json'), JSON.stringify(result, null, 2));
   console.log('Update UI checks passed:', JSON.stringify(result));
 }

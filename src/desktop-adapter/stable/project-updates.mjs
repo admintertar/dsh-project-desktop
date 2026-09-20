@@ -20,6 +20,34 @@ function updateFailureDetail(failure, locale, fallback) {
   return fallback;
 }
 
+/** Shell-owned download progress. The official downloader exposes no progress callback, so the release
+ * feed reports verified byte counts and this owner turns them into a phase plus a throttled percentage.
+ * Refresh is throttled because every change rebuilds the application menu and the tray menu.
+ */
+export function createUpdateProgress({intervalMs = 500, changed = () => {}, now = Date.now} = {}) {
+  let downloadingVersion, progress, progressAt = 0;
+  return {
+    begin(version) {downloadingVersion = version; progress = undefined; progressAt = 0; changed()},
+    report({version, received, total}) {
+      const declared = total > 0 ? total : undefined;
+      const percent = declared === undefined ? undefined : Math.min(100, Math.floor(received / declared * 100));
+      const complete = percent === 100;
+      if (progress !== undefined && !complete) {
+        if (progress.percent === percent) return;
+        if (now() - progressAt < intervalMs) return;
+      }
+      progress = {version, received, total: declared, percent};
+      progressAt = now(); changed();
+    },
+    end() {
+      if (downloadingVersion === undefined && progress === undefined) return;
+      downloadingVersion = undefined; progress = undefined; progressAt = 0; changed();
+    },
+    get downloading() {return downloadingVersion !== undefined},
+    get snapshot() {return progress === undefined ? undefined : {...progress}},
+  };
+}
+
 /** Application-owned adapter for the unmodified official update lifecycle.
  * Native confirmation/save/install/cleanup follows electron-runtime.ts; those
  * private instance methods cannot own our multiple project windows or shutdown.
@@ -32,7 +60,8 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
   const platform = process.platform;
-  const feed = createProjectReleaseFeed({request, platform});
+  const progressState = createUpdateProgress({intervalMs: policy.progressIntervalMs ?? 500, changed});
+  const feed = createProjectReleaseFeed({request, platform, onProgress: update => progressState.report(update)});
   let registration, manual, requester, requestLocale, disposed = false, closing = false, cleanup, downloadController;
   const language = () => requestLocale ?? locale();
   const owner = () => requester && !requester.isDestroyed() ? requester : getWindow?.();
@@ -71,6 +100,8 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
       if (closing || disposed) return;
       downloadController = new AbortController();
       signal = AbortSignal.any([signal, downloadController.signal]);
+      // The official lifecycle already reports this version as downloading; mirror it before the picker.
+      progressState.begin(version);
       try {
         const t = copy();
         const filename = `DSH-Project-Desktop-${version}-${platform === 'darwin' ? 'mac-universal.dmg' : 'win-x64-Setup.exe'}`;
@@ -100,7 +131,7 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
         }
       } catch (error) {
         if (!signal.aborted && !disposed) await failure();
-      } finally {downloadController = undefined}
+      } finally {downloadController = undefined; progressState.end()}
     },
     notify(value) {
       if (closing || disposed) return;
@@ -118,8 +149,14 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
     registerTrayItem(item) {registration = item; return {refresh: changed, dispose() {registration = undefined; changed()}}},
   });
   const service = {
-    label: () => registration ? brand(registration.label()) : (locale() === 'zh' ? '检查更新…' : 'Check for Updates…'),
+    label: () => {
+      const text = registration ? brand(registration.label()) : (locale() === 'zh' ? '检查更新…' : 'Check for Updates…');
+      const percent = progressState.snapshot?.percent;
+      return percent === undefined ? text : `${text} ${percent}%`;
+    },
     get busy() {return Boolean(manual)},
+    get phase() {return progressState.downloading ? 'downloading' : manual ? 'checking' : 'idle'},
+    get progress() {return progressState.snapshot},
     checkNow(window) {
       if (disposed || closing) return Promise.reject(new Error('Application is closing'));
       if (manual) return manual;
