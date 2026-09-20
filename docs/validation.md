@@ -351,3 +351,32 @@ test substitutes. This is local source/UI acceptance; Windows and macOS arm64,
 packaging and Intel DMG launch checks must pass in the tag-triggered release workflow
 before publication. The v0.1.1 packaging plan resolves both platform jobs and the
 unchanged stable source pins.
+
+## Static update manifest (0.1.1 republish)
+
+The installed 0.1.1 update failure was reproduced using Electron's real network
+stack and the system proxy: the anonymous GitHub REST endpoint returned HTTP 403,
+`x-ratelimit-remaining: 0`, and an API rate-limit error. The published installers
+and metadata were valid; a direct public checksum download returned HTTP 200.
+
+The replacement feed reads only public static release files. Local macOS x64
+`npm run check` passed (67 application tests, 7 recovery tests, 1 safe-mode test,
+production builds, immutable source checks, project files and dual Hosts).
+Targeted checks cover manifest generation/validation, fixed repository/version
+binding, malformed and oversized responses, safe failure details, ETag/empty 304,
+verified DMG/EXE downloads, corruption preserving existing destinations and stale
+same-version manifests during public verification.
+
+`npm run smoke:updates` passed with twelve real official dialogs, including
+connection/HTTP 403/HTTP 429 explanations, menu actions, language/theme, keyboard
+cancellation, download confirmation and isolated project Hosts. Captured connection
+and rate-limit dialogs were visually inspected. Request assertions prohibit the
+GitHub REST API for both version discovery and download verification. Responses,
+save destination and installer handoff are synthetic in this regression test.
+
+Publication now generates a seventh asset, `update.json`, from the verified
+packages, and validates anonymous latest/tag downloads plus public checksum files
+after promotion. `npm run smoke:updates:live` separately exercises the real published
+files and the official latest-version dialog through isolated Electron, without
+credentials, installer downloads or daily project state. Final CI and live public
+results are recorded after the same-version publication completes.

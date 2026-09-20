@@ -3,8 +3,10 @@ import {createHash} from 'node:crypto';
 import {createReadStream, readFileSync, readdirSync, statSync, existsSync} from 'node:fs';
 import {basename, dirname, join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createUpdateManifest, releaseRepository, updateManifestName} from '../src/app/update-manifest.mjs';
+import {verifyPublishedUpdate} from './verify-update-feed.mjs';
 
-export const releaseRepo = 'admintertar/dsh-project-desktop';
+export const releaseRepo = releaseRepository;
 const sha256 = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 function files(directory) {
   return readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
@@ -71,6 +73,9 @@ async function main(root) {
   const commit = process.env.GITHUB_SHA;
   assert.equal(process.env.GITHUB_REPOSITORY, releaseRepo);
   const assets = collectReleaseAssets(root, version, commit);
+  const manifest = Buffer.from(JSON.stringify(createUpdateManifest(assets, version, commit), null, 2) + '\n');
+  const uploads = [...assets, {name: updateManifestName, body: manifest, size: manifest.byteLength,
+    digest: 'sha256:' + createHash('sha256').update(manifest).digest('hex')}];
   const token = process.env.GH_TOKEN; assert.ok(token, 'GitHub Actions token is required');
   const api = async (path, method = 'GET', body, optional = false) => {
     const response = await fetch(`https://api.github.com/repos/${releaseRepo}${path}`, {method,
@@ -98,23 +103,33 @@ async function main(root) {
   const candidate = await api('/releases', 'POST', {tag_name: `candidate-${tag}-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
     target_commitish: commit, name: `DSH Project Desktop ${version}`, body: notes, draft: true, prerelease: false});
   const uploadBase = candidate.upload_url.split('{')[0]; assert.equal(new URL(uploadBase).hostname, 'uploads.github.com');
-  for (const asset of assets) {
+  for (const asset of uploads) {
     console.log('Uploading', asset.name);
     const response = await fetch(`${uploadBase}?name=${encodeURIComponent(asset.name)}`, {method: 'POST',
       headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream', 'Content-Length': String(asset.size)},
-      body: createReadStream(asset.path), duplex: 'half', signal: AbortSignal.timeout(300000)});
+      body: asset.body ?? createReadStream(asset.path), duplex: 'half', signal: AbortSignal.timeout(300000)});
     if (!response.ok) throw new Error(`Asset upload failed: ${asset.name}, HTTP ${response.status}`);
     const uploaded = await response.json();
     assert.equal(uploaded.state, 'uploaded'); assert.equal(uploaded.size, asset.size); assert.equal(uploaded.digest, asset.digest);
   }
-  const staged = await api(`/releases/${candidate.id}`); assert.equal(staged.assets.length, assets.length);
+  const staged = await api(`/releases/${candidate.id}`); assert.equal(staged.assets.length, uploads.length);
   const currentRef = await api(`/git/ref/tags/${tag}`, 'GET', undefined, true);
   assert.equal(currentRef?.object.sha, previous?.object.sha, 'The version tag changed during upload');
   const currentRelease = await api(`/releases/tags/${tag}`, 'GET', undefined, true);
   assert.equal(currentRelease?.id, existing?.id, 'The release changed during upload');
   const published = await promoteRelease({api, candidate, existing, tag, commit, previousCommit: previous?.object.sha, tagAlreadyTargetsCommit: target?.sha === commit});
-  assert.equal(published.draft, false); assert.equal(published.assets.length, 6);
+  assert.equal(published.draft, false); assert.equal(published.assets.length, uploads.length);
   console.log('Published verified release:', published.html_url);
+  // The mock feed cannot prove anonymous access. Allow CDN propagation, then
+  // require both real public entry points and checksums to match this build.
+  for (let attempt = 0; ; attempt++) {
+    try {console.log('Public update verification:', await verifyPublishedUpdate({version, commit, assets})); break}
+    catch (error) {
+      if (attempt === 5) throw error;
+      console.log('Waiting for public release files:', error.message);
+      await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main(resolve(process.argv[2]));

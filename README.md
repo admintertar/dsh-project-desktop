@@ -71,6 +71,8 @@ npm run package:win
 
 ## 架构与权利
 
+更新检查直接读取 Release 的静态 `update.json` 清单，下载时校验大小和 SHA-256，不调用 GitHub 匿名 API，也不需要用户 Token。同版本重发需手动覆盖安装一次。
+
 实现边界和固定官方内部接口清单见 [架构说明](docs/architecture.md)。升级需一起核对 Desktop、Harness 与插件提交，不自动跟随 latest。
 
 界面开发须遵循 [桌面壳前端规范](docs/frontend-guidelines.md) 及其引用的通用组件规则，优先复用官方完整界面与交互流程。

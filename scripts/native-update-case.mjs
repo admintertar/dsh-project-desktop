@@ -63,8 +63,18 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   await until(() => guide.webContents.executeJavaScript('Boolean(document.querySelector("[data-check-updates]"))'), 'welcome update button');
   fixture.state.offline = true;
   await guide.webContents.executeJavaScript('document.querySelector("[data-check-updates]").click()');
-  const failed = await dialog(guide); assert.equal(failed.options.type, 'warning'); await failed.choose(0);
+  const failed = await dialog(guide); assert.equal(failed.options.type, 'warning');
+  assert.match(failed.options.detail, /网络|network/); await failed.choose(0);
   fixture.state.offline = false;
+  await until(() => !updates.busy, 'failed check completed');
+  for (const status of [403, 429]) {
+    fixture.state.status = status;
+    const pending = updates.checkNow(guide);
+    const failed = await dialog(guide);
+    assert.match(failed.options.detail, new RegExp(`HTTP ${status}`));
+    await failed.choose(0); await pending;
+  }
+  fixture.state.status = 200;
   checkApplicationMenu();
   // Installed startup/restoration may have no focused welcome window. In that
   // case menu refresh immediately reads the project's native locale.
@@ -142,10 +152,13 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   const check = updates.checkNow(guide); await (await dialog(guide)).choose(1); await check;
   assert.equal(workspace.projects.size, 0);
   checkApplicationMenu();
+  assert.ok(fixture.state.requests.every(url => new URL(url).hostname === 'github.com'), 'No anonymous REST API requests');
+  assert.ok(fixture.state.requests.some(url => url.endsWith('/latest/download/update.json')));
+  assert.ok(fixture.state.requests.some(url => url.endsWith(`/download/v${fixture.nextVersion}/update.json`)));
   const result = {ok: true, platform: process.platform, realDialogsRendered: captures, savePickerAndInstallerHandoffSubstituted: true,
     checks: ['welcome-without-host', 'offline-warning', 'system-locale-after-restart', 'settings-without-version-popover',
       ...(process.platform === 'darwin' ? ['official-application-menu-placement', 'application-menu-action-and-busy-state'] : ['no-extra-help-menu']),
-      'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
+      'static-manifest-no-rest-api', 'network-and-http-error-details', 'renderer-ipc', 'shared-multi-project-check', 'own-product-version', 'english-chinese-light-dark',
       'keyboard-cancel', 'download-confirmation-and-later', 'verified-download', 'normal-projects-unaffected', 'narrow-welcome', 'all-projects-closed-update']};
   writeFileSync(join(userData, 'updates-result.json'), JSON.stringify(result, null, 2));
   console.log('Update UI checks passed:', JSON.stringify(result));

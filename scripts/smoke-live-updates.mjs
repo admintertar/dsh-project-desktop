@@ -1,0 +1,13 @@
+import {mkdtempSync, mkdirSync} from 'node:fs';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawn} from 'node:child_process';
+import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
+import {repository} from '../src/desktop-adapter/paths.mjs';
+mkdirSync(join(repository, '.runtime'), {recursive: true});
+const root = mkdtempSync(join(repository, '.runtime/updates-live-'));
+const env = {...process.env, DSH_PROJECT_DESKTOP_SMOKE_DATA: root}; delete env.ELECTRON_RUN_AS_NODE;
+console.log('Live public update evidence:', root);
+const child = spawn(desktopRequire('electron'), [fileURLToPath(new URL('./native-live-update-case.mjs', import.meta.url))], {env, stdio: 'inherit'});
+child.on('error', error => {console.error(error); process.exitCode = 1});
+child.on('exit', code => {process.exitCode = code ?? 1});

@@ -22,6 +22,10 @@ gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master 
 
 两平台产物、官方更新 UI 冒烟和 Intel DMG 验收必须全部成功才允许发布。发布 job 首先核对来源提交、干净源码、文件大小和 SHA-256；附件全部上传到候选草稿并验证 GitHub 摘要后才切换公开版本。失败不会发布半套安装包；重发切换失败会尝试恢复旧标签和旧公开 Release。并发发布串行处理，未显式开启覆盖时拒绝已有 Release。
 
+发布时从已校验产物自动生成 `update.json`，与三个安装包、三个 SHA-256 文件一起发布。客户端直接读取 `https://github.com/admintertar/dsh-project-desktop/releases/latest/download/update.json`；确认下载后读取对应版本的清单，校验安装包大小和 SHA-256。两个阶段均不调用 GitHub REST API，不需要用户 Token。只有 CI 发布管理使用 GitHub 提供的认证 API。
+
+公开后，工作流通过真实无令牌请求核对 latest、版本清单及三个校验文件，防止模拟测试遗漏网络接入问题。同版本重发会核对清单的 `sourceCommit`，拒绝旧缓存。发布完成后可在已准备开发依赖的机器运行 `npm run smoke:updates:live`，复验 Electron 系统网络和真实官方弹窗；指定 `DSH_PROJECT_UPDATE_COMMIT=<构建提交>` 可进一步固定验收对象。静态文件避免 API 配额问题，不承诺 GitHub 连接或代理永远可用。已安装同版本的用户必须手动覆盖一次。
+
 | 任务 | 原生 runner | 可下载产物 |
 | --- | --- | --- |
 | mac-universal | `macos-15` | Universal DMG、SHA-256、arm64 验证结果 |

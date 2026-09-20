@@ -71,6 +71,8 @@ Download installers from [GitHub Releases](https://github.com/admintertar/dsh-pr
 
 ## Architecture and rights
 
+Update checks read the static `update.json` release asset and verify installer size and SHA-256 without anonymous GitHub API calls or user tokens. Same-version republication requires a one-time manual reinstall.
+
 See [architecture](docs/architecture.md) for integration boundaries and the inventory of pinned private upstream interfaces. Upgrades must validate Desktop, Harness and plugin revisions together; the application does not follow latest automatically.
 
 UI work must follow the [Shell frontend guidelines](docs/frontend-guidelines.md) (detailed requirements in Chinese) and the linked shared rules, including complete official UI and workflow reuse.

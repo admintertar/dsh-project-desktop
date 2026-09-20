@@ -15,6 +15,7 @@
     "smoke:native": "node scripts/smoke-native.mjs",
     "smoke:profiles": "node scripts/smoke-profiles.mjs",
     "smoke:updates": "node scripts/smoke-updates.mjs",
+    "smoke:updates:live": "node scripts/smoke-live-updates.mjs",
     "smoke:guide": "node scripts/smoke-guide.mjs",
     "smoke:resources": "node scripts/smoke-resource-states.mjs",
     "smoke:lifecycle": "node scripts/smoke-lifecycle.mjs",

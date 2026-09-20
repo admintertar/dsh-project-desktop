@@ -6,6 +6,20 @@ import {productName, productVersion} from '../../app/product.mjs';
 
 const brand = text => text.replaceAll('DSH Desktop', productName);
 
+function updateFailureDetail(failure, locale, fallback) {
+  const zh = locale === 'zh';
+  if (failure?.kind === 'timeout') return zh ? '连接更新服务超时，请检查网络或系统代理后重试。' : 'The update request timed out. Check your network or system proxy and try again.';
+  if (failure?.kind === 'network') return zh ? '无法连接更新服务，请检查网络或系统代理后重试。' : 'Cannot connect to the update service. Check your network or system proxy and try again.';
+  if (failure?.kind === 'invalid') return zh ? '更新信息不完整或格式无效，请稍后重试。' : 'Update information is incomplete or invalid. Please try again later.';
+  if (failure?.kind === 'http') {
+    if (failure.status === 429) return zh ? '更新服务暂时限制请求（HTTP 429），请稍后重试。' : 'The update service is temporarily limiting requests (HTTP 429). Please try again later.';
+    if (failure.status === 403) return zh ? '更新服务拒绝了请求（HTTP 403），请检查网络或系统代理后重试。' : 'The update service denied the request (HTTP 403). Check your network or system proxy and try again.';
+    if (failure.status === 404) return zh ? '暂时未找到更新信息（HTTP 404），请稍后重试。' : 'Update information is not available yet (HTTP 404). Please try again later.';
+    return zh ? `更新服务暂时不可用（HTTP ${failure.status}），请稍后重试。` : `The update service is temporarily unavailable (HTTP ${failure.status}). Please try again later.`;
+  }
+  return fallback;
+}
+
 /** Application-owned adapter for the unmodified official update lifecycle.
  * Native confirmation/save/install/cleanup follows electron-runtime.ts; those
  * private instance methods cannot own our multiple project windows or shutdown.
@@ -49,7 +63,8 @@ export async function createProjectUpdates(electron, {userData, locale, getWindo
       await show({type: result === null ? 'warning' : 'info',
         title: result === null ? t.updateCheckFailedTitle : result.status === 'up-to-date' ? t.upToDateTitle : t.updateAvailableTitle,
         message: result === null ? t.updateCheckFailedMessage : result.status === 'up-to-date' ? t.upToDateMessage : t.updateAvailableMessage(result.latestVersion),
-        detail: result === null ? t.tryAgainLater : result.status === 'up-to-date' ? t.installedVersion(result.currentVersion) : t.installerUnavailable,
+        detail: result === null ? updateFailureDetail(feed.lastFailure, language(), t.tryAgainLater)
+          : result.status === 'up-to-date' ? t.installedVersion(result.currentVersion) : t.installerUnavailable,
         buttons: [t.ok], defaultId: 0, noLink: true});
     },
     async downloadAndOpen(version, signal) {

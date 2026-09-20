@@ -87,6 +87,8 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 | `npm run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
 | `npm run smoke:resources` | Native resource status and remote-association checks |
 | `npm run smoke:lifecycle` | Native lifecycle and single-instance behavior |
+| `npm run smoke:updates` | Real official update dialogs with synthetic release/download fixtures, menu/state/error checks and two unaffected Hosts |
+| `npm run smoke:updates:live` | After publication: real anonymous static downloads, manifest/checksum validation and the official latest-version dialog in isolated Electron; optionally pin `DSH_PROJECT_UPDATE_COMMIT` |
 | `npm run test:recovery:network` | Network dependency recovery with an isolated test registry |
 | `npm run package:mac` | Universal macOS DMG, built on a Mac, with ad-hoc signing and verification of the mounted artifact |
 | `npm run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
@@ -95,5 +97,5 @@ Automated checks use synthetic temporary projects and do not call models. Native
 checks are separate and require Electron. The local acceptance baseline is macOS
 x64; the packaging workflow runs each additional platform's own checks. Developer
 ID and Authenticode signing require separate validation. See [packaging](packaging.md)
-for manual/tag Actions triggers and artifact downloads. No script automatically
-pushes source or publishes a release.
+for manual/tag Actions triggers and artifact downloads. Local checks do not push
+source or publish releases; the explicitly triggered release workflow owns publication.
