@@ -1,7 +1,7 @@
 import {build} from 'esbuild';
 import {cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
-import {repository, desktopSource, projectSource, runtimePackage, projectPackage, lock} from '../src/desktop-adapter/paths.mjs';
+import {repository, desktopSource, projectSource, localProjectSource, runtimePackage, projectPackage, lock} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
 import {buildDesktopDialog} from './build-desktop-dialog.mjs';
@@ -55,7 +55,8 @@ writeFileSync(join(projectPackage, 'lib/build.json'), JSON.stringify({desktop: l
   harness: {stable: {version: lock.harness.version, commit: lock.harness.commit}}}) + '\n');
 mkdirSync(join(repository, 'dist'), {recursive: true});
 writeFileSync(join(repository, 'dist/build.json'), JSON.stringify({desktop: lock.desktop.commit,
-  harness: lock.harness.commit, project: lock.project.commit}, null, 2) + '\n');
+  harness: lock.harness.commit, project: lock.project.commit,
+  ...(localProjectSource === undefined ? {} : {projectLocalSource: localProjectSource})}, null, 2) + '\n');
 const shellPackage = join(repository, '.cache/runtime/dsh-project-shell');
 mkdirSync(shellPackage, {recursive: true});
 const officialManifest = JSON.parse(readFileSync(join(runtimePackage, 'package.json'), 'utf8'));
@@ -86,4 +87,6 @@ writeFileSync(join(repository, 'dist/guide/official.css'), ['base', 'corner-shap
   .map(name => readFileSync(join(themeStyles, name + '.css'), 'utf8')).join('\n'));
 cpSync(join(repository, 'src/guide/index.html'), join(repository, 'dist/guide/index.html'));
 verifyUpstream();
-console.log('Built official stable libraries and the pinned Project plugin without modifying either source tree.');
+console.log(localProjectSource === undefined
+  ? 'Built official stable libraries and the pinned Project plugin without modifying either source tree.'
+  : `Built official stable libraries and the local Project plugin from ${localProjectSource} (development build, not a release).`);

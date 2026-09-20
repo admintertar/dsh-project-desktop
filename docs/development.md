@@ -58,6 +58,23 @@ be committed and its commit/tree adopted explicitly; dirty files are not exporte
 不够。插件修改需要提交后显式更新壳的 commit/tree，不能通过修改 `.upstream/project/`
 替代升级。两个新仓库保留各自独立历史。
 
+### Local plugin source (development only) / 本地插件源码（仅开发）
+
+`DSH_PROJECT_PLUGIN_SOURCE=/path/to/dsh-plugin-project` compiles the companion
+plugin from that local working tree instead of the pinned snapshot, so
+uncommitted UI edits reach a development shell without committing, updating the
+lock or re-exporting `.upstream/project`. The pinned tree check becomes a
+repository identity check plus a warning, and release packaging refuses to run
+while the variable is set. Rebuild after every edit; the shell then needs a page
+reload, or a restart when it still serves the cached bundle:
+
+```sh
+DSH_PROJECT_PLUGIN_SOURCE=../dsh-plugin-project npm run build
+DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell npm start -- /path/to/project
+```
+
+`DSH_PROJECT_PLUGIN_SOURCE=...` 让壳直接从本地工作区编译配套插件，未提交的界面改动不再需要提交、更新锁文件或重新导出 `.upstream/project`。固定树校验改为仓库身份校验并打印警告；设置该变量时打包会直接拒绝。每次改动后重新构建，然后刷新壳页面（若仍加载旧 bundle 则重启壳）。
+
 ## 3. Shell / 桌面壳
 
 Run the `npm ci`, `npm run setup` and `npm run check` commands in the README.

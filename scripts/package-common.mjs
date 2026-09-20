@@ -2,7 +2,7 @@ import {constants, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rea
 import {basename, dirname, isAbsolute, join, relative, resolve, sep} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {repository, runtimePackage, desktopSource} from '../src/desktop-adapter/paths.mjs';
+import {repository, runtimePackage, desktopSource, localProjectSource} from '../src/desktop-adapter/paths.mjs';
 import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
@@ -40,6 +40,7 @@ export function auditLinks(directory, {allowAbsolute = false} = {}) {
 
 export async function preparePackage(platform, arch) {
   if (platform !== process.platform || (arch !== process.arch && !(platform === 'darwin' && arch === 'universal'))) throw new Error('Packages must be built on the target platform and architecture');
+  if (localProjectSource !== undefined) throw new Error(`Release packaging requires the pinned Project commit; unset DSH_PROJECT_PLUGIN_SOURCE (${localProjectSource})`);
   verifyUpstream(); verifyRuntimeDependencies();
   const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8'));
   const electronRoot = dirname(desktopRequire.resolve('electron/package.json'));

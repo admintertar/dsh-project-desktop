@@ -124,6 +124,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 - fixed advanced、随机 loopback 端口、禁止 ordinary browser/LAN，由正式 settings schema 校验；非法变更在持久化前被拒绝。
 - 模型页面与项目页保留；强制模型首次弹窗不参与组合。通知、终端、诊断、材质和日志已经接入自有设置及菜单。
 - 已实现项目集合/窗口布局恢复、项目内多 Profile、官方恢复助手、配置检查点、第三方插件卸载接入、临时安全模式和本地 macOS x64 打包流程。工厂重置、环境迁移、Developer ID 签名公证和正式分发仍为后续工作。
+- 开发期可用 `DSH_PROJECT_PLUGIN_SOURCE` 把配套插件指向本地工作区（见[开发说明](development.md)）：构建读取工作区源码，跳过固定树校验并打印警告；该开关不进入运行时，打包流程在设置时直接拒绝，发布产物始终使用锁定的插件提交。
 
 GitHub Actions 的 `Package Desktop` 工作流按锁定提交从公开仓库准备依赖，在 Apple Silicon runner 生成 Universal DMG，分别在 arm64 和 Intel runner 启动同一产物；Windows x64 runner 生成 NSIS 与 ZIP。两平台共用独立 staging、生产依赖收集、许可保留与链接边界审计，选中的依赖文件实体化，安装包不回链构建目录。源码构建使用平台无关的路径判断；运行时 Profile 在 Windows 使用目录 junction，安全模式按不区分大小写的允许列表保留系统环境。各平台安装自检均在开发目录外启动打包应用，实际验收以对应 job 为准；产物、触发方式和签名限制见 [打包说明](packaging.md)。
 

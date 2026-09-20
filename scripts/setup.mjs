@@ -2,13 +2,15 @@ import {constants, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rea
 import {dirname, join, relative, resolve, sep} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
-import {repository, lock, desktopSource, projectSource, runtimePackage} from '../src/desktop-adapter/paths.mjs';
+import {repository, lock, desktopSource, projectSource, localProjectSource, runtimePackage} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
 import {setupGuideSources} from './setup-guide-sources.mjs';
 
 const {values} = parseArgs({options: {'desktop-source': {type: 'string'}, 'project-source': {type: 'string'},
   'desktop-dependencies': {type: 'string'}, 'project-dependencies': {type: 'string'}, 'harness-source': {type: 'string'}}});
 for (const key of ['desktop-source', 'project-source', 'desktop-dependencies', 'project-dependencies']) {
+  // A local plugin checkout replaces the pinned snapshot, so its source path is unused.
+  if (key === 'project-source' && localProjectSource !== undefined) continue;
   if (!values[key]) throw new Error(`Provide --${key}; this initial offline bootstrap imports existing stable dependency caches`);
 }
 
@@ -27,7 +29,8 @@ function snapshot(source, commit, destination, paths = []) {
 snapshot(values['desktop-source'], lock.desktop.commit, dirname(desktopSource), [
   'dsh-plugin-desktop', `vendor/dsh-runtime/${lock.harness.version}`, 'upstream.json', 'LICENSE',
 ]);
-snapshot(values['project-source'], lock.project.commit, projectSource);
+if (localProjectSource === undefined) snapshot(values['project-source'], lock.project.commit, projectSource);
+else console.warn(`[dev] DSH_PROJECT_PLUGIN_SOURCE is set; the pinned Project snapshot is not exported.`);
 setupGuideSources(values['harness-source']);
 verifyUpstream();
 
