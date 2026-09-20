@@ -65,6 +65,24 @@ Setup copies dependencies into `.cache/`, audits their links and verifies source
 trees. The exported `.upstream/` source is never modified by the build. Start
 with `npm start` only after the checks complete.
 
+An installed copy owns the default application data directory and its
+single-instance lock, so starting another build there quits immediately. Run a
+development build beside it with an isolated directory:
+
+```sh
+DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell npm start
+```
+
+The override applies to normal launches only; test modes keep the directory their
+harness supplies through `DSH_PROJECT_DESKTOP_SMOKE_DATA`. Everything the shell
+persists — recent projects, window sessions, theme, per-project DSH homes and
+Chromium partitions — then lives under the isolated directory, so deleting it
+resets the build without touching the installed copy.
+
+已安装的副本占用默认应用数据目录和单实例锁，在默认位置启动第二个构建会立即退出。
+用上面的环境变量指定独立目录即可与其并行运行；该覆盖只作用于正常启动，测试模式仍
+使用 `DSH_PROJECT_DESKTOP_SMOKE_DATA` 指定的目录。
+
 If Electron was downloaded after setup, import just its matching binary with:
 
 ```sh

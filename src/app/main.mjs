@@ -1,6 +1,6 @@
 import electron from 'electron';
 import {fileURLToPath} from 'node:url';
-import {basename, dirname, join, resolve} from 'node:path';
+import {basename, dirname, join} from 'node:path';
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {ProjectWorkspace} from './project-workspace.mjs';
@@ -16,6 +16,7 @@ import {createProjectNativeWindow} from '../desktop-adapter/stable/project-nativ
 import {prepareSafeMode, cleanupSafeMode} from '../desktop-adapter/stable/safe-mode.mjs';
 import {cancelGuideCreations, createGuideWindow} from '../windows/guide-window.mjs';
 import {assertProjectCreationReady} from './project-bootstrap.mjs';
+import {resolveUserData} from './user-data.mjs';
 import {cleanupGuideClones} from './guide-clones.mjs';
 import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
 
@@ -30,8 +31,9 @@ const installationCheck = process.argv.includes('--verify-installation');
 const updateTest = process.argv.includes('--update-test') && !app.isPackaged;
 const testing = smoke || lifecycleTest || profileRecoveryTest || installationCheck || updateTest;
 app.setName('DSH Project Desktop');
-const userData = installationCheck ? mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))
-  : testing ? resolve(process.env.DSH_PROJECT_DESKTOP_SMOKE_DATA) : join(app.getPath('appData'), 'dsh-project-desktop');
+const userData = resolveUserData({installationCheck, testing, environment: process.env, appData: app.getPath('appData'),
+  temporaryDirectory: () => mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))});
+if (!testing && process.env.DSH_PROJECT_DESKTOP_USER_DATA) console.log(`Isolated user data: ${userData}`);
 app.setPath('userData', userData);
 app.setAppUserModelId('local.dsh.project.desktop');
 if (!app.requestSingleInstanceLock()) {app.quit()}
