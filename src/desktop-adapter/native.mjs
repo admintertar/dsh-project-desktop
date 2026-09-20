@@ -4,7 +4,7 @@ import {statSync} from 'node:fs';
 import {startProjectHost} from './index.mjs';
 import {loadDesktop, desktopRequire} from './stable/modules.mjs';
 import {runtimePackage, lock} from './paths.mjs';
-import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-security.mjs';
+import {trustedSender, rendererHeaders, externalUrl, applyRendererPermissionPolicy} from '../windows/renderer-security.mjs';
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
@@ -123,13 +123,12 @@ export async function openNativeProject(electron, options) {
     const origin = new URL(specification.url).origin;
     const session = contents.session;
     chromiumSession = session;
-    session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-    session.setPermissionCheckHandler(() => false);
+    const removePermissionPolicy = applyRendererPermissionPolicy(session);
     const denyDownload = event => event.preventDefault();
     session.on('will-download', denyDownload);
     removeSessionPolicies = () => {
       session.removeListener('will-download', denyDownload);
-      session.setPermissionRequestHandler(null); session.setPermissionCheckHandler(null);
+      removePermissionPolicy();
     };
     const auth = await session.fetch(specification.authenticationUrl, {credentials: 'include', cache: 'no-store',
       headers: {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value}});
