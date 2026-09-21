@@ -118,6 +118,11 @@ jobs:
       - name: Export the pinned official runtime for the Project plugin
         working-directory: .cache/ci-sources/project
         run: corepack yarn run setup -- --desktop ../desktop
+      # TEMPORARY diagnostic for the Windows-only Project plugin test failures.
+      - name: Diagnose the Project plugin git environment on Windows
+        working-directory: .cache/ci-sources/project
+        run: |
+          node -e "const {execFileSync}=require('node:child_process');const os=require('node:os'),fs=require('node:fs'),path=require('node:path');const base=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'diag-')));const outside=path.join(base,'outside');fs.mkdirSync(outside);const git=(...a)=>execFileSync('git',a,{cwd:outside,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();git('init','-b','main');fs.writeFileSync(path.join(outside,'README.md'),'x');git('add','README.md');git('-c','user.name=F','-c','user.email=f@e.com','-c','core.hooksPath=/dev/null','commit','-m','f');const local=path.join(base,'repository');execFileSync('git',['clone','--',outside,local],{stdio:'ignore'});const top=execFileSync('git',['-C',local,'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();console.log('tmpdir         ',os.tmpdir());console.log('base           ',base);console.log('local          ',local);console.log('realpath(local)',fs.realpathSync(local));console.log('show-toplevel  ',top);console.log('realpath(top)  ',fs.realpathSync(top));console.log('EQUAL          ',fs.realpathSync(top)===fs.realpathSync(local));console.log('git version    ',execFileSync('git',['--version'],{encoding:'utf8'}).trim());console.log('remote url     ',execFileSync('git',['-C',local,'remote','get-url','origin'],{encoding:'utf8'}).trim());fs.rmSync(base,{recursive:true,force:true});"
       - name: Verify the Project plugin on Windows
         working-directory: .cache/ci-sources/project
         run: corepack yarn run check
