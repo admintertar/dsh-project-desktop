@@ -161,7 +161,10 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
     }, 'english welcome download progress');
     assert.match(english, /^Downloading \d+%$/u);
     writeFileSync(join(userData, 'updates-welcome-downloading-en-light.png'), (await guide.webContents.capturePage()).toPNG());
-    await (await dialog(guide)).choose(0);
+    // The downloaded-installer dialog puts Restart-and-install first on Windows and a single OK on
+    // macOS. Picking index 0 unconditionally would start the installer, quit the app and tear down
+    // every project Host before the rest of this case runs.
+    await (await dialog(guide)).choose(process.platform === 'darwin' ? 0 : 1);
     await englishDownload;
   } finally {electron.dialog.showSaveDialog = englishPicker}
   assert.equal(updates.phase, 'idle');
