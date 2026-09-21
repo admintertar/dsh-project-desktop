@@ -8,6 +8,22 @@ import {test} from 'node:test';
 import {assertProjectCreationReady, createProjectFromPlan} from '../src/app/project-bootstrap.mjs';
 import {runProjectGit} from '../src/app/project-git.mjs';
 
+// The loopback fixture must exercise the clone instead of an operator's Git proxy. A user-level
+// http.proxy (a local proxy such as ClashX) hijacks 127.0.0.1, keeps the tunnel open after the
+// killed Git process is gone, and the server then never observes the disconnect.
+if (!process.env.GIT_CONFIG_GLOBAL) process.env.GIT_CONFIG_GLOBAL = '/dev/null';
+if (!process.env.GIT_CONFIG_SYSTEM) process.env.GIT_CONFIG_SYSTEM = '/dev/null';
+
+/** Bound every wait so a leaked Git transport can never leave this file, and `npm run check`, hanging. */
+async function within(promise, ms, message) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    })]);
+  } finally {clearTimeout(timer)}
+}
+
 /** Serve an actual Git repository over loopback HTTP, with a controllable network stall. */
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'project-clone-'));
@@ -45,6 +61,10 @@ async function fixture() {
   };
   const plan = {location: root, name: 'project', resources: [{id: 'web', name: 'web', mode: 'remote', url}]};
   return {root, requested: requested.promise, disconnected: disconnected.promise, release: release.resolve, runGit, plan,
+    /** The server noticed the client's transport close within a bounded window. */
+    async expectDisconnected(ms = 8000) {
+      await within(disconnected.promise, ms, `the clone transport stayed open for more than ${ms}ms after the client stopped`);
+    },
     async cleanup() {release.resolve(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); rmSync(root, {recursive: true, force: true})}};
 }
 
@@ -53,7 +73,7 @@ test('a slow real clone leaves the event loop and other project creation respons
   const pending = createProjectFromPlan(f.plan, {runGit: f.runGit, signal: controller.signal});
   const observed = pending.then(value => ({value}), error => ({error}));
   try {
-    await f.requested;
+    await within(f.requested, 8000, 'the redirected clone never reached the fixture server');
     await new Promise(resolve => setImmediate(resolve));
     await assert.rejects(createProjectFromPlan(f.plan), /still in progress/);
     assert.throws(() => assertProjectCreationReady(join(f.root, 'project/project.agent-project')), /still in progress/);
@@ -66,7 +86,11 @@ test('a slow real clone leaves the event loop and other project creation respons
     assert.equal(readFileSync(join(f.root, 'project/resources/web/README.md'), 'utf8'), 'Cloned over the test HTTP server.\n');
     assert.equal(existsSync(join(f.root, 'project/web')), false);
     assert.equal(await createProjectFromPlan(f.plan), manifest, 'retry reuses the completed project');
-  } finally {controller.abort(); await observed; await f.cleanup()}
+  } finally {
+    controller.abort(); f.release();
+    await within(observed, 8000, 'the clone did not settle after cancellation').catch(() => {});
+    await f.cleanup();
+  }
 });
 
 test('cancelling a real clone closes its transport before rollback and preserves linked resources', {timeout: 15000}, async () => {
@@ -76,16 +100,20 @@ test('cancelling a real clone closes its transport before rollback and preserves
   const pending = createProjectFromPlan(f.plan, {runGit: f.runGit, signal: controller.signal});
   const rejected = assert.rejects(pending, {name: 'AbortError'});
   try {
-    await f.requested;
+    await within(f.requested, 8000, 'the redirected clone never reached the fixture server');
     controller.abort();
-    await rejected;
-    await f.disconnected;
+    await within(rejected, 8000, 'the cancelled clone did not stop its Git transport');
+    await f.expectDisconnected();
     assert.equal(existsSync(join(f.root, 'project')), false);
     assert.equal(readFileSync(join(external, 'keep.txt'), 'utf8'), 'keep');
     f.release();
     const manifest = await createProjectFromPlan(f.plan, {runGit: f.runGit});
     assert.ok(existsSync(manifest), 'retry succeeds after cancelled creation is rolled back');
-  } finally {controller.abort(); await rejected; await f.cleanup()}
+  } finally {
+    controller.abort(); f.release();
+    await within(rejected, 8000, 'the cancelled clone did not stop its Git transport').catch(() => {});
+    await f.cleanup();
+  }
 });
 
 test('a stalled clone times out and removes only the unfinished project', {timeout: 15000}, async () => {
@@ -93,8 +121,8 @@ test('a stalled clone times out and removes only the unfinished project', {timeo
   const pending = createProjectFromPlan(f.plan, {runGit: (args, cwd, options) => f.runGit(args, cwd,
     {...options, ...(args.includes('clone') ? {timeoutMs: 500} : {})})});
   try {
-    await assert.rejects(pending, /timed out/);
-    await f.disconnected;
+    await within(assert.rejects(pending, /timed out/), 8000, 'the stalled clone did not time out');
+    await f.expectDisconnected();
     assert.equal(existsSync(join(f.root, 'project')), false);
     assert.ok(existsSync(join(f.root, 'remote.git')));
   } finally {await f.cleanup()}
