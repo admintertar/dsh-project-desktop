@@ -252,7 +252,7 @@ test('rejects an occupied project target without changing it', async () => {
     const target = join(f.root, 'occupied');
     mkdirSync(target);
     writeFileSync(join(target, 'keep.txt'), 'keep');
-    await assert.rejects(createProjectFromPlan({location: f.root, name: 'occupied', templateId: 'empty'}), /already exists|已存在/);
+    await assert.rejects(createProjectFromPlan({location: f.root, name: 'occupied', templateId: 'empty'}), /^Error: project-target-exists$/);
     assert.equal(readFileSync(join(target, 'keep.txt'), 'utf8'), 'keep');
     assert.equal(existsSync(join(target, '.git')), false);
   } finally { f.cleanup(); }

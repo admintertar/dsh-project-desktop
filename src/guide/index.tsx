@@ -31,7 +31,8 @@ const copy = {
     locate: '重新定位', forget: '不再自动打开',
     details: '查看详情', pending: '项目尚未打开，可以重试或重新定位项目文件。',
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
-    unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。'},
+    unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。',
+    projectTargetExists: '这个位置已有同名文件夹且不为空。请更换项目名称或路径，或改用「打开已有项目」。'},
   en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.', resizeSidebar: 'Resize sidebar',
     opening: 'Opening…', creating: 'Creating…', openingRecent: 'Opening…', preparing: 'Preparing a new project…', checkUpdates: 'Check for updates', checkingUpdates: 'Checking for updates…', downloading: 'Downloading',
     creatingDetail: 'Creating project files and local repositories…', openingDetail: 'Opening the project window…',
@@ -49,11 +50,18 @@ const copy = {
     locate: 'Locate project', forget: 'Stop opening automatically',
     details: 'Show details', pending: 'This project is not open. Retry or locate the project file.',
     interrupted: 'The app exited while this project was starting. Retry manually to avoid a repeated startup failure.',
-    unreadable: 'The last window record could not be read. The original file was preserved. Reopen a recent project to continue.', historyUnreadable: 'Recent history could not be read. The original file was preserved. You can still open project files.', backProjects: 'Back to projects', sameConfig: 'The current settings match this checkpoint.'},
+    unreadable: 'The last window record could not be read. The original file was preserved. Reopen a recent project to continue.', historyUnreadable: 'Recent history could not be read. The original file was preserved. You can still open project files.', backProjects: 'Back to projects', sameConfig: 'The current settings match this checkpoint.',
+    projectTargetExists: 'A non-empty folder with this name already exists. Change the name or path, or open the existing project.'},
 };
 const api = (window as any).projectGuide;
 const localeService = createGuideLocale(copy);
 localeService.register('project-guide-resources', guideResourceCopy);
+/** Stable Host error codes become actionable, localized guide copy instead of a raw message. */
+const guideErrorKeys: Record<string, string> = {'project-target-exists': 'projectTargetExists'};
+function guideErrorText(message: string, t: Record<string, string>): string {
+  const key = guideErrorKeys[message];
+  return key ? t[key] : message;
+}
 function makeResources(name: string, templateId: string) {
   const template = templates.find(item => item.id === templateId) ?? templates[0];
   return template.roles.map(role => ({id: role, role, name: `${name}-${role}`, path: defaultResourceTarget(`${name}-${role}`), url: '', mode: 'empty', customName: false}));
@@ -278,7 +286,7 @@ function Guide() {
       if (action === 'remove-recent' && Array.isArray(result)) setRecent(result);
       if (['forget', 'retry', 'relocate'].includes(action)) await refresh();
     }
-    catch (e) {setError((e as Error).message)} finally {operationId.current = undefined; setOperation(undefined)}
+    catch (e) {setError(guideErrorText((e as Error).message, t))} finally {operationId.current = undefined; setOperation(undefined)}
   }
   const filtered = recent.filter(item => `${item.title} ${item.path}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const selectTemplate = (id: string) => {setTemplateId(id); setDraftResources(makeResources(projectName || selection?.name || 'project', id))};

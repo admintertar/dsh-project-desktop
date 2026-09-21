@@ -186,7 +186,8 @@ export async function createProjectFromPlan(plan, options = {}) {
   const existing = existsSync(root) && statSync(root).isDirectory() ? findProjectFile(root) : undefined;
   if (existing) return existing;
   if (existsSync(root)) {
-    if (!directRoot || (!plan.allowExistingRoot && readdirSync(root).length)) throw new Error(`Project target already exists: ${root}`);
+    // The guide localizes this stable code; never surface a raw absolute path as the prompt.
+    if (!directRoot || (!plan.allowExistingRoot && readdirSync(root).length)) throw new Error('project-target-exists');
   }
 
   const git = options.runGit ?? plan.runGit ?? runProjectGit;

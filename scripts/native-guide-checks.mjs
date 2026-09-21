@@ -156,6 +156,9 @@ export async function checkGuide({electron, repository, userData}) {
     assert.equal(launcher.isDestroyed(), false, 'the creation window has its own lifecycle');
   } finally {if (window && !window.isDestroyed()) window.destroy(); launcher.destroy()}
 
+  // A non-empty target must explain itself in the active locale and never leak
+  // the raw absolute path or the internal error code used by the Host.
+  const occupied = join(directory, 'Occupied'); mkdirSync(occupied, {recursive: true}); writeFileSync(join(occupied, 'keep.txt'), 'keep');
   const createWindow = await createGuideWindow(electron, {repository, locale: 'en', hidden: true, mode: 'create',
     defaultDirectory: directory, recent: {list: () => []}, chooseDirectory: async () => {chooserCalls++; return directory}, open: async () => {}});
   try {
@@ -164,11 +167,39 @@ export async function checkGuide({electron, repository, userData}) {
     assert.equal(await createWindow.webContents.executeJavaScript(`document.querySelector('.createWindow') !== null`), true);
     assert.equal(await createWindow.webContents.executeJavaScript(`document.querySelector('.recent') === null`), true);
     assert.equal(chooserCalls, 1);
+    await createWindow.webContents.executeJavaScript(`(() => {const input = document.querySelector('input[aria-label="Project name"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, 'Occupied'); input.dispatchEvent(new Event('input', {bubbles:true}))})()`);
+    await waitFor(createWindow, "!document.querySelector('.createContent > footer button:last-child').disabled");
+    await createWindow.webContents.executeJavaScript(`document.querySelector('.createContent > footer button:last-child').click()`);
+    await waitFor(createWindow, "document.querySelector('.createContent [role=alert]')?.textContent.length > 0");
+    const occupiedMessage = await createWindow.webContents.executeJavaScript(`document.querySelector('.createContent [role=alert]').textContent`);
+    assert.match(occupiedMessage, /non-empty folder with this name/);
+    assert.equal(occupiedMessage.includes(occupied), false, 'the prompt must not leak the rejected absolute path');
+    assert.equal(occupiedMessage.includes('project-target-exists'), false, 'the prompt must not show the raw error code');
+    assert.equal(readFileSync(join(occupied, 'keep.txt'), 'utf8'), 'keep');
+    writeFileSync(join(userData, 'guide-target-exists-en.png'), (await createWindow.webContents.capturePage()).toPNG());
     createWindow.setSize(420, 460);
     await waitFor(createWindow, 'window.innerWidth <= 420');
-    assert.equal(await createWindow.webContents.executeJavaScript(`document.querySelector('.guideBody').scrollWidth > document.querySelector('.guideBody').clientWidth`), false);
+    // Let the narrowed layout settle before sampling; a real overflow never settles and still fails here.
+    await waitFor(createWindow, "document.querySelector('.guideBody').scrollWidth <= document.querySelector('.guideBody').clientWidth");
+    writeFileSync(join(userData, 'guide-target-exists-en-narrow.png'), (await createWindow.webContents.capturePage()).toPNG());
     await clickAndWaitForClose(createWindow, '.createContent > footer button:first-child');
   } finally {if (!createWindow.isDestroyed()) createWindow.destroy()}
+
+  const zhCreate = await createGuideWindow(electron, {repository, locale: 'zh', hidden: true, mode: 'create',
+    defaultDirectory: directory, recent: {list: () => []}, chooseDirectory: async () => directory, open: async () => {}});
+  try {
+    zhCreate.showInactive();
+    await waitFor(zhCreate, "document.querySelector('input[aria-label=\"项目名称\"]') && !document.querySelector('.createWindow section[aria-busy=\"true\"]')");
+    await zhCreate.webContents.executeJavaScript(`(() => {const input = document.querySelector('input[aria-label="项目名称"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, 'Occupied'); input.dispatchEvent(new Event('input', {bubbles:true}))})()`);
+    await waitFor(zhCreate, "!document.querySelector('.createContent > footer button:last-child').disabled");
+    await zhCreate.webContents.executeJavaScript(`document.querySelector('.createContent > footer button:last-child').click()`);
+    await waitFor(zhCreate, "document.querySelector('.createContent [role=alert]')?.textContent.length > 0");
+    const zhOccupiedMessage = await zhCreate.webContents.executeJavaScript(`document.querySelector('.createContent [role=alert]').textContent`);
+    assert.match(zhOccupiedMessage, /同名文件夹/);
+    assert.equal(zhOccupiedMessage.includes(occupied), false, 'the Chinese prompt must not leak the rejected absolute path');
+    writeFileSync(join(userData, 'guide-target-exists-zh.png'), (await zhCreate.webContents.capturePage()).toPNG());
+    await clickAndWaitForClose(zhCreate, '.createContent > footer button:first-child');
+  } finally {if (!zhCreate.isDestroyed()) zhCreate.destroy()}
 
   let records = Array.from({length: 12}, (_, id) => ({title: `项目 ${id + 1}`, path: `/fixtures/很长的项目目录/${id}/project.agent-project`, available: id !== 0}));
   let recentOpenCalls = 0;
