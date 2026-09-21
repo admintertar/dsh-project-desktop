@@ -1,8 +1,10 @@
 import {cpSync, existsSync, readFileSync} from 'node:fs';
 import {join, resolve, sep} from 'node:path';
 import {runtimePackage} from '../src/desktop-adapter/paths.mjs';
-const source = resolve(process.argv[2] ?? '');
-if (!process.argv[2]) throw new Error('Usage: npm run setup:electron -- /path/to/electron-npm-package');
+// Yarn 4 forwards the literal "--" separator to the script (npm swallowed it).
+const args = process.argv.slice(2).filter(arg => arg !== '--');
+const source = resolve(args[0] ?? '');
+if (!args[0]) throw new Error('Usage: yarn run setup:electron -- /path/to/electron-npm-package');
 const destination = join(runtimePackage, 'node_modules/electron');
 const version = JSON.parse(readFileSync(join(destination, 'package.json'), 'utf8')).version;
 if (JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')).version !== version) throw new Error('Electron versions differ');

@@ -6,7 +6,9 @@ import {repository, lock, desktopSource, projectSource, localProjectSource, runt
 import {verifyUpstream} from './verify-upstream.mjs';
 import {setupGuideSources} from './setup-guide-sources.mjs';
 
-const {values} = parseArgs({options: {'desktop-source': {type: 'string'}, 'project-source': {type: 'string'},
+// Yarn 4 forwards the literal "--" separator to the script (npm swallowed it).
+const {values} = parseArgs({args: process.argv.slice(2).filter(arg => arg !== '--'),
+  options: {'desktop-source': {type: 'string'}, 'project-source': {type: 'string'},
   'desktop-dependencies': {type: 'string'}, 'project-dependencies': {type: 'string'}, 'harness-source': {type: 'string'}}});
 for (const key of ['desktop-source', 'project-source', 'desktop-dependencies', 'project-dependencies']) {
   // A local plugin checkout replaces the pinned snapshot, so its source path is unused.

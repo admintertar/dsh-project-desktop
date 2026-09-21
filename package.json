@@ -1,9 +1,10 @@
 {
   "name": "dsh-project-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "packageManager": "yarn@4.18.0",
   "main": "src/app/main.mjs",
   "description": "Project Desktop shell built around an unmodified, pinned DSH Desktop stable runtime",
   "engines": {
@@ -27,11 +28,11 @@
     "test:recovery": "node --test scripts/check-recovery.mjs",
     "test:safe-mode": "node --test scripts/check-safe-mode.mjs",
     "test:recovery:network": "node scripts/check-network-recovery.mjs",
-    "package:mac": "npm run build && node scripts/package-macos.mjs",
-    "package:win": "npm run build && node scripts/package-windows.mjs",
+    "package:mac": "yarn run build && node scripts/package-macos.mjs",
+    "package:win": "yarn run build && node scripts/package-windows.mjs",
     "sign:mac": "node scripts/sign-macos.mjs",
     "smoke:host": "node scripts/smoke-host.mjs",
-    "check": "npm run verify:upstream && npm run build && npm test && npm run test:recovery && npm run test:safe-mode && node scripts/check-project-files.mjs && npm run smoke:host"
+    "check": "yarn run verify:upstream && yarn run build && yarn run test && yarn run test:recovery && yarn run test:safe-mode && node scripts/check-project-files.mjs && yarn run smoke:host"
   },
   "dependencies": {
     "yaml": "2.8.3"
@@ -55,5 +56,10 @@
     "micromark-util-symbol": "2.0.1",
     "shiki": "4.3.1",
     "zustand": "4.4.7"
+  },
+  "dependenciesMeta": {
+    "esbuild": {
+      "built": true
+    }
   }
 }

@@ -34,7 +34,7 @@ export async function signMacApp(app, identity) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const [app, identity, notaryProfile] = process.argv.slice(2);
+  const [app, identity, notaryProfile] = process.argv.slice(2).filter(arg => arg !== '--');
   console.log(await signMacApp(resolve(app), identity));
   if (notaryProfile) {
     if (identity === '-') throw new Error('Notarization requires a Developer ID identity');
