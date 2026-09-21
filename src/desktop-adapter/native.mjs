@@ -29,6 +29,11 @@ export async function openNativeProject(electron, options) {
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
   const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
+  // The official Electron runtime exposes windowsBuild on its own runtime object.
+  // Our hand-written replacement must carry the same value, or every capability
+  // gate that reads it (Mica support, window material resolution) silently
+  // disables itself for project windows.
+  const {windowsBuildNumber} = await loadDesktop('window-material');
   let window, host, specification, removeHeaders, chromiumSession;
   let disposed = false, quitting = false;
   let locale = options.locale;
@@ -55,7 +60,7 @@ export async function openNativeProject(electron, options) {
     confirmationCopy: desktopRestartConfirmationCopy, showMessageBox: (owner, options) => showDesktopMessageBox(options, owner),
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
   const runtime = {
-    platform: process.platform, locale,
+    platform: process.platform, windowsBuild: process.platform === 'win32' ? windowsBuildNumber() : undefined, locale,
     updates: {isPackaged: false, canDownload: false, currentVersion: productVersion, statePath: join(options.stateDirectory, 'updates-disabled'),
       request: disabled, confirmDownload: disabled, showManualCheckResult: disabled, downloadAndOpen: disabled, notify() {}},
     schedule(spec) {
