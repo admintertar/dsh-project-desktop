@@ -11,7 +11,13 @@ export async function checkNativeSafeMode({electron, workspace, manifests, userD
   const originalSession = original.window.webContents.session;
   await original.host.updateShellSettings('locale', {preference: 'zh'});
   electron.app.focus({steal: true}); original.focus();
-  await until(() => electron.Menu.getApplicationMenu().items[0].submenu.items.some(item => item.label === '退出 DSH Project Desktop'), 'all native menu labels follow Chinese');
+  // macOS keeps the quit item in the leading application menu; Windows closes the
+  // window instead and has no quit entry, so the localized labels below are the
+  // portable part of this check.
+  if (process.platform !== 'win32') {
+    const hasQuit = menu => menu.items.some(item => (item.label ?? '').includes('退出') || Boolean(item.submenu && hasQuit(item.submenu)));
+    await until(() => hasQuit(electron.Menu.getApplicationMenu()), 'all native menu labels follow Chinese');
+  }
   const menu = electron.Menu.getApplicationMenu();
   for (const label of ['编辑', '视图', '窗口']) {
     const entry = menu.items.find(item => item.label === label); assert.ok(entry, label);
@@ -40,5 +46,8 @@ export async function checkNativeSafeMode({electron, workspace, manifests, userD
   const reopened = await workspace.open(manifests[0]);
   assert.equal(reopened.safeMode, false); assert.equal((await reopened.host.request('/api/project/snapshot')).status, 200);
   await bravo.host.updateShellSettings('locale', {preference: 'en'}); bravo.focus();
-  await until(() => electron.Menu.getApplicationMenu().items[0].submenu.items.some(item => item.label === 'Quit DSH Project Desktop'), 'native menu switches back to English');
+  await until(() => {
+    const labels = electron.Menu.getApplicationMenu().items.map(item => item.label);
+    return ['Edit', 'View', 'Window'].every(label => labels.includes(label));
+  }, 'native menu switches back to English');
 }

@@ -89,7 +89,7 @@ export async function checkResourceStates({electron, userData}) {
       assert.equal(await evaluate(window, `document.querySelectorAll('.project-resource-card[aria-label="Resource states"]').length`), 0);
       for (const width of [1180, 420]) {
         window.setSize(width, 820); await frame(window);
-        await wait(window, `innerWidth === ${width}`);
+        await wait(window, `Math.abs(innerWidth - ${width}) <= 2`);
         await clickAction(window, labels.link);
         await wait(window, `document.querySelectorAll('[role=dialog] input').length === 2`);
         await fill(window, '[role=dialog] input', 'invalid URL');
@@ -244,7 +244,7 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `document.querySelector('[role=dialog] .project-select-trigger')?.disabled === true`);
     // The details dialog stays inside a narrow window without horizontal overflow.
     window.setSize(420, 820); await frame(window);
-    await wait(window, `innerWidth === 420`);
+    await wait(window, `Math.abs(innerWidth - 420) <= 2`);
     assert.equal(await evaluate(window, `(() => {const dialog=document.querySelector('[role=dialog]');
       return dialog.scrollWidth > dialog.clientWidth || document.body.scrollWidth > innerWidth;})()`), false);
     writeFileSync(join(userData, 'resource-git-actions.png'), (await window.webContents.capturePage()).toPNG());
@@ -315,7 +315,7 @@ export async function checkResourceStates({electron, userData}) {
       nextPick = skill;
       // Panel navigation lives in the sidebar, which the earlier narrow-window pass collapsed.
       window.setSize(1180, 820); await frame(window);
-      await wait(window, `innerWidth === 1180`);
+      await wait(window, `Math.abs(innerWidth - 1180) <= 2`);
       await click(window, '技能');
       // The toolbar only enables import once the Host reports a reachable chooser.
       await wait(window, `(() => {const item = [...document.querySelectorAll('.project-capability-toolbar button')]

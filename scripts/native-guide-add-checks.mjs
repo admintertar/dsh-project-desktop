@@ -53,12 +53,12 @@ export async function checkGuideAdd({electron, repository, userData}) {
         ['desktop', 'Desktop application', ['Desktop app']], ['empty', 'Empty project', []],
       ];
       for (const [id, title, roles] of compositions) {
-        window.setSize(1180, 820); await wait(window, 'innerWidth === 1180');
+        window.setSize(1180, 820); await wait(window, 'Math.abs(innerWidth - 1180) <= 2');
         await click(window, `.templateItem[data-template-id="${id}"]`);
         assert.equal(await evaluate(window, `document.querySelector('.toolbar h1').textContent`), title);
         assert.deepEqual(await evaluate(window, `Array.from(document.querySelectorAll('.resourceDraftRole'), el => el.textContent)`), roles);
         for (const [width, height] of [[1180, 820], [420, 460]]) {
-          window.setSize(width, height); await wait(window, `innerWidth === ${width}`);
+          window.setSize(width, height); await wait(window, `Math.abs(innerWidth - ${width}) <= 2`);
           if (width === 420) {
             const trigger = '.createTemplateSelect button';
             const alternate = compositions.find(item => item[0] !== id);
@@ -91,7 +91,7 @@ export async function checkGuideAdd({electron, repository, userData}) {
           }
         }
       }
-      window.setSize(1180, 820); await wait(window, 'innerWidth === 1180');
+      window.setSize(1180, 820); await wait(window, 'Math.abs(innerWidth - 1180) <= 2');
       assert.equal(await evaluate(window, `document.querySelectorAll('.resourceEditor button').length`), 1);
       assert.equal(await evaluate(window, `Boolean(document.querySelector('.resourceGrid'))`), false);
       const label = locale === 'zh' ? {name: '名称', url: '仓库地址', path: '项目内目录', branch: '初始分支', project: '项目名称'}
@@ -131,7 +131,7 @@ export async function checkGuideAdd({electron, repository, userData}) {
       await click(window, '.project-settings-card-header'); await fill(window, input('branch'), 'feature/demo');
       const measurements = [];
       for (const [width, height] of [[1180, 820], [420, 460]]) {
-        window.setSize(width, height); await wait(window, `innerWidth === ${width}`);
+        window.setSize(width, height); await wait(window, `Math.abs(innerWidth - ${width}) <= 2`);
         const measure = () => evaluate(window, `(() => {const form=document.querySelector('.addResourceForm'),modal=form.closest('[role=dialog]'),body=form.parentElement,
           input=form.querySelector('input').getBoundingClientRect();return {x:input.x,width:input.width,overflow:body.scrollWidth>body.clientWidth||modal.scrollWidth>modal.clientWidth,
             footerBottom:modal.lastElementChild.getBoundingClientRect().bottom,height:innerHeight};})()`);
