@@ -227,6 +227,21 @@ test('resource import preserves the chosen local type, Git origin and display na
   } finally {f.cleanup()}
 });
 
+test('links an explicit Git repository that has no origin remote yet', async () => {
+  const f = fixture();
+  try {
+    const external = join(f.root, 'unlinked-repo'); mkdirSync(external);
+    git(['init', '--quiet'], external);
+    const manifest = await createProjectFromPlan({location: f.root, name: 'unlinked', resources: [
+      {id: 'library', name: 'Local library', role: 'resource', mode: 'link', path: external, type: 'git'},
+    ]});
+    const projectRoot = join(f.root, 'unlinked');
+    const item = parse(readFileSync(manifest, 'utf8')).resources[1];
+    assert.equal(item.type, 'git'); assert.equal(item.url, undefined); assert.equal(item.path, undefined);
+    assert.equal(parse(readFileSync(join(projectRoot, '.agent-project', 'local.yaml'), 'utf8')).resources[item.id], realpathSync(external));
+  } finally {f.cleanup()}
+});
+
 test('resource import rejects overlapping and unsafe targets before creating anything', async () => {
   const f = fixture();
   try {

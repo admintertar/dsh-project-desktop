@@ -151,3 +151,9 @@ body[data-dsh-desktop-mode="advanced"] .guideFrame[data-guide-compact] .dshDeskt
   .setting {align-items:flex-start;flex-direction:column}
   .empty {min-height:180px}
 }
+
+/* The stacked setting control is a right-aligned flex row, so the directory field owns its own
+   column: the path and button stay on one line and the notes sit full width underneath. */
+.project-resource-directory-field {display:flex;flex-direction:column;gap:6px;width:100%;min-width:0}
+.project-resource-notes {display:flex;flex-direction:column;gap:4px;min-width:0}
+.project-resource-notes>p {margin:0;overflow-wrap:anywhere}

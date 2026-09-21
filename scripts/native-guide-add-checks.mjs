@@ -106,6 +106,9 @@ export async function checkGuideAdd({electron, repository, userData}) {
       await open(window); await click(window, '.project-resource-directory button');
       await wait(window, `document.querySelector(${JSON.stringify(input('name'))}).value === 'seed'`);
       assert.equal(await evaluate(window, `document.querySelectorAll('.addResourceForm .project-select-trigger').length`), 2);
+      // A picked Git working tree preselects Git instead of waiting for a manual type change.
+      assert.equal(await evaluate(window, `document.querySelectorAll('.addResourceForm .project-select-trigger')[1].textContent`),
+        locale === 'zh' ? 'Git 仓库' : 'Git repository');
       await select(window, 1, 1);
       await fill(window, input('name'), 'Shared / library');
       cancelled = true; await click(window, '.project-resource-directory button'); cancelled = false;

@@ -21,7 +21,8 @@ export function AddResourceModal({resources, t, pickDirectory, onSave, onClose}:
       const next = await pickDirectory();
       if (!next || current !== generation.current) return;
       setInspection(next);
-      if (!next.git?.url) setType('local');
+      // The picked directory decides the type; the Host already reports whether it is a Git working tree.
+      setType(next.git ? 'git' : 'local');
       if (!named.current) setName(next.name);
     } catch (e) {if (current === generation.current) setError((e as Error).message)}
     finally {if (current === generation.current) setSelecting(false)}
@@ -40,13 +41,13 @@ export function AddResourceModal({resources, t, pickDirectory, onSave, onClose}:
     if (!invalid && source === 'local') {
       if (!inspection) invalid = 'resource-unavailable';
       else if (duplicate) invalid = 'resource-duplicate';
-      else if (type === 'git' && !validResourceUrl(inspection.git?.url)) invalid = 'resource-git-invalid';
+      else if (type === 'git' && !inspection.git) invalid = 'resource-git-invalid';
     }
     if (invalid) {setError(invalid); return}
     setSaving(true); setError('');
     try {
       await onSave(source === 'git' ? {...value, mode: 'remote'}
-        : {mode: 'link', name: value.name, path: inspection.path, type, url: type === 'git' ? inspection.git.url : ''});
+        : {mode: 'link', name: value.name, path: inspection.path, type, url: type === 'git' ? inspection.git?.url : ''});
       onClose();
     } catch (e) {setError((e as Error).message); setSaving(false)}
   };
@@ -61,11 +62,15 @@ export function AddResourceModal({resources, t, pickDirectory, onSave, onClose}:
           onChange={value => {generation.current++; setSelecting(false); setSource(value); setError('')}}/></ProjectSettingRow>
         {source === 'local' && <>
           <ProjectSettingRow title={t('resourceDirectory')} description={t('resourceReferenceBody')} layout="stacked">
-            <div className="project-resource-directory"><code>{inspection?.path ?? t('resourceUnbound')}</code>
-              <Button variant="outline" disabled={selecting} onClick={() => void pick()}>{t(selecting ? 'loading' : 'resourceChoose')}</Button></div>
-            {duplicate && <p className="project-error" role="alert">{t('resourceErrorDuplicate')}</p>}
+            <div className="project-resource-directory-field">
+              <div className="project-resource-directory"><code>{inspection?.path ?? t('resourceUnbound')}</code>
+                <Button variant="outline" disabled={selecting} onClick={() => void pick()}>{t(selecting ? 'loading' : 'resourceChoose')}</Button></div>
+              {duplicate && <div className="project-resource-notes">
+                <p className="project-error" role="alert">{t('resourceErrorDuplicate')}</p>
+              </div>}
+            </div>
           </ProjectSettingRow>
-          {inspection?.git?.url && <ProjectSettingRow title={t('resourceKind')} description={t('resourceDetected')}>
+          {inspection?.git && <ProjectSettingRow title={t('resourceKind')} description={t('resourceDetected')}>
             <ProjectSelect label={t('resourceKind')} value={type} disabled={saving}
               options={[{value: 'local', label: t('resourceLocal')}, {value: 'git', label: t('resourceGit')}]}
               onChange={value => {setType(value); setError('')}}/>

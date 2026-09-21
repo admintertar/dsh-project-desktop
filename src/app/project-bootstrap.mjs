@@ -106,8 +106,9 @@ function normalizeResources(plan, projectName) {
     }
     if (typeof item.path !== 'string' || !item.path.trim()) throw new Error(`Resource ${name} needs a directory`);
     if (item.type !== undefined && !['local', 'git'].includes(item.type)) throw new Error('resource-config-invalid');
-    if (item.type === 'git' && !validResourceUrl(item.url)) throw new Error('resource-url-invalid');
-    return {id, name, role, mode, path: item.path, type: item.type, url: item.type === 'git' ? item.url : undefined};
+    // A Git working tree without an origin remote is a valid link; a claimed URL still has to be safe.
+    if (item.type === 'git' && item.url && !validResourceUrl(item.url)) throw new Error('resource-url-invalid');
+    return {id, name, role, mode, path: item.path, type: item.type, url: item.type === 'git' && item.url ? item.url : undefined};
   });
   const targets = resources.filter(item => item.mode !== 'link');
   if (targets.some((item, index) => targets.slice(0, index).some(previous => resourceTargetsOverlap(previous.path, item.path)))) {
@@ -246,7 +247,9 @@ export async function createProjectFromPlan(plan, options = {}) {
         const locationInfo = externalBinding(root, linked);
         const gitRoot = await inspectGitRoot(linked, runGit, signal);
         const type = item.type ?? (gitRoot ? 'git' : 'local');
-        if (type === 'git' && item.type !== undefined && (!gitRoot || await runGit(['remote', 'get-url', 'origin'], linked) !== item.url)) {
+        // An explicit Git link must be a working-tree root, and a claimed URL must still match its origin.
+        if (type === 'git' && item.type !== undefined
+          && (!gitRoot || (item.url && await runGit(['remote', 'get-url', 'origin'], linked) !== item.url))) {
           throw new Error('resource-git-invalid');
         }
         const resource = {id: item.id, name: item.name, type};
