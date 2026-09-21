@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {updateFixture} from '../scripts/update-fixtures.mjs';
 import {createProjectReleaseFeed, parseProjectRelease} from '../src/desktop-adapter/stable/project-release-feed.mjs';
+import {createUpdateProgress} from '../src/desktop-adapter/stable/project-updates.mjs';
 import {loadDesktop} from '../src/desktop-adapter/stable/modules.mjs';
 import {latestUpdateManifestUrl, versionUpdateManifestUrl} from '../src/app/update-manifest.mjs';
 
@@ -114,4 +115,46 @@ test('official lifecycle coalesces manual checks and persists one background not
     await pause(120); await lifecycle.dispose();
   }
   assert.equal(notifications, 1);
+});
+test('the verified download stream reports monotonic progress against the declared total', async () => {
+  const fixture = updateFixture();
+  const reported = [];
+  const chunked = body => new ReadableStream({start(controller) {
+    for (let offset = 0; offset < body.length; offset += 128) controller.enqueue(body.subarray(offset, offset + 128));
+    controller.close();
+  }});
+  const feed = createProjectReleaseFeed({platform: 'darwin', onProgress: update => reported.push(update),
+    request: async url => [latestUpdateManifestUrl, versionUpdateManifestUrl(fixture.release.version)].includes(url)
+      ? Response.json(fixture.release) : new Response(chunked(fixture.body))});
+  const root = mkdtempSync(join(tmpdir(), 'project-update-progress-'));
+  await downloadDesktopUpdate({platform: 'darwin', version: fixture.release.version, destinationPath: join(root, fixture.name), request: feed.downloadRequest});
+  assert.equal(reported[0].received, 0);
+  assert.ok(reported.length > 2, 'A chunked download reports more than one sample');
+  assert.ok(reported.every(update => update.version === fixture.release.version && update.total === fixture.body.length));
+  assert.ok(reported.every((update, index) => index === 0 || update.received >= reported[index - 1].received));
+  assert.equal(reported.at(-1).received, fixture.body.length);
+});
+test('Shell download progress throttles refreshes, keeps the last sample and clears on completion', () => {
+  let at = 1000, refreshes = 0;
+  const progress = createUpdateProgress({intervalMs: 500, now: () => at, changed: () => {refreshes++}});
+  assert.equal(progress.downloading, false); assert.equal(progress.snapshot, undefined);
+  progress.begin('0.1.2');
+  assert.equal(progress.downloading, true); assert.equal(refreshes, 1);
+  progress.report({version: '0.1.2', received: 0, total: 400});
+  assert.deepEqual(progress.snapshot, {version: '0.1.2', received: 0, total: 400, percent: 0});
+  at += 100; progress.report({version: '0.1.2', received: 100, total: 400});
+  assert.equal(progress.snapshot.percent, 0, 'A sample inside the throttle window is dropped');
+  assert.equal(refreshes, 2);
+  at += 500; progress.report({version: '0.1.2', received: 100, total: 400});
+  assert.equal(progress.snapshot.percent, 25); assert.equal(refreshes, 3);
+  at += 500; progress.report({version: '0.1.2', received: 100, total: 400});
+  assert.equal(refreshes, 3, 'An unchanged percentage never refreshes');
+  at += 500; progress.report({version: '0.1.2', received: 200, total: 400});
+  assert.equal(progress.snapshot.percent, 50); assert.equal(refreshes, 4);
+  progress.report({version: '0.1.2', received: 400, total: 400});
+  assert.equal(progress.snapshot.percent, 100); assert.equal(refreshes, 5, 'Completion always refreshes');
+  progress.end();
+  assert.equal(progress.downloading, false); assert.equal(progress.snapshot, undefined); assert.equal(refreshes, 6);
+  progress.end();
+  assert.equal(refreshes, 6, 'A second end is a no-op');
 });

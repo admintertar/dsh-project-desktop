@@ -82,7 +82,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop'));
       ready.resolve();
       return {locale, recent: recent.list(), failures: getFailures(), warning, version: productVersion, mode,
-        updates: updates ? {label: updates.label(), busy: updates.busy} : undefined,
+        updates: updates ? {label: updates.label(), busy: updates.busy, phase: updates.phase, progress: updates.progress} : undefined,
         chrome, sidebarWidth: layoutState.width(mode)};
     }
     if (action === 'sidebar-width') {layoutState.save(mode, value); return true}

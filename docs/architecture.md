@@ -96,7 +96,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `tray-locale` 的 `desktopRestartConfirmationCopy` | 原生重启／恢复警告文案，按当前项目语言与操作范围适配 |
 | `native-menu` 的 `macApplicationMenuTemplate` | 直接复用官方 macOS 应用名称菜单及 additions 插入位置，传入当前项目语言和自有品牌；其余项目菜单由 Shell 组合 |
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
-| `update-lifecycle`、`update-checker`、`update-download`、`native-dialog-copy` | 主进程仅创建一个官方更新生命周期。通过 request 适配自有 GitHub Release，保留官方版本比较、检查合并、通知去重、临时下载/原子替换及安装包清理。私有 ElectronRuntime 提示和平台交接在 `project-updates.mjs` 最小适配为自有品牌、动态所属窗口和全项目退出；上游源码及 bundle 不改写 |
+| `update-lifecycle`、`update-checker`、`update-download`、`native-dialog-copy` | 主进程仅创建一个官方更新生命周期。通过 request 适配自有 GitHub Release，保留官方版本比较、检查合并、通知去重、临时下载/原子替换及安装包清理。私有 ElectronRuntime 提示和平台交接在 `project-updates.mjs` 最小适配为自有品牌、动态所属窗口和全项目退出；上游源码及 bundle 不改写。官方下载器既无进度回调也不经过 Electron download manager，Shell 因此只在自有校验流上额外上报字节进度（`project-release-feed.mjs` 的 `onProgress`），由 `createUpdateProgress` 折算为 `downloading` 阶段与节流后的百分比，只供欢迎窗口按钮使用；应用菜单与托盘保持官方文案不变 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
 | `profile-checkpoint`、`startup-recovery-controller` | 健康配置检查点、预览与确认 token、恢复校验，不调用官方应用级重启 |
 | `startup-recovery-window`、`profile-selection-window`、`profile-create-window` 及其 native-ui 页面 | 完整复用官方恢复／选择／创建界面与交互，回调限定当前项目；仅补生命周期归属 |
@@ -132,7 +132,7 @@ GitHub Actions 的 `Package Desktop` 工作流按锁定提交从公开仓库准�
 
 打包版默认启动 60 秒后、此后每 6 小时读取自有 Release 的 `latest/download/update.json` 静态附件。`src/app/update-manifest.mjs` 定义客户端与发布脚本共用的 schema：stable 版本、构建提交、固定仓库发布页，以及三个安装包的精确文件名、下载地址、字节数和 SHA-256。清单限制为 16 KiB，拒绝不完整、重复、异仓库或无效校验信息；选中安装包仍受官方下载大小上限约束。客户端不调用 GitHub REST API，不受其匿名 API 额度影响，也不向 GitHub 传递安装标识、认证令牌或上游专用请求头。
 
-后台失败不打扰工作，同一版本只通知一次；手动检查复用官方确认、最新版本和失败窗口，并补充不含私有网络详情的连接、超时、无效清单或 HTTP 错误说明。GitHub ETag 只复用已经校验的清单；下载时重新读取已确认版本的 `download/v<version>/update.json`，以该版本的大小和 SHA-256 校验完整下载流，失败不得替换已有文件。不回退到匿名 API；GitHub 文件访问仍受网络、代理及其独立服务限制影响。
+后台失败不打扰工作，同一版本只通知一次；手动检查复用官方确认、最新版本和失败窗口，并补充不含私有网络详情的连接、超时、无效清单或 HTTP 错误说明。GitHub ETag 只复用已经校验的清单；下载时重新读取已确认版本的 `download/v<version>/update.json`，以该版本的大小和 SHA-256 校验完整下载流，失败不得替换已有文件。不回退到匿名 API；GitHub 文件访问仍受网络、代理及其独立服务限制影响。下载期间欢迎窗口按钮按官方 `downloadingUpdate` 语义显示「正在下载 <n>%」，`busy` 只负责禁用；应用菜单与托盘保持官方文案，不追加百分比——macOS 不会重绘已展开的原生菜单，菜单里的百分比只能是打开那一刻的快照。进度刷新按整数百分比变化且不短于 500 ms 节流，且只推送到欢迎窗口，不重建原生菜单。
 
 macOS 下载后打开 Universal DMG，用户替换应用；Windows 确认安装后先正常停止全部项目 Host，再启动可见 NSIS 安装器并退出。保留项目恢复集合；安装器启动失败则恢复项目并显示官方错误窗口。退出中止未完成下载，升级成功后沿用官方安装包保留/删除确认。便携 ZIP 在发布页面保留手动替换入口，暂不实现静默安装。
 
