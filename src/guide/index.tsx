@@ -8,6 +8,7 @@ import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResour
 import {RemoteRepositoryModal} from './RemoteRepositoryModal';
 import {AddResourceModal} from './AddResourceModal';
 import {defaultResourceTarget, draftResourceTarget} from '../shared/resource-draft.mjs';
+import {projectPathPreview} from '../shared/project-path.mjs';
 import {PROJECT_COMPOSITIONS as templates, RESOURCE_ROLE_KEYS} from '../shared/project-templates.mjs';
 import {useModalBoundary} from './useModalBoundary';
 import {GuideFrame} from '../desktop-adapter/stable/GuideFrame';
@@ -175,11 +176,11 @@ function ResourceDraftCard({item, busy, t, rt, clone, onRename, onEditRemote, on
     </footer>
   </article>;
 }
-function ProjectPathField({directory, projectName, busy, t, onChange, onBrowse}: any) {
+function ProjectPathField({directory, projectName, busy, t, platform, onChange, onBrowse}: any) {
   return <div className="setting projectPathSetting"><div><h2>{t.projectPath}</h2>
     <div className="projectPathControl"><Input aria-label={t.projectPath} value={directory} disabled={busy}
       onChange={event => onChange(event.target.value)}/><Button variant="outline" disabled={busy} onClick={onBrowse}>{t.browse}</Button></div>
-    <p className="projectPathPreview">{directory}/{projectName || 'project'}</p>
+    <p className="projectPathPreview">{projectPathPreview(directory, projectName || 'project', platform)}</p>
   </div></div>;
 }
 function Guide() {
@@ -332,7 +333,7 @@ function Guide() {
     <section className="guideBody" aria-busy={busy}>
       {!selection ? <p role="status">{t.preparing}</p> : selection.existing ? <div className="setting"><div><h2>{t.folder}</h2><p>{selection.directory}</p></div></div> : <>
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} autoFocus disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
-        <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t}
+        <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t} platform={frameState.chrome.platform}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
         <section className="resourceEditor" aria-labelledby="create-resources-title"><div className="resourceEditorHeading"><div><h2 id="create-resources-title">{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}
@@ -365,7 +366,7 @@ function Guide() {
         <Button variant="outline" disabled={busy} onClick={() => run('choose')}>{t.back}</Button></div>
         <div className="setting"><div><h2>{t.file}</h2><p>{selection.filename}</p><p>{t.hint}</p></div></div></> : <>
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
-        <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t}
+        <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t} platform={frameState.chrome.platform}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
         <section className="resourceEditor"><div className="resourceEditorHeading"><div><h2>{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}

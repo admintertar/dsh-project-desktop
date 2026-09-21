@@ -119,7 +119,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
       }
       if (action === 'new') {
         const directory = defaultDirectory ?? process.env.HOME ?? process.cwd();
-        selection = {directory, existing: undefined, name: '', filename: basename(`${directory}/project.agent-project`)};
+        selection = {directory, existing: undefined, name: '', filename: basename(join(directory, 'project.agent-project'))};
         pickedResources.clear();
         return selection;
       }
@@ -131,7 +131,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         if (!directory) return null;
         const existing = findProjectFile(directory);
         pickedResources.clear();
-        selection = {directory, existing, name: basename(directory), filename: basename(existing ?? `${directory}/${basename(directory)}.agent-project`)};
+        selection = {directory, existing, name: basename(directory), filename: basename(existing ?? join(directory, `${basename(directory)}.agent-project`))};
         return selection;
       }
       if (action === 'browse-location') {

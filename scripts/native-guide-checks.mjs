@@ -132,7 +132,8 @@ export async function checkGuide({electron, repository, userData}) {
     await waitFor(window, "!document.querySelector('section[aria-busy=\"true\"]')");
     assert.equal(chooserCalls, 1);
     await window.webContents.executeJavaScript(`(() => {const input = document.querySelector('input[aria-label="Project path"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, ${JSON.stringify(editedLocation)}); input.dispatchEvent(new Event('input', {bubbles:true}))})()`);
-    await waitFor(window, `document.querySelector('.setting p').textContent.includes(${JSON.stringify(editedLocation)})`);
+    // The preview must use the host separator exactly as node:path.join will create it.
+    await waitFor(window, `document.querySelector('.projectPathPreview')?.textContent === ${JSON.stringify(join(editedLocation, 'Guide project'))}`);
     assert.equal(existsSync(editedLocation), false, 'typing a path must not create it before confirmation');
     const width = await window.webContents.executeJavaScript(`document.querySelector('.setting').getBoundingClientRect().width`);
     await window.webContents.executeJavaScript(`document.querySelector('.createContent > footer button:last-child').click()`);
