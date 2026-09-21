@@ -29,6 +29,8 @@ Profile 分隔插件依赖、补丁和检查点，不代表整个 Home 独立。
 
 原生能力桥使用官方 `HostRpc`、`createHostRuntime`、`bindNativeRuntime`。我们给自己提供的 runtime 增加项目窗口能力，官方桥和源码保持不变。每个窗口使用唯一 Chromium partition、官方 sandbox/contextIsolation preload，在该 Session 内换取官方认证 Cookie；专属访问头只注入所属 Renderer 的同源 HTTP/WebSocket，不随外链或 iframe 泄漏。窗口 Session **不安装任何 Web 权限处理器**，与官方 Desktop runtime 一致：官方客户端 UI 的消息、代码块、终端、表格和 JSON 树复制入口都走 `navigator.clipboard.writeText`，而 Electron 43 把该请求报成 `clipboard-read`，一旦按 deny-all 拦截就会让复制静默失效（UI 侧吞掉异常且不显示反馈）。Web 安全边界因此只由 webPreferences、导航／弹窗／webview 拦截和专属访问头承担，权限与下载都交回 Electron 默认行为（官方同样没有 `will-download` 策略）；`tests/renderer-security.test.mjs` 断言两个窗口模块不再出现权限处理器或 `will-download`，避免该缺陷回归。
 
+适配器常在自有文件里**自己实现**官方对象，而非包一层官方实例，此时官方对象对外提供的字段就是与固定官方代码之间的契约：官方的桥、URL 构造器、设置页和能力门都会按名读取它们，缺一个既不报类型错也不抛异常，只会让对应能力静默失效。改写这类实现时先照搬官方那份完整行为再叠加我们的裁剪，只删除我们确实要裁的能力，并保留官方能力位与探测入口。项目窗口材质即判例：官方 `ElectronDesktopRuntime` 在主进程构造时自行解析 `windowsBuild`，而项目的 native runtime 是 `src/desktop-adapter/native.mjs` 里的自有对象；该字段缺失使官方 `runtimeSnapshot` 送出的 `windowsBuild` 为 `undefined`，能力位随即在**两处**同时失守——`desktopRendererUrl` 按官方门槛写出 `dsh-desktop-mica=0`，自有设置页因 `micaSupported` 为假只列出「纯色背景」；`effectiveDesktopWindowMaterial` 也把已持久化的 `mica` 当作系统不支持，回落为 `off`，于是选项既不显示、也不会生效。修法是从官方 `window-material` 读 `windowsBuildNumber` 并原样放进自有 runtime（`tests/windows-build-capability.test.mjs` 固定快照契约与静默降级，并按文本断言该字段仍来自官方探测）。桥接方补齐的其余字段同样按此处理；不要因为某字段暂时没有自有消费者就省掉它。
+
 `dsh-project-shell` 是我们自己的双面插件。Host 面只注册固定 advanced/loopback 的设置 schema、窗口规格及官方健康上报端点；原官方 desktop-shell 条目被配置禁用。Client 面调用官方 advanced、窗口几何、主题呈现与健康报告，接入 Project 客户端，不调用官方应用设置的全量注册函数。
 
 Harness 的模型插件把设置页面和首次弹窗注册放在同一个入口中，因此使用约 30 行自有组合，直接导入固定的 ModelsSection、store、operations、schema 和 locale，实现原始模型页面与刷新订阅。源文件与 CSS 保持原样，只不注册 `settings.onboarding` 两个条目。不存在 CSS 隐藏、修改上游 bundle 或伪造 onboarding 完成状态。
@@ -63,7 +65,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 `SharedTheme` 拥有应用级 preference，只同步 `system/light/dark`。各 Host 的官方 `settings/updated` 事件触发协调，原子保存应用 theme.json 后统一更新 Electron nativeTheme 及所有 Host 的 ui-theme；广播写入不再广播。不共享字体、语言、模型；菜单语言随当前项目窗口改变。
 
-欢迎窗口默认 900×640，新建窗口默认 980×720。二者通过 `guide-window-options` 直接调用官方 `advancedWindowOptions`，复用主窗口的 native traffic lights、32px 拖动区域及 macOS sidebar vibrancy；Windows 使用官方能力校验后的 Mica，不支持时使用实体背景。入口窗口材质不依赖项目 Profile，明暗由应用共享 `nativeTheme` 驱动。
+欢迎窗口默认 900×640，新建窗口默认 980×720。二者通过 `guide-window-options` 直接调用官方 `advancedWindowOptions`，复用主窗口的 native traffic lights、32px 拖动区域及 macOS sidebar vibrancy；Windows 使用官方能力校验后的 Mica，不支持时使用实体背景。入口窗口材质不依赖项目 Profile，明暗由应用共享 `nativeTheme` 驱动。项目窗口走同一条官方 Mica 门槛，构建号由自有 runtime 的 `windowsBuild` 提供（见上文字段契约）。
 
 `GuideFrame` 是官方 `AdvancedFrame.tsx` 的双栏最小适配：直接复用 `installDesktopOwnedStyles`、原始 pointer-capture／RAF 拖拽和原生标题栏布局，补充键盘调整与取消清理。固定 stable 的 1024px 自动折叠阈值、`DesktopLayoutState` 与列宽计算的侧栏上下限不可配置，私有 ResizeHandle 也未导出，因此适配器仅保留左右面板，并将侧栏上下限按官方值的三分之二独立管理：范围 176–280px，欢迎页默认 187px、新建页默认 190px；双击分隔线恢复各自默认值。保护右侧至少 400px；小于 576px 时转为顶部导航，新建页保留官方下拉选择项目组合。分隔线沿用官方透明悬停，仅键盘聚焦时提供焦点提示。扩宽恢复偏好宽度，拖拽结束／键盘调整分别保存 welcome、create 的本机宽度到 `guide-window-state.json`；v2 将旧 v1 宽度按三分之二一次性迁移。欢迎页品牌采用左侧 42×42px 图标、右侧标题与版本上下两行的排列，图文间距 4px，在侧栏和顶部导航中保持一致；底部说明下边距为 0。组合名称按需换行，适应更窄的导航。正文与导航各自使用稳定滚动槽，正文独立滚动，底部操作固定；不启动 Host、不修改官方源码。
 
@@ -86,7 +88,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | 模块组 | 原因 |
 | --- | --- |
 | `profile`、`profile-manager` | 使用官方模板和 Profile 组合，安装依赖解析边界 |
-| `host-rpc`、`host-runtime-bridge` | 保留官方进程通信契约 |
+| `host-rpc`、`host-runtime-bridge` | 保留官方进程通信契约；`runtimeSnapshot` 决定自有 runtime 必须提供哪些能力字段 |
 | `module-resolution`、`desktop-actions`、`log-files`、`file-exporter` | 自有 Host 组合所需的解析、命令和日志能力 |
 | `desktop-browser-access`、`lan-https-runtime` | 保留 Renderer 认证；项目仅开放本机，LAN 不启用 |
 | `desktop-runtime-environment`、`launch-environment` | 命令环境与项目环境变量 |
