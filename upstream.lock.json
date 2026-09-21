@@ -21,7 +21,7 @@
   },
   "project": {
     "repository": "https://github.com/admintertar/dsh-plugin-project.git",
-    "commit": "60a9cf8a565473e64e708b6d5f4345e31baa2f03",
-    "tree": "bf09ffab16b1972092877ec4fabdc1665129c72d"
+    "commit": "cdedc048475c923b810e81839fbf2496303f5985",
+    "tree": "dd62f43fce9297fd62d0121aa4a254d2b6d99704"
   }
 }
