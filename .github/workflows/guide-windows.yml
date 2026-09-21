@@ -137,7 +137,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: guide-windows-${{ github.sha }}
-          if-no-files-found: warn
+          if-no-files-found: error
+          # The smoke run keeps its evidence under the hidden .runtime directory.
+          include-hidden-files: true
           path: |
             .runtime/guide-frame-*/*.png
             .runtime/guide-frame-*/result.json
