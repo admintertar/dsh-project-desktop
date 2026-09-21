@@ -3,11 +3,11 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
 import {repository} from '../src/desktop-adapter/paths.mjs';
+import {smokeEnvironment} from './smoke-environment.mjs';
 
 mkdirSync(join(repository, '.runtime'), {recursive: true});
 const root = mkdtempSync(join(repository, '.runtime/guide-frame-'));
-const env = {...process.env, DSH_PROJECT_DESKTOP_SMOKE_DATA: root};
-delete env.ELECTRON_RUN_AS_NODE;
+const env = smokeEnvironment({DSH_PROJECT_DESKTOP_SMOKE_DATA: root});
 console.log('Guide frame evidence:', root);
 // Flags pass through to the case: --focused runs only the create-guide flow,
 // which needs no real window focus and is what Windows CI verifies.

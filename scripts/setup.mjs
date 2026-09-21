@@ -50,7 +50,11 @@ const projectModules = join(repository, '.cache/project-dependencies');
 const pluginCache = resolve(values['project-dependencies']);
 if (!existsSync(projectModules)) cpSync(pluginCache, projectModules, {...copyOptions, filter: path => {
   const first = relative(pluginCache, path).split(sep)[0];
-  return first !== '@deepseek-ai' && first !== '.bin' && !first.startsWith('.@');
+  // Package-manager bookkeeping is not part of the runtime dependency cache:
+  // npm leaves .package-lock.json, Yarn leaves .yarn-state.yml and
+  // .package-map.json beside the packages they describe.
+  return first !== '@deepseek-ai' && first !== '.bin' && !first.startsWith('.@')
+    && first !== '.package-lock.json' && first !== '.yarn-state.yml' && first !== '.package-map.json' && first !== '.yarn';
 }});
 // Cached npm bin links must remain inside the copied cache, even on an older bootstrap.
 function rehomeLinks(directory, from, to) {
