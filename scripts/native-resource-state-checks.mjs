@@ -288,6 +288,39 @@ export async function checkResourceStates({electron, userData}) {
       const resources = parse(readFileSync(manifest, 'utf8')).resources;
       assert.equal(resources.some(item => item.name === 'picked-resource' && item.type === 'local'), true);
       writeFileSync(join(userData, 'resource-add-local-saved.png'), (await window.webContents.capturePage()).toPNG());
+
+      // Binding an existing resource must reach the same chooser instead of refusing the local flow.
+      const rebound = join(root, 'rebound-resource');
+      mkdirSync(rebound, {recursive: true});
+      writeFileSync(join(rebound, 'README.md'), '# rebound resource\n');
+      await evaluate(window, `document.querySelector('button[aria-label="绑定目录: picked-resource"]').click()`);
+      await wait(window, `Boolean(document.querySelector('[role=dialog] .project-resource-directory'))`);
+      assert.equal(await evaluate(window, `document.querySelector('[role=dialog]').textContent
+        .includes('当前环境不支持原生文件夹选择')`), false);
+      assert.equal(await evaluate(window, `Boolean(${choose}) && ${choose}.disabled === false`), true);
+      await evaluate(window, `${choose}.click()`);
+      await wait(window, `document.querySelector('[role=dialog] .project-resource-directory code')?.textContent.endsWith('rebound-resource')`);
+      await evaluate(window, `document.querySelector('[role=dialog] button[type=submit]').click()`);
+      await wait(window, `!document.querySelector('[role=dialog]')`);
+      await wait(window, `document.querySelector('.project-panel')?.textContent.includes('rebound-resource')`);
+      assert.equal(JSON.stringify(await (await project.host.request('/api/project/resources')).json()).includes('rebound-resource'), true);
+
+      // Importing a skill folder must use the same desktop-runtime chooser.
+      const skill = join(root, 'picked-skill');
+      mkdirSync(skill, {recursive: true});
+      writeFileSync(join(skill, 'SKILL.md'), '---\nname: picked-skill\ndescription: Windows picker fixture\n---\nUse this skill.');
+      await click(window, '技能');
+      // The toolbar only enables import once the Host reports a reachable chooser.
+      await wait(window, `(() => {const item = [...document.querySelectorAll('.project-capability-toolbar button')]
+        .find(button => button.textContent.trim() === '导入技能'); return Boolean(item) && item.disabled === false;})()`);
+      assert.equal(await evaluate(window, `document.querySelector('.project-capability-toolbar').textContent
+        .includes('当前环境不支持原生文件夹选择')`), false);
+      await click(window, '导入技能');
+      await wait(window, `Boolean(document.querySelector('[role=dialog]'))`);
+      await click(window, '选择技能文件夹');
+      await wait(window, `!document.querySelector('[role=dialog]')`);
+      await wait(window, `document.querySelector('.project-panel')?.textContent.includes('picked-skill')`);
+      writeFileSync(join(userData, 'resource-bind-and-skill.png'), (await window.webContents.capturePage()).toPNG());
     }
     return {measurements, manifest};
   } finally {remoteServer?.close(); await project.close();}
