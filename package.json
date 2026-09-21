@@ -17,6 +17,7 @@
     "smoke:updates": "node scripts/smoke-updates.mjs",
     "smoke:updates:live": "node scripts/smoke-live-updates.mjs",
     "smoke:guide": "node scripts/smoke-guide.mjs",
+    "smoke:guide:focused": "node scripts/smoke-guide.mjs --focused",
     "smoke:resources": "node scripts/smoke-resource-states.mjs",
     "smoke:lifecycle": "node scripts/smoke-lifecycle.mjs",
     "setup": "node scripts/setup.mjs",
