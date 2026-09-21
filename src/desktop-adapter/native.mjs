@@ -8,6 +8,7 @@ import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-s
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
+import {createWindowMaterialRefresher} from '../windows/window-material-refresh.mjs';
 import {productVersion, productName} from '../app/product.mjs';
 
 function spawnUtility(electron, entry, args, options) {
@@ -34,6 +35,7 @@ export async function openNativeProject(electron, options) {
   // gate that reads it (Mica support, window material resolution) silently
   // disables itself for project windows.
   const {windowsBuildNumber} = await loadDesktop('window-material');
+  const {electronPlatformStrategy} = await loadDesktop('electron-platform');
   let window, host, specification, removeHeaders, chromiumSession;
   let disposed = false, quitting = false;
   let locale = options.locale;
@@ -56,6 +58,17 @@ export async function openNativeProject(electron, options) {
     options.onFocus?.(); options.onMenuChanged?.();
   }};
   const disabled = async () => {throw new Error('This operation is unavailable in Project Desktop')};
+  // Windows keeps the previous DWM backdrop palette until the window recomposes,
+  // so a transparent themed surface (our sidebar stays transparent while a
+  // material is active) keeps the old palette until the material is re-applied.
+  // This mirrors the pinned official ElectronDesktopRuntime.setThemeSource, which
+  // re-applies the active material after a live theme change for the same reason.
+  const platformStrategy = electronPlatformStrategy(process.platform);
+  const refreshWindowMaterial = createWindowMaterialRefresher({
+    strategy: platformStrategy,
+    getWindow: () => window,
+    getMaterial: () => specification?.material,
+  });
   const requestRestart = createProjectRestartRequest({getWindow: () => window, getLocale: () => locale,
     confirmationCopy: desktopRestartConfirmationCopy, showMessageBox: (owner, options) => showDesktopMessageBox(options, owner),
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
@@ -97,8 +110,12 @@ export async function openNativeProject(electron, options) {
     async validateDirectory(path) {try {return typeof path === 'string' && statSync(path).isDirectory()} catch {return false}},
     reportRendererBoot(report) {clearTimeout(healthTimer); report.status === 'healthy' ? health.resolve(report) : failed(new Error(JSON.stringify(report)))},
     setLocalePreference(value) {locale = value === 'zh' || value === 'en' ? value : options.locale; options.onMenuChanged?.()},
-    // SharedTheme is the sole native appearance owner; no per-window override.
-    setThemeSource() {},
+    // SharedTheme owns nativeTheme.themeSource for the whole application, so this
+    // hook does not set the theme. It still has to re-apply the window material:
+    // the official runtime does exactly that on a live theme change, and without
+    // it Windows keeps the previous DWM palette and the transparent sidebar stays
+    // dark after switching to a light theme.
+    setThemeSource() {refreshWindowMaterial()},
     requestRestart: () => requestRestart(), requestRecoveryRestart: () => requestRestart('recovery'),
     prepareToQuit() {quitting = true}, openProfileCreateWindow: disabled,
   };
@@ -119,6 +136,9 @@ export async function openNativeProject(electron, options) {
     if (options.windowState?.maximized) window.maximize();
     if (options.windowState?.fullScreen) window.setFullScreen(true);
     saveWindow = trackWindowState(window, state => options.saveWindowState?.(state), options.onError);
+    // Re-apply the material once the window is actually on screen: the first
+    // composition is what Windows caches as the DWM backdrop palette.
+    window.once('show', refreshWindowMaterial);
     window.on('page-title-updated', event => {event.preventDefault(); window.setTitle(options.title)});
     window.on('close', event => {if (!disposed) {event.preventDefault(); options.close()}});
     window.on('focus', () => {options.onFocus?.(); options.onMenuChanged?.()});
