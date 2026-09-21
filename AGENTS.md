@@ -12,7 +12,7 @@
 - Project entry files live at the root. Memory lives under root `memory/`; share `.agent-project/` metadata while precisely excluding machine-local and temporary records. Never silently choose among multiple project definitions or overwrite an existing project.
 - Reuse official UI components, locale and theme. Preserve fixed modal actions, one body scroll region, stable scrollbar gutters and narrow-window behavior.
 - Before any frontend change, read and follow [Shell frontend guidelines](docs/frontend-guidelines.md) and its linked companion-plugin shared guidelines. Both are required; the Shell document adds window and lifecycle rules to the shared component requirements.
-- Run `npm run check` for source changes. Report native graphical checks separately; do not claim Windows/macOS arm64 acceptance from macOS x64 results.
+- Run `yarn run check` for source changes. Report native graphical checks separately; do not claim Windows/macOS arm64 acceptance from macOS x64 results.
 - Preserve existing work. Repository publication, remote deletion, pushes, releases and upstream PRs require an explicit request.
 - Original code has no open-source license grant. Keep `LICENSE` and all third-party notices in generated packages.
 

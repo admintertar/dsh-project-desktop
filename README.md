@@ -23,7 +23,7 @@
 
 ## 开发准备
 
-需要 Node.js `^22.19.0 || >=24.0.0`、npm、Git、tar、Corepack；原生依赖可能需要系统编译工具。两个项目仓库建议同级放置：
+需要 Node.js `^22.19.0 || >=24.0.0`、Git、tar、Corepack；原生依赖可能需要系统编译工具。两个项目仓库建议同级放置：
 
 ```text
 workspace/
@@ -33,23 +33,23 @@ workspace/
 └── deepseek-harness-source/     # 官方源码缓存
 ```
 
-先按插件 README 完成其 `npm ci` 和 `setup`。官方源码缓存只需包含锁定提交，不需要维护 fork。完整步骤见 [开发说明](docs/development.md)，包括官方依赖安装与 Electron 准备。
+先按插件 README 完成其 `yarn install --immutable` 和 `setup`。官方源码缓存只需包含锁定提交，不需要维护 fork。完整步骤见 [开发说明](docs/development.md)，包括官方依赖安装与 Electron 准备。
 
 在本仓库安装开发工具，并导入配套的固定源码与依赖：
 
 ```sh
-npm ci
-npm run setup -- \
+yarn install --immutable
+yarn run setup -- \
   --desktop-source ../dsh-desktop-source \
   --harness-source ../deepseek-harness-source \
   --project-source ../dsh-plugin-project \
   --desktop-dependencies ../dsh-desktop-source/dsh-plugin-desktop/node_modules \
   --project-dependencies ../dsh-plugin-project/node_modules
-npm run check
-npm start
+yarn run check
+yarn start
 ```
 
-`setup` 从提交对象导出源码，核对 tree hash 与版本，并复制独立依赖。`.upstream/` 保持原样，构建输出写入 `.cache/` 和 `dist/`；运行时不链接回开发仓库。启动已有项目可运行 `npm start -- /path/to/example.agent-project`。模型服务在项目设置中配置；自动检查不调用模型。
+`setup` 从提交对象导出源码，核对 tree hash 与版本，并复制独立依赖。`.upstream/` 保持原样，构建输出写入 `.cache/` 和 `dist/`；运行时不链接回开发仓库。启动已有项目可运行 `yarn start -- /path/to/example.agent-project`。模型服务在项目设置中配置；自动检查不调用模型。
 
 ## 项目数据
 
@@ -59,12 +59,12 @@ npm start
 
 ## 验证与打包
 
-`npm run check` 覆盖独立逻辑、固定源码完整性、构建、恢复、安全模式、项目创建及真实双 Host 冒烟。原生 UI 检查使用单独的 `smoke:native`、`smoke:profiles`、`smoke:resources` 与 `smoke:lifecycle`，需要可用的图形会话；它们不是无界面检查的一部分。`smoke:profiles` 验证官方 Profile 窗口、恢复助手与单项目恢复隔离。
+`yarn run check` 覆盖独立逻辑、固定源码完整性、构建、恢复、安全模式、项目创建及真实双 Host 冒烟。原生 UI 检查使用单独的 `smoke:native`、`smoke:profiles`、`smoke:resources` 与 `smoke:lifecycle`，需要可用的图形会话；它们不是无界面检查的一部分。`smoke:profiles` 验证官方 Profile 窗口、恢复助手与单项目恢复隔离。
 
 ```sh
-npm run package:mac
+yarn run package:mac
 # Windows x64 上运行：
-npm run package:win
+yarn run package:win
 ```
 
 安装包可从 [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest) 下载。本地包输出到 `release/`。GitHub → Actions → **Package Desktop** → **Run workflow** 可选择 `all`、`mac` 或 `win`；选择 `all` 并启用 `publish` 可在验收后发布。推送与 `package.json` 版本一致的 `v*` 标签会自动打包并发布；覆盖已有版本必须显式启用 `replace_existing`。macOS 使用 ad-hoc 签名、未公证，Windows 未签名。应用更新以 Shell 版本为准，欢迎页、macOS 应用名称菜单和托盘菜单共用检查入口；设置页不额外显示版本号或更新浮层。详细入口、安装验证及限制见 [打包说明](docs/packaging.md)。

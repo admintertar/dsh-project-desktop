@@ -8,7 +8,7 @@ import {buildDesktopDialog} from './build-desktop-dialog.mjs';
 import {productVersion} from '../src/app/product.mjs';
 
 verifyUpstream();
-if (!existsSync(join(runtimePackage, 'node_modules/@deepseek-ai/dsh'))) throw new Error('Run npm run setup first');
+if (!existsSync(join(runtimePackage, 'node_modules/@deepseek-ai/dsh'))) throw new Error('Run yarn run setup first');
 verifyRuntimeDependencies();
 const nodePaths = [join(runtimePackage, 'node_modules')];
 mkdirSync(runtimePackage, {recursive: true});

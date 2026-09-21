@@ -23,7 +23,7 @@ The current local native acceptance baseline is **macOS x64**. GitHub Actions pr
 
 ## Development setup
 
-Requires Node.js `^22.19.0 || >=24.0.0`, npm, Git, tar and Corepack. Native dependencies may require platform build tools. Place the two repositories alongside the official source caches:
+Requires Node.js `^22.19.0 || >=24.0.0`, Git, tar and Corepack. Native dependencies may require platform build tools. Place the two repositories alongside the official source caches:
 
 ```text
 workspace/
@@ -33,23 +33,23 @@ workspace/
 └── deepseek-harness-source/     # Official source cache
 ```
 
-First complete `npm ci` and setup in the plugin repository as described in its README. Source caches must contain the pinned commits; no fork maintenance is needed. See [development instructions](docs/development.md) for official dependency installation and Electron preparation.
+First complete `yarn install --immutable` and setup in the plugin repository as described in its README. Source caches must contain the pinned commits; no fork maintenance is needed. See [development instructions](docs/development.md) for official dependency installation and Electron preparation.
 
 From this repository, install development tools and import pinned sources and matching dependencies:
 
 ```sh
-npm ci
-npm run setup -- \
+yarn install --immutable
+yarn run setup -- \
   --desktop-source ../dsh-desktop-source \
   --harness-source ../deepseek-harness-source \
   --project-source ../dsh-plugin-project \
   --desktop-dependencies ../dsh-desktop-source/dsh-plugin-desktop/node_modules \
   --project-dependencies ../dsh-plugin-project/node_modules
-npm run check
-npm start
+yarn run check
+yarn start
 ```
 
-Setup exports committed objects, checks tree hashes and versions, and copies independent dependencies. `.upstream/` stays unchanged; build products go to `.cache/` and `dist/`. The runtime does not link back to development repositories. Open an existing project with `npm start -- /path/to/example.agent-project`. Configure model providers in project settings; automated checks do not call models.
+Setup exports committed objects, checks tree hashes and versions, and copies independent dependencies. `.upstream/` stays unchanged; build products go to `.cache/` and `dist/`. The runtime does not link back to development repositories. Open an existing project with `yarn start -- /path/to/example.agent-project`. Configure model providers in project settings; automated checks do not call models.
 
 ## Project data
 
@@ -59,12 +59,12 @@ See [project directories and files](docs/project-directory-structure.md). Applic
 
 ## Checks and packaging
 
-`npm run check` covers application logic, source integrity, building, recovery, safe mode, project creation and real dual-Host smoke tests. Separate `smoke:native`, `smoke:profiles`, `smoke:resources` and `smoke:lifecycle` checks require a graphical session and are not part of headless checks. `smoke:profiles` exercises the official Profile windows, Recovery Assistant and per-project recovery isolation.
+`yarn run check` covers application logic, source integrity, building, recovery, safe mode, project creation and real dual-Host smoke tests. Separate `smoke:native`, `smoke:profiles`, `smoke:resources` and `smoke:lifecycle` checks require a graphical session and are not part of headless checks. `smoke:profiles` exercises the official Profile windows, Recovery Assistant and per-project recovery isolation.
 
 ```sh
-npm run package:mac
+yarn run package:mac
 # On Windows x64:
-npm run package:win
+yarn run package:win
 ```
 
 Download installers from [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest). Local packages are written to `release/`. In Actions → **Package Desktop** → **Run workflow**, select `all`, `mac` or `win`; select `all` with `publish` enabled to publish after verification. Pushing a `v*` tag matching `package.json` automatically builds and publishes. Replacing a release requires the explicit `replace_existing` input. macOS uses ad-hoc signing without notarization; Windows builds are unsigned. Welcome, the macOS application-name menu and the tray menu share application-level update checks using the Shell version. Settings has no added version label or update popover. See [packaging notes](docs/packaging.md) for verification and limitations.

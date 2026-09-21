@@ -48,8 +48,8 @@ cache; no ongoing fork maintenance is involved.
 
 ## 2. Companion plugin / 配套插件
 
-In `dsh-plugin-project`, follow its README: `npm ci`, setup from the official
-Desktop source, then `npm run check`. The plugin Git repository must contain the
+In `dsh-plugin-project`, follow its README: `yarn install --immutable`, setup from the official
+Desktop source, then `yarn run check`. The plugin Git repository must contain the
 exact `project.commit` recorded in this shell's `upstream.lock.json`. A source ZIP
 without that Git object cannot serve as the setup source. New plugin work must
 be committed and its commit/tree adopted explicitly; dirty files are not exported.
@@ -69,25 +69,25 @@ while the variable is set. Rebuild after every edit; the shell then needs a page
 reload, or a restart when it still serves the cached bundle:
 
 ```sh
-DSH_PROJECT_PLUGIN_SOURCE=../dsh-plugin-project npm run build
-DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell npm start -- /path/to/project
+DSH_PROJECT_PLUGIN_SOURCE=../dsh-plugin-project yarn run build
+DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start -- /path/to/project
 ```
 
 `DSH_PROJECT_PLUGIN_SOURCE=...` 让壳直接从本地工作区编译配套插件，未提交的界面改动不再需要提交、更新锁文件或重新导出 `.upstream/project`。固定树校验改为仓库身份校验并打印警告；设置该变量时打包会直接拒绝。每次改动后重新构建，然后刷新壳页面（若仍加载旧 bundle 则重启壳）。
 
 ## 3. Shell / 桌面壳
 
-Run the `npm ci`, `npm run setup` and `npm run check` commands in the README.
+Run the `yarn install --immutable`, `yarn run setup` and `yarn run check` commands in the README.
 Setup copies dependencies into `.cache/`, audits their links and verifies source
 trees. The exported `.upstream/` source is never modified by the build. Start
-with `npm start` only after the checks complete.
+with `yarn start` only after the checks complete.
 
 An installed copy owns the default application data directory and its
 single-instance lock, so starting another build there quits immediately. Run a
 development build beside it with an isolated directory:
 
 ```sh
-DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell npm start
+DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start
 ```
 
 The override applies to normal launches only; test modes keep the directory their
@@ -103,7 +103,7 @@ resets the build without touching the installed copy.
 If Electron was downloaded after setup, import just its matching binary with:
 
 ```sh
-npm run setup:electron -- ../dsh-desktop-source/dsh-plugin-desktop/node_modules/electron
+yarn run setup:electron -- ../dsh-desktop-source/dsh-plugin-desktop/node_modules/electron
 ```
 
 The import refuses an already prepared destination. Do not overwrite an active
@@ -114,19 +114,19 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 
 | Command | Scope |
 | --- | --- |
-| `npm test` | Application logic and fixtures; requires the first build |
-| `npm run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
-| `npm run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
-| `npm run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
-| `npm run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
-| `npm run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
-| `npm run smoke:resources` | Native resource status and remote-association checks |
-| `npm run smoke:lifecycle` | Native lifecycle and single-instance behavior |
-| `npm run smoke:updates` | Real official update dialogs with synthetic release/download fixtures, menu/state/error checks and two unaffected Hosts |
-| `npm run smoke:updates:live` | After publication: real anonymous static downloads, manifest/checksum validation and the official latest-version dialog in isolated Electron; optionally pin `DSH_PROJECT_UPDATE_COMMIT` |
-| `npm run test:recovery:network` | Network dependency recovery with an isolated test registry |
-| `npm run package:mac` | Universal macOS DMG, built on a Mac, with ad-hoc signing and verification of the mounted artifact |
-| `npm run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
+| `yarn run test` | Application logic and fixtures; requires the first build |
+| `yarn run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
+| `yarn run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
+| `yarn run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
+| `yarn run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
+| `yarn run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
+| `yarn run smoke:resources` | Native resource status and remote-association checks |
+| `yarn run smoke:lifecycle` | Native lifecycle and single-instance behavior |
+| `yarn run smoke:updates` | Real official update dialogs with synthetic release/download fixtures, menu/state/error checks and two unaffected Hosts |
+| `yarn run smoke:updates:live` | After publication: real anonymous static downloads, manifest/checksum validation and the official latest-version dialog in isolated Electron; optionally pin `DSH_PROJECT_UPDATE_COMMIT` |
+| `yarn run test:recovery:network` | Network dependency recovery with an isolated test registry |
+| `yarn run package:mac` | Universal macOS DMG, built on a Mac, with ad-hoc signing and verification of the mounted artifact |
+| `yarn run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
 
 Automated checks use synthetic temporary projects and do not call models. Native
 checks are separate and require Electron. The local acceptance baseline is macOS
