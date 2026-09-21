@@ -51,12 +51,14 @@ export async function checkResourceStates({electron, userData}) {
   // that leaves every other Electron face untouched: the Host, the runtime RPC bridge, the panel and
   // every Git call stay real, and the chooser answers with a real directory.
   const picked = join(root, 'picked-resource');
+  // Each chooser request answers with the directory the running case is about to pick.
+  let nextPick = picked;
   let chooser = electron;
   if (process.platform === 'win32') {
     mkdirSync(picked, {recursive: true});
     writeFileSync(join(picked, 'README.md'), '# picked resource\n');
     chooser = Object.create(electron, {dialog: {value: {...electron.dialog,
-      showOpenDialog: async () => ({canceled: false, filePaths: [picked]})}}});
+      showOpenDialog: async () => ({canceled: false, filePaths: [nextPick]})}}});
   }
   const project = await openNativeProject(chooser, {...projectStatePath(userData, manifest), projectRoot: root,
     title: 'Resource states', locale: 'en', hidden: true, onError: console.error,
@@ -293,6 +295,7 @@ export async function checkResourceStates({electron, userData}) {
       const rebound = join(root, 'rebound-resource');
       mkdirSync(rebound, {recursive: true});
       writeFileSync(join(rebound, 'README.md'), '# rebound resource\n');
+      nextPick = rebound;
       await evaluate(window, `document.querySelector('button[aria-label="绑定目录: picked-resource"]').click()`);
       await wait(window, `Boolean(document.querySelector('[role=dialog] .project-resource-directory'))`);
       assert.equal(await evaluate(window, `document.querySelector('[role=dialog]').textContent
@@ -309,6 +312,7 @@ export async function checkResourceStates({electron, userData}) {
       const skill = join(root, 'picked-skill');
       mkdirSync(skill, {recursive: true});
       writeFileSync(join(skill, 'SKILL.md'), '---\nname: picked-skill\ndescription: Windows picker fixture\n---\nUse this skill.');
+      nextPick = skill;
       await click(window, '技能');
       // The toolbar only enables import once the Host reports a reachable chooser.
       await wait(window, `(() => {const item = [...document.querySelectorAll('.project-capability-toolbar button')]
