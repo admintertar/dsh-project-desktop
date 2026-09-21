@@ -313,6 +313,9 @@ export async function checkResourceStates({electron, userData}) {
       mkdirSync(skill, {recursive: true});
       writeFileSync(join(skill, 'SKILL.md'), '---\nname: picked-skill\ndescription: Windows picker fixture\n---\nUse this skill.');
       nextPick = skill;
+      // Panel navigation lives in the sidebar, which the earlier narrow-window pass collapsed.
+      window.setSize(1180, 820); await frame(window);
+      await wait(window, `innerWidth === 1180`);
       await click(window, '技能');
       // The toolbar only enables import once the Host reports a reachable chooser.
       await wait(window, `(() => {const item = [...document.querySelectorAll('.project-capability-toolbar button')]
