@@ -18,6 +18,7 @@ import {cancelGuideCreations, createGuideWindow} from '../windows/guide-window.m
 import {assertProjectCreationReady} from './project-bootstrap.mjs';
 import {resolveUserData} from './user-data.mjs';
 import {cleanupGuideClones} from './guide-clones.mjs';
+import {restoreMissingResources} from './resource-restore.mjs';
 import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, dialog} = electron;
@@ -254,7 +255,15 @@ async function run() {
         const nativeClose = value.close;
         value.safeMode = safeMode;
         value.close = async () => {stop?.(); await detach?.(); await nativeClose(); temporary?.cleanup()};
-        if (!safeMode) {recent.remember({path: manifest, title}); session.update(manifest, {locale: value.locale})}
+        if (!safeMode) {
+          recent.remember({path: manifest, title});
+          session.update(manifest, {locale: value.locale});
+          // A fresh checkout carries no resources/ directory at all, because the project
+          // definition excludes every resource repository from the parent Git tree. Rebuild
+          // them through the Host's own resource API: opening never waits, the Plugin's panel
+          // shows progress and a failure stays recoverable from there.
+          if (!testing) void restoreMissingResources(value.host, {onError: error => console.error('Resource restore:', error.message)});
+        }
         return value;
       } catch (error) {
         stop?.(); await detach?.();
