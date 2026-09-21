@@ -41,7 +41,11 @@ export async function privateGitFixture() {
     run: base => (args, cwd, options) => base(['-c', `http.sslCAInfo=${cert}`,
       ...(process.platform === 'win32' ? ['-c', 'http.sslBackend=openssl'] : []),
       ...(!options?.auth ? ['-c', 'credential.helper='] : []), ...args], cwd, options),
-    async close() {server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); rmSync(root, {recursive: true, force: true})}};
+    // Windows refuses to remove a directory that any process still holds open,
+    // where Unix does not, so cleanup stays best effort and never fails the run.
+    async close() {server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+      try {rmSync(root, {recursive: true, force: true, maxRetries: 10, retryDelay: 100})}
+      catch (error) {console.warn(`Fixture directory left behind (${error.code}): ${root}`)}}};
 }
 
 export async function waitUntil(check, label) {

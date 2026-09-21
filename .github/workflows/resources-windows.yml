@@ -113,6 +113,14 @@ jobs:
       - name: Install pinned plugin build dependencies
         working-directory: .cache/ci-sources/project
         run: corepack yarn install --immutable
+      # This job used to build the pinned plugin without ever running its own suite,
+      # which is how six platform-specific test gaps stayed invisible on Windows.
+      - name: Export the pinned official runtime for the Project plugin
+        working-directory: .cache/ci-sources/project
+        run: corepack yarn run setup -- --desktop ../desktop
+      - name: Verify the Project plugin on Windows
+        working-directory: .cache/ci-sources/project
+        run: corepack yarn run check
       - name: Install shell build dependencies
         run: corepack yarn install --immutable
       - name: Import verified stable snapshots and independent caches

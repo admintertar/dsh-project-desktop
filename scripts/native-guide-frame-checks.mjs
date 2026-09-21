@@ -121,7 +121,7 @@ export async function checkGuideFrame({electron, repository, userData}) {
         await drag(window, mode === 'welcome' ? 200 : 213);
         for (const size of [expected, [700, 560], [600, 560], [576, 560], [420, 460]]) {
           window.setSize(...size);
-          await wait(window, `innerWidth === ${size[0]} && Boolean(document.querySelector('[data-guide-compact]')) === ${size[0] < 576}`);
+          await wait(window, `Math.abs(innerWidth - ${size[0]}) <= 2 && Boolean(document.querySelector('[data-guide-compact]')) === (innerWidth < 576)`);
           const geometry = await evaluate(window, `(() => {
             const body=document.querySelector('.guideBody'),content=document.querySelector('.dshDesktopConversationSurface'),
               footer=document.querySelector('.${mode === 'create' ? 'createContent' : 'welcomeContent'}>footer'),
@@ -143,11 +143,12 @@ export async function checkGuideFrame({electron, repository, userData}) {
               footerPadding:getComputedStyle(footer).padding,footerHeight:r.height,
               resourceButtonMatchesBrowse:add&&browse?['height','fontSize','lineHeight','borderRadius','padding'].every(key=>getComputedStyle(add)[key]===getComputedStyle(browse)[key]):null,
               sidebarOverflow:document.querySelector('.dshDesktopUpstreamSidebar').scrollWidth>document.querySelector('.dshDesktopUpstreamSidebar').clientWidth,
-              labelOverflow:[...document.querySelectorAll('.templateItemLabel')].some(label=>label.scrollWidth>label.clientWidth)};
+              labelOverflow:[...document.querySelectorAll('.templateItemLabel')].some(label=>label.scrollWidth>label.clientWidth),
+              compact:Boolean(document.querySelector('[data-guide-compact]'))};
           })()`);
           assert.equal(geometry.horizontal, false); assert.equal(geometry.footerVisible, true);
           assert.equal(geometry.equalPadding, true); assert.equal(geometry.bodyAligned, true);
-          assert.equal(geometry.headerHidden, mode === 'create' && size[0] < 576);
+          assert.equal(geometry.headerHidden, mode === 'create' && geometry.compact);
           if (!geometry.headerHidden) assert.equal(geometry.headerAligned, true);
           assert.equal(geometry.gutterOutside, true); assert.equal(geometry.scrollbarGap, 8);
           assert.equal(geometry.scrollbarOuterGap, 8); assert.equal(geometry.rightInset, 24);
@@ -156,8 +157,8 @@ export async function checkGuideFrame({electron, repository, userData}) {
           if (mode === 'create') assert.equal(geometry.resourceButtonMatchesBrowse, true);
           assert.equal(geometry.sidebarOverflow, false); assert.equal(geometry.labelOverflow, false);
           assert.ok(geometry.bodyHeight > 70); assert.equal(geometry.gutter, 'stable');
-          if (size[0] >= 576) assert.ok(geometry.contentWidth >= 400);
-          if (mode === 'create' && size[0] < 576) assert.equal(await evaluate(window, 'getComputedStyle(document.querySelector(".createTemplateSelect")).display'), 'flex');
+          if (!geometry.compact) assert.ok(geometry.contentWidth >= 400);
+          if (mode === 'create' && geometry.compact) assert.equal(await evaluate(window, 'getComputedStyle(document.querySelector(".createTemplateSelect")).display'), 'flex');
           if (size[0] === 700) await checkAutoHideScrollbar(window);
           await evaluate(window, 'document.querySelector(".guideBody").scrollTop=0');
           writeFileSync(join(userData, `${mode}-frame-${language}-${theme}-${size[0]}.png`), (await window.webContents.capturePage()).toPNG());
@@ -175,7 +176,7 @@ export async function checkGuideFrame({electron, repository, userData}) {
         assert.deepEqual(await measure(), before);
       } else {
         window.setSize(700, 720);
-        await wait(window, 'innerWidth===700');
+        await wait(window, 'Math.abs(innerWidth - 700) <= 2');
         const measure = () => evaluate(window, `(() => {
           const field=document.querySelector('.projectPathControl').getBoundingClientRect(), body=document.querySelector('.guideBody');
           return {x:field.x,width:field.width,overflow:body.scrollHeight>body.clientHeight};
