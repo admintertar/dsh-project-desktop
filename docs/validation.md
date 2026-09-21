@@ -465,3 +465,79 @@ Accepted on the macOS x64 baseline, 2026-09-20:
 - `npm run build`, 70 application tests (none skipped), 7 recovery tests, 1
   safe-mode test, immutable source verification, project-file checks and the real
   dual-Host smoke all passed. Local evidence: `.runtime/smoke-O05BdS`.
+
+## Windows Mica material on project windows
+
+Accepted on Windows 11 Pro 25H2, build 26200.9457, 2026-09-21. This is the first
+acceptance in this document that is native Windows for the material path; the
+macOS x64 baseline above does not certify it and the reverse is now also true.
+
+Two defects were found and fixed in `src/desktop-adapter/native.mjs`; both sit on
+the shell's own replacement of an official object, and both failed silently.
+
+- `windowsBuild` was missing from the shell's native runtime object. The official
+  `ElectronDesktopRuntime` resolves it in its constructor, and `runtimeSnapshot`
+  passes it to the Host, where `desktopRendererUrl` turns it into the
+  `dsh-desktop-mica` renderer marker. Without the field the marker was `0`, so
+  `micaSupported` was false: the 桌面设置 material row offered only 纯色背景, and
+  `effectiveDesktopWindowMaterial` additionally read a persisted `windowsMaterial:
+  mica` as unsupported and fell back to `off`. The value now comes from the
+  official `window-material` probe instead of being reconstructed.
+- `setThemeSource` was a no-op, so a live theme change never re-applied the window
+  material. The official method does both: it sets `nativeTheme.themeSource` and
+  calls `generation.refreshThemeMaterial()`; its comment records that Windows keeps
+  the preceding DWM Mica palette until the window recomposes. The advanced sidebar
+  is transparent whenever a material is active, so after switching dark → light the
+  content region followed the theme while the sidebar kept the stale palette and
+  looked black under a light theme. `SharedTheme` still owns `nativeTheme` for the
+  whole application; the shell only restores the official re-apply step, through
+  `electronPlatformStrategy().refreshThemeMaterial`, and additionally on the first
+  on-screen composition (`window.once('show')`), because that first composition is
+  what Windows caches.
+
+Native acceptance on the above build: the material row lists Mica and the choice is
+persisted to the project Home (`windowsMaterial: mica`); the window composited Mica
+with a light sidebar; and switching dark → light → dark left the sidebar following
+the theme with no stale dark palette. `yarn check` passed on Windows: upstream
+integrity, build, 86 application tests, 7 recovery tests, 1 safe-mode test,
+project-file checks and the real dual-Host smoke. Regression coverage is
+`tests/windows-build-capability.test.mjs` and
+`tests/window-material-refresh.test.mjs`; the latter pins the silent-missing cases
+and guards the hook so it cannot be reduced to a no-op again.
+
+The advanced sidebar is transparent by design while a material is active
+(`--dsw-specific-sidebar-fill: transparent`), so its colour is always the composited
+window backdrop rather than a CSS value. Any future "the sidebar has the wrong
+colour" report should be read as a material/composition question first, not a CSS
+one.
+
+### Failed approaches in this investigation
+
+Recorded because the detours cost more time than the fix, and because the same
+traps apply to any native-surface check done beside a running application.
+
+- Two windows were stacked on screen (the user's installed app, an installed
+  project window, and the development shell's own windows). Every screen-coordinate
+  sample silently measured whichever window happened to be on top, which produced
+  contradictory results — "the sidebar is white" and "the sidebar is black" from the
+  same coordinates minutes apart. Activating a window by PID before sampling, and
+  reading the DOM over CDP instead of inferring from pixels, is what settled it.
+  Screen sampling without a proven foreground window is not evidence.
+- Reading the user's downscaled screenshots as if they were pixels was misleading:
+  a JPEG preview of an app window is downscaled and its text antialiasing bleeds, so
+  dense chrome (the session list) can average to colours that look like a background.
+  Sample the real screen or the live DOM, never a communication preview.
+- `git worktree` copies cannot run the check on Windows as-is: the check asserts
+  paths inside the worktree, so junctions for `node_modules`/`.upstream`/`.yarn` are
+  fine but `.runtime` must be a real directory — a junction there makes the
+  temporary-path assertions compare against the main checkout and fail.
+- The same worktree run needs `git` and `openssl` on `PATH`; `tests/fixtures/private-git.mjs`
+  generates its own CA, so without `openssl` three guide-clone tests fail for
+  environmental reasons that look like code failures.
+- Electron does not implement `Browser.getWindowForTarget`/`Browser.setWindowBounds`,
+  so a window cannot be resized over CDP to test composition; resize the window from
+  application code instead.
+- Do not write source files with shell redirection on this platform: a PowerShell
+  round-trip added a BOM and mangled the Chinese diagnostics copy in
+  `native.mjs`. Use the file tools, and verify with `git diff` afterwards.
+
