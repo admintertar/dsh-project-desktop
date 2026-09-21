@@ -46,7 +46,19 @@ export async function checkResourceStates({electron, userData}) {
   const manifest = await createProjectFromPlan({location: userData, name: 'Resource states', templateId: 'fullstack'});
   const root = dirname(manifest), backend = join(root, 'resources/Resource states-backend');
   const git = (args, cwd = backend) => execFileSync('git', args, {cwd, encoding: 'utf8', stdio: 'pipe'}).trim();
-  const project = await openNativeProject(electron, {...projectStatePath(userData, manifest), projectRoot: root,
+  // Windows pins the browse directory-picker backend, so the panel asks the Desktop runtime for a
+  // directory instead of the native seam. Replace only the OS chooser, through a prototype overlay
+  // that leaves every other Electron face untouched: the Host, the runtime RPC bridge, the panel and
+  // every Git call stay real, and the chooser answers with a real directory.
+  const picked = join(root, 'picked-resource');
+  let chooser = electron;
+  if (process.platform === 'win32') {
+    mkdirSync(picked, {recursive: true});
+    writeFileSync(join(picked, 'README.md'), '# picked resource\n');
+    chooser = Object.create(electron, {dialog: {value: {...electron.dialog,
+      showOpenDialog: async () => ({canceled: false, filePaths: [picked]})}}});
+  }
+  const project = await openNativeProject(chooser, {...projectStatePath(userData, manifest), projectRoot: root,
     title: 'Resource states', locale: 'en', hidden: true, onError: console.error,
     connectTheme: host => host.setTheme('light'), close() {}, restart() {}, recover() {}});
   const window = project.window;
@@ -254,6 +266,29 @@ export async function checkResourceStates({electron, userData}) {
     assert.equal((await (await project.host.request('/api/project/resources')).json()).resources.length, 0);
     assert.equal(parse(readFileSync(manifest, 'utf8')).resources[0].id, 'root');
     writeFileSync(join(userData, 'resource-states-empty.png'), (await window.webContents.capturePage()).toPNG());
+
+    // --- Windows only: the launcher pins the browse backend, so a local resource must stay pickable ---
+    // macOS/Linux keep the official native seam, whose chooser is a separate OS process this harness
+    // cannot drive; the desktop-runtime path exists exactly for the Windows composition.
+    if (process.platform === 'win32') {
+      await click(window, '添加资源');
+      await wait(window, `Boolean(document.querySelector('[role=dialog] .project-resource-directory'))`);
+      // The panel must offer the local flow instead of refusing it with the native-picker notice.
+      assert.equal(await evaluate(window, `document.querySelector('[role=dialog]').textContent
+        .includes('当前环境不支持原生文件夹选择')`), false);
+      const choose = `[...document.querySelectorAll('[role=dialog] button')].find(item => item.textContent.trim() === '选择目录…')`;
+      assert.equal(await evaluate(window, `Boolean(${choose}) && ${choose}.disabled === false`), true);
+      await evaluate(window, `${choose}.click()`);
+      await wait(window, `document.querySelector('[role=dialog] .project-resource-directory code')?.textContent.endsWith('picked-resource')`);
+      assert.equal(await evaluate(window, `document.querySelector('[role=dialog] input[id$="-name"]')?.value`), 'picked-resource');
+      writeFileSync(join(userData, 'resource-add-local.png'), (await window.webContents.capturePage()).toPNG());
+      await evaluate(window, `document.querySelector('[role=dialog] button[type=submit]').click()`);
+      await wait(window, `!document.querySelector('[role=dialog]')`);
+      await wait(window, `Boolean(document.querySelector('.project-resource-card'))`);
+      const resources = parse(readFileSync(manifest, 'utf8')).resources;
+      assert.equal(resources.some(item => item.name === 'picked-resource' && item.type === 'local'), true);
+      writeFileSync(join(userData, 'resource-add-local-saved.png'), (await window.webContents.capturePage()).toPNG());
+    }
     return {measurements, manifest};
   } finally {remoteServer?.close(); await project.close();}
 }
