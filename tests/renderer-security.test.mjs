@@ -22,13 +22,14 @@ test('native IPC rejects subframes and other documents, external launches reject
   for (const value of ['file:///etc/passwd', 'javascript:alert(1)', 'https://user:pass@example.com']) assert.equal(externalUrl(value), undefined);
 });
 
-test('window sessions never install a renderer permission handler', () => {
-  // Official parity: the pinned Desktop runtime installs none, and a deny-all
-  // policy rejects `navigator.clipboard.writeText` as `clipboard-read` while the
-  // official client swallows that rejection, killing every copy button silently.
+test('window sessions install no renderer permission handler and no download block', () => {
+  // Official parity: the pinned Desktop runtime has neither. A deny-all policy
+  // rejects `navigator.clipboard.writeText` as `clipboard-read` while the official
+  // client swallows that rejection, killing every copy button silently.
   for (const file of ['../src/desktop-adapter/native.mjs', '../src/windows/guide-window.mjs']) {
     const source = readFileSync(new URL(file, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /setPermission(Request|Check)Handler/u, file);
+    assert.doesNotMatch(source, /will-download/u, file);
   }
 });
 

@@ -27,7 +27,7 @@ Host 通过自有 `bootProjectHost()` 组合官方 Harness `boot()`、Profile �
 
 Profile 分隔插件依赖、补丁和检查点，不代表整个 Home 独立。普通设置默认仍位于项目 Home 的 `settings.yaml`，市场 provider 选择也是项目共享设置；市场包操作绑定实际运行的 Profile。官方检查点包含 Home 的 `settings.yaml`／`cordis.patch.yml`，回滚可能影响同项目其他 Profile 的共享配置，项目资料与会话不在配置检查点内。
 
-原生能力桥使用官方 `HostRpc`、`createHostRuntime`、`bindNativeRuntime`。我们给自己提供的 runtime 增加项目窗口能力，官方桥和源码保持不变。每个窗口使用唯一 Chromium partition、官方 sandbox/contextIsolation preload，在该 Session 内换取官方认证 Cookie；专属访问头只注入所属 Renderer 的同源 HTTP/WebSocket，不随外链或 iframe 泄漏。窗口 Session **不安装任何 Web 权限处理器**，与官方 Desktop runtime 一致：官方客户端 UI 的消息、代码块、终端、表格和 JSON 树复制入口都走 `navigator.clipboard.writeText`，而 Electron 43 把该请求报成 `clipboard-read`，一旦按 deny-all 拦截就会让复制静默失效（UI 侧吞掉异常且不显示反馈）。Web 安全边界因此只由 webPreferences、导航／弹窗／webview 拦截和专属访问头承担，权限交回 Electron 默认行为；`tests/renderer-security.test.mjs` 断言两个窗口模块不再出现权限处理器，避免该缺陷回归。
+原生能力桥使用官方 `HostRpc`、`createHostRuntime`、`bindNativeRuntime`。我们给自己提供的 runtime 增加项目窗口能力，官方桥和源码保持不变。每个窗口使用唯一 Chromium partition、官方 sandbox/contextIsolation preload，在该 Session 内换取官方认证 Cookie；专属访问头只注入所属 Renderer 的同源 HTTP/WebSocket，不随外链或 iframe 泄漏。窗口 Session **不安装任何 Web 权限处理器**，与官方 Desktop runtime 一致：官方客户端 UI 的消息、代码块、终端、表格和 JSON 树复制入口都走 `navigator.clipboard.writeText`，而 Electron 43 把该请求报成 `clipboard-read`，一旦按 deny-all 拦截就会让复制静默失效（UI 侧吞掉异常且不显示反馈）。Web 安全边界因此只由 webPreferences、导航／弹窗／webview 拦截和专属访问头承担，权限与下载都交回 Electron 默认行为（官方同样没有 `will-download` 策略）；`tests/renderer-security.test.mjs` 断言两个窗口模块不再出现权限处理器或 `will-download`，避免该缺陷回归。
 
 `dsh-project-shell` 是我们自己的双面插件。Host 面只注册固定 advanced/loopback 的设置 schema、窗口规格及官方健康上报端点；原官方 desktop-shell 条目被配置禁用。Client 面调用官方 advanced、窗口几何、主题呈现与健康报告，接入 Project 客户端，不调用官方应用设置的全量注册函数。
 

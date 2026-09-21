@@ -452,14 +452,16 @@ Accepted on the macOS x64 baseline, 2026-09-20:
   renderer boundary is `webPreferences` (`contextIsolation`, `nodeIntegration:
   false`, `sandbox`, `webSecurity`), navigation/popup/webview blocking, the
   dedicated partitions and the capability header — never a permission policy.
-- The Shell's deny-all handler was therefore a deviation, not a shared policy. It
-  is removed from both window modules; the clipboard allow-list helper and its
-  unit test are gone with it, replaced by an assertion that neither window module
-  installs a permission handler.
+- The Shell's deny-all handler and its `will-download` block were therefore
+  deviations, not shared policy. Both are removed from the window modules; the
+  clipboard allow-list helper and its unit test are gone with it, replaced by an
+  assertion that neither window module installs a permission handler or a
+  `will-download` listener. The client exposes no browser-download affordance, so
+  the download block had no observed effect; it is dropped for parity only.
 - Native re-acceptance with the aligned build: `geolocation`, `notifications`,
   `camera` and `microphone` report `granted` (Electron defaults, matching
   official) instead of `denied`, and a real click on the message copy button still
   switched it to `复制成功` with the exact message text on the clipboard.
-- `npm run build`, 68 application tests, 7 recovery tests, 1 safe-mode test,
-  immutable source verification, project-file checks and the real dual-Host smoke
-  all passed. Local evidence: `.runtime/smoke-7IFcuQ`.
+- `npm run build`, 70 application tests (none skipped), 7 recovery tests, 1
+  safe-mode test, immutable source verification, project-file checks and the real
+  dual-Host smoke all passed. Local evidence: `.runtime/smoke-O05BdS`.

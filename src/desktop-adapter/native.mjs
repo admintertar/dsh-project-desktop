@@ -29,7 +29,7 @@ export async function openNativeProject(electron, options) {
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
   const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
-  let window, host, specification, removeHeaders, removeSessionPolicies, chromiumSession;
+  let window, host, specification, removeHeaders, chromiumSession;
   let disposed = false, quitting = false;
   let locale = options.locale;
   let healthTimer;
@@ -61,7 +61,7 @@ export async function openNativeProject(electron, options) {
     schedule(spec) {
       if (spec.mode !== 'advanced' || specification) throw new Error('Invalid project window specification');
       specification = spec;
-      return async () => {removeHeaders?.(); removeSessionPolicies?.(); if (window && !window.isDestroyed()) window.destroy()};
+      return async () => {removeHeaders?.(); if (window && !window.isDestroyed()) window.destroy()};
     },
     registerTrayItem(item) {const id = Symbol(); contributions.set(id, item); options.onMenuChanged?.();
       return {refresh: () => options.onMenuChanged?.(), dispose() {contributions.delete(id); options.onMenuChanged?.()}}},
@@ -100,7 +100,6 @@ export async function openNativeProject(electron, options) {
   const close = async () => {
     saveWindow?.(); disposed = true; clearTimeout(healthTimer);
     removeHeaders?.();
-    removeSessionPolicies?.();
     if (window && !window.isDestroyed()) window.destroy();
     await host?.close();
     if (options.safeMode && chromiumSession) await chromiumSession.clearStorageData();
@@ -123,15 +122,11 @@ export async function openNativeProject(electron, options) {
     const origin = new URL(specification.url).origin;
     const session = contents.session;
     chromiumSession = session;
-    // No renderer permission handler on purpose: the official Desktop runtime
-    // installs none, and Electron's defaults keep navigator.clipboard.writeText
-    // working. A deny-all policy rejects that write as `clipboard-read`, and the
-    // official client swallows the rejection, so every copy button dies silently.
-    const denyDownload = event => event.preventDefault();
-    session.on('will-download', denyDownload);
-    removeSessionPolicies = () => {
-      session.removeListener('will-download', denyDownload);
-    };
+    // No renderer permission handler and no download block on purpose: the
+    // official Desktop runtime has neither. Electron's defaults keep
+    // navigator.clipboard.writeText working, whereas a deny-all policy rejects
+    // that write as `clipboard-read` and the official client swallows the
+    // rejection, so every copy button dies silently.
     const auth = await session.fetch(specification.authenticationUrl, {credentials: 'include', cache: 'no-store',
       headers: {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value}});
     await auth.body?.cancel();
