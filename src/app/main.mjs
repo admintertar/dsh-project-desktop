@@ -20,6 +20,7 @@ import {resolveUserData} from './user-data.mjs';
 import {cleanupGuideClones} from './guide-clones.mjs';
 import {restoreMissingResources} from './resource-restore.mjs';
 import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
+import {recordRecoveryEvent} from './recovery-journal.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, dialog} = electron;
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -151,7 +152,7 @@ async function run() {
       setImmediate(() => {if (previousGuide && !previousGuide.isDestroyed() && !workspace.failures().length) previousGuide.close()});
       return project;
     } catch (error) {
-      if (manifest && session.get(manifest) && !quitting) {await recover(manifest, {requested: false, error}); return}
+      if (manifest && session.get(manifest) && !quitting) {await recover(manifest, {requested: false, error, source: 'open'}); return}
       if (showWelcomeOnError && startupComplete && !quitting) await showGuide();
       throw error;
     }
@@ -169,12 +170,12 @@ async function run() {
     const locale = projects.get(manifest)?.locale ?? session.get(manifest)?.locale;
     await dismissSurface(manifest);
     try {return await workspace.restart(manifest)}
-    catch (error) {if (!quitting) await recover(manifest, {requested: false, error, locale})}
+    catch (error) {if (!quitting) await recover(manifest, {requested: false, error, locale, source: 'restart'})}
   }
-  async function recover(manifest, {requested = true, error, locale} = {}) {
-    return showProfileSurface(manifest, {recoveryMode: true, requested, error, locale});
+  async function recover(manifest, {requested = true, error, locale, source = 'manual'} = {}) {
+    return showProfileSurface(manifest, {recoveryMode: true, requested, error, locale, source});
   }
-  async function showProfileSurface(manifest, {recoveryMode = false, requested = false, error, locale} = {}) {
+  async function showProfileSurface(manifest, {recoveryMode = false, requested = false, error, locale, source = 'manual'} = {}) {
     if (quitting) return;
     let existing = surfaces.get(manifest);
     if (existing?.recoveryMode === recoveryMode) {const handle = await existing.opening; handle.show(); return handle}
@@ -195,9 +196,17 @@ async function run() {
           recovery = {profileName: (await projectProfiles(state)).current(), waitIdle: async () => {}};
         }
       }
+      const failureStage = error?.failureStage ?? 'host-boot';
+      const failureDetail = error ? await describeProjectError(error) : workspace.errors.get(manifest);
+      // The official Recovery Assistant only ever receives this reason as a window query
+      // parameter, so a dismissed window used to leave no evidence anywhere while the Host
+      // log cannot exist yet. Keep the shell-owned copy beside the project's Host logs.
+      if (recoveryMode && !recordRecoveryEvent(state.stateDirectory, {source, requested, readOnly, failureStage,
+        detail: failureDetail ?? '', phase: session.get(manifest)?.phase ?? null, manifestPath: state.manifestPath})) {
+        console.error('Recovery journal: the Recovery Mode reason could not be recorded');
+      }
       const handle = await createProjectNativeWindow({...state, locale: entry.locale, recovery, requested, readOnly,
-        failureDetail: error ? await describeProjectError(error) : workspace.errors.get(manifest),
-        failureStage: error?.failureStage ?? 'host-boot', isClosing: () => quitting || entry.closing,
+        failureDetail, failureStage, isClosing: () => quitting || entry.closing,
         enterSafeMode: async () => {
           preparedSafeModes.set(manifest, await prepareSafeMode(state.stateDirectory));
         }});
@@ -207,7 +216,7 @@ async function run() {
         if (entry.closing || quitting) return;
         if (result === 'restart') await restart(manifest);
         else if (result === 'safe-mode') {
-          try {await workspace.safeMode(manifest)} catch (cause) {await recover(manifest, {requested: false, error: cause})}
+          try {await workspace.safeMode(manifest)} catch (cause) {await recover(manifest, {requested: false, error: cause, source: 'safe-mode'})}
         } else if (recoveryMode) await close(manifest);
       }).catch(report).finally(() => {
         if (surfaces.get(manifest) === entry) surfaces.delete(manifest);
@@ -241,9 +250,9 @@ async function run() {
             if (quitting) return;
             const locale = value?.locale;
             error.message = await describeProjectError(error);
-            await workspace.fail(manifest, error); await recover(manifest, {requested: false, error, locale});
+            await workspace.fail(manifest, error); await recover(manifest, {requested: false, error, locale, source: 'runtime'});
           }),
-          close: () => perform(async () => {if (safeMode) {await workspace.exitSafeMode(manifest); await recover(manifest)} else await close(manifest)}),
+          close: () => perform(async () => {if (safeMode) {await workspace.exitSafeMode(manifest); await recover(manifest, {source: 'safe-mode-exit'})} else await close(manifest)}),
           restart: () => restart(manifest), recover: () => recover(manifest),
           windows: {list: () => [...projects].map(([id, project]) => ({id, title: project.window.getTitle(), current: id === manifest})),
             open: async () => {await showGuide()}, focus: id => projects.get(id)?.focus(), quit: () => perform(() => close(manifest))},
@@ -312,7 +321,7 @@ async function run() {
         command(zh ? '重启当前项目' : 'Restart Current Project', () => active()?.restart(), {enabled: Boolean(current)}),
         command(current?.safeMode ? (zh ? '退出安全模式' : 'Exit Safe Mode') : (zh ? '在安全模式中打开' : 'Open in Safe Mode'), async () => {
           const entry = [...projects].find(([, value]) => value === active()); if (!entry) return;
-          if (entry[1].safeMode) {await workspace.exitSafeMode(entry[0]); await recover(entry[0])}
+          if (entry[1].safeMode) {await workspace.exitSafeMode(entry[0]); await recover(entry[0], {source: 'safe-mode-exit'})}
           else {await dismissSurface(entry[0]); await workspace.safeMode(entry[0])}
         }, {enabled: Boolean(current)}),
         command(zh ? '项目恢复…' : 'Project Recovery…', () => active()?.recover(), {enabled: Boolean(current)})]},
@@ -418,7 +427,7 @@ async function run() {
   await workspace.restore();
   for (const failure of workspace.failures()) {
     try {resolveProjectFile(failure.path)} catch {continue}
-    await recover(failure.path, {requested: failure.phase === 'recovering', error: new Error(failure.error ?? 'Previous project startup failed')});
+    await recover(failure.path, {requested: failure.phase === 'recovering', error: new Error(failure.error ?? 'Previous project startup failed'), source: 'startup-restore'});
   }
   while (startupFiles.length) await Promise.allSettled(startupFiles.splice(0).map(open));
   startupComplete = true;

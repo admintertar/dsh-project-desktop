@@ -55,7 +55,7 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 检查点适配器只在完整 Host/Renderer 健康后调用官方 `captureHealthy()`，保留每 Profile 三槽轮换及恢复后跳过覆盖的规则。恢复入口先停止所属 Host，然后使用官方 `DesktopStartupRecoveryWindow`、`startup-recovery-controller` 的代际绑定、短期预览 token、文件校验及恢复。依赖声明变化时调用官方 materializer；自有 pending 文件按 Profile 跨进程保留恢复未完成状态，只阻止相应 Profile 启动。旧 `desktop` journal 保持原路径。选择另一 Profile 后旧预览失效，不能再写入旧 Profile。插件卸载委托官方 `removeRecoveryPlugin`，自带 Project 插件仍受开发依赖边界保护。
 
-手动恢复、启动失败、Host／Renderer 崩溃均打开所属项目的官方恢复助手，语言沿用该项目。修复后重启／安全模式／关闭仅作用于该项目；安全模式关闭后返回恢复助手。未确认 Host 停止或状态所有权时，仅提供官方诊断界面，不授予配置、Profile 切换或恢复写入能力。应用级 DSH Home 迁移和工厂重置不提供能力，官方对应页显示不可用。恢复 UI 不依赖失败项目的 Host、Renderer 或插件。
+手动恢复、启动失败、Host／Renderer 崩溃均打开所属项目的官方恢复助手，语言沿用该项目。修复后重启／安全模式／关闭仅作用于该项目；安全模式关闭后返回恢复助手。未确认 Host 停止或状态所有权时，仅提供官方诊断界面，不授予配置、Profile 切换或恢复写入能力。应用级 DSH Home 迁移和工厂重置不提供能力，官方对应页显示不可用。恢复 UI 不依赖失败项目的 Host、Renderer 或插件。恢复原因只作为窗口 query 参数交给官方恢复助手，窗口一关就消失，而 Host 日志在恢复之后才可能存在；因此壳把每次进入恢复的原因追加到项目状态目录的 `recovery-events.jsonl`（`src/app/recovery-journal.mjs`，有界且只保留最近记录），字段含来源（`startup-restore`／`open`／`restart`／`runtime`／`safe-mode`／`manual` 等）、`requested`、只读降级、失败阶段与详情、会话阶段和 manifest 路径。写入失败只记一行错误，不改变恢复行为；该文件是壳自有诊断记录，不进入官方诊断包（导出器只收 `dsh-<日期>.log`）。
 
 `project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.11 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
 
