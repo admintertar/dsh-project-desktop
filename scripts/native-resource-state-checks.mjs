@@ -154,6 +154,16 @@ export async function checkResourceStates({electron, userData}) {
       assert.equal(await evaluate(window, `${dialog}?.textContent.includes(${JSON.stringify(label)})`), true,
         `repository details missing ${label}`);
     }
+    // A click must reach the Host: the repository route has to receive the action.
+    if (locale === 'en' && theme === 'light' && width === 1180) {
+      await evaluate(window, `(() => {window.__repoActions = []; const original = window.fetch;
+        window.fetch = (input, init) => {const url = String(typeof input === 'string' ? input : input?.url ?? '');
+          if (url.includes('/api/project/repository')) {try {window.__repoActions.push(JSON.parse(String(init?.body ?? '{}')).action);} catch {}}
+          return original(input, init);};})()`);
+      await evaluate(window, `[...(${dialog}?.querySelectorAll('button') ?? [])]
+        .find(item => item.textContent.trim() === 'Check for updates')?.click()`);
+      await wait(window, `window.__repoActions?.includes('check') === true`);
+    }
     await evaluate(window, `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
     await wait(window, `!document.querySelector('.project-resource-details')`);
     writeFileSync(join(userData, `project-changes-${locale}-${theme}-${width}.png`), (await window.webContents.capturePage()).toPNG());
