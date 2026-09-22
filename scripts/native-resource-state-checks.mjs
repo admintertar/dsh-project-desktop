@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {createServer as createHttpsServer} from 'node:https';
 import {dirname, join} from 'node:path';
-import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {parse} from 'yaml';
 import {createProjectFromPlan} from '../src/app/project-bootstrap.mjs';
 import {openNativeProject} from '../src/desktop-adapter/native.mjs';
@@ -493,17 +493,23 @@ export async function checkResourceStates({electron, userData}) {
     projectGit(['remote', 'set-url', 'origin', `https://127.0.0.1:${remoteServer.address().port}/project.git`]);
     // Seed the remote over the local path: pushing to loopback HTTPS would wait for a credential helper.
     projectGit(['push', '--quiet', '--', projectRemote, `${rootBranch}:${rootBranch}`]);
-    /** One new remote commit that rewrites AGENT.md, built directly in the bare repository. */
-    const advanceProjectRemote = (message, content) => {
+    /** One new remote commit that rewrites one file, built directly in the bare repository. */
+    const advanceProjectRemote = (message, path, content) => {
       const env = {...process.env, GIT_DIR: projectRemote, GIT_INDEX_FILE: join(userData, `project-remote-index-${message.replace(/\W+/g, '-')}`)};
       const blob = execFileSync('git', ['--git-dir', projectRemote, 'hash-object', '-w', '--stdin'], {input: content, encoding: 'utf8'}).trim();
       execFileSync('git', ['read-tree', `${rootBranch}^{tree}`], {env});
-      execFileSync('git', ['update-index', '--add', '--cacheinfo', `100644,${blob},AGENT.md`], {env});
+      execFileSync('git', ['update-index', '--add', '--cacheinfo', `100644,${blob},${path}`], {env});
       const tree = execFileSync('git', ['write-tree'], {env, encoding: 'utf8'}).trim();
       const parent = execFileSync('git', ['rev-parse', rootBranch], {env, encoding: 'utf8'}).trim();
       const commit = execFileSync('git', ['-c', 'user.name=Remote', '-c', 'user.email=remote@example.invalid',
         'commit-tree', tree, '-p', parent, '-m', message], {env, encoding: 'utf8'}).trim();
       execFileSync('git', ['update-ref', `refs/heads/${rootBranch}`, commit], {env});
+    };
+    /** Commit the project's own work so the branch has commits the remote does not have. */
+    const commitProjectLocally = (message, path, content) => {
+      writeFileSync(join(root, path), content);
+      projectGit(['add', '-A']);
+      projectGit(['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '-m', message]);
     };
     const assetsSection = locale => `[...document.querySelectorAll('.project-panel section')]
       .find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(locale === 'zh' ? '项目资产' : 'Project assets')})`;
@@ -533,7 +539,7 @@ export async function checkResourceStates({electron, userData}) {
     // A successful check against the real remote is what makes the comparison readable at all.
     await clickRepositoryCheck('检查更新');
     await wait(window, `${repoState('zh')} === '已是最新'`);
-    advanceProjectRemote('remote update', '# updated by the remote\n');
+    advanceProjectRemote('remote update', 'AGENT.md', '# updated by the remote\n');
     await clickRepositoryCheck('检查更新');
     await wait(window, `${repoState('zh')} === '有 1 个新提交'`);
     // The state the user reported: new commits on the remote now come with the action that applies them.
@@ -546,7 +552,7 @@ export async function checkResourceStates({electron, userData}) {
     // A dirty working tree keeps the action visible but disabled, and the dialog says why.
     await project.host.updateShellSettings('locale', {preference: 'en'});
     await wait(window, `Boolean(${assetsSection('en')})`);
-    advanceProjectRemote('remote update two', '# updated by the remote again\n');
+    advanceProjectRemote('remote update two', 'AGENT.md', '# updated by the remote again\n');
     writeFileSync(join(root, 'uncommitted-fixture.txt'), 'local change\n');
     await openRepositoryDetails('en');
     await clickRepositoryCheck('Check for updates');
@@ -571,6 +577,55 @@ export async function checkResourceStates({electron, userData}) {
     await closeRepositoryDetails();
     await project.host.updateShellSettings('locale', {preference: 'zh'});
     await wait(window, `document.body.textContent.includes('项目资产')`);
+
+    // --- A diverged project repository: merge it when it is clean, hand a conflict to a conversation ---
+    // Both sides gain a commit, but in different files, so the merge needs no decision at all.
+    await openRepositoryDetails('zh');
+    commitProjectLocally('chore(project): local only', 'local-only.txt', 'local work\n');
+    advanceProjectRemote('remote only', 'remote-only.txt', 'remote work\n');
+    await clickRepositoryCheck('检查更新');
+    await wait(window, `${repoState('zh')} === '分支已分叉'`);
+    assert.equal(await evaluate(window, `${dialogButton('更新资源')}?.disabled`), false, 'a diverged branch must offer the merge');
+    const divergedHead = projectGit(['rev-parse', 'HEAD']);
+    await evaluate(window, `${dialogButton('更新资源')}.click()`);
+    // A clean merge completes in place: the panel stays open and the branch is ahead, not diverged.
+    await wait(window, `${repoState('zh')} === '本地领先 2 个提交'`);
+    await waitGit(() => projectGit(['rev-parse', 'HEAD^2']), projectGit(['rev-parse', 'origin/' + rootBranch]));
+    assert.notEqual(projectGit(['rev-parse', 'HEAD']), divergedHead);
+    assert.equal(projectGit(['rev-parse', 'HEAD^1']), divergedHead);
+    assert.equal(readFileSync(join(root, 'local-only.txt'), 'utf8'), 'local work\n');
+    assert.equal(readFileSync(join(root, 'remote-only.txt'), 'utf8'), 'remote work\n');
+    assert.equal(projectGit(['status', '--porcelain']), '');
+    assert.equal(await evaluate(window, `Boolean(${assetsSection('zh')})`), true, 'a clean merge must not open a conversation');
+    writeFileSync(join(userData, 'project-assets-merged.png'), (await window.webContents.capturePage()).toPNG());
+    await closeRepositoryDetails();
+
+    // Now both sides rewrite the same file: the update must change nothing and open a prepared conversation.
+    await openRepositoryDetails('zh');
+    commitProjectLocally('docs(project): local line', 'AGENT.md', '# local line\n');
+    advanceProjectRemote('remote line', 'AGENT.md', '# remote line\n');
+    await clickRepositoryCheck('检查更新');
+    await wait(window, `${repoState('zh')} === '分支已分叉'`);
+    const conflictHead = projectGit(['rev-parse', 'HEAD']);
+    await evaluate(window, `${dialogButton('更新资源')}.click()`);
+    // The conflicting paths become the draft of a brand-new session the panel opens for the user.
+    await wait(window, `Boolean(document.querySelector('[contenteditable=true]'))`);
+    const conflictDraft = String(await evaluate(window, `document.querySelector('[contenteditable=true]')?.innerText ?? ''`));
+    assert.equal(conflictDraft.includes('AGENT.md'), true, `the prepared draft must name the conflicting file: ${conflictDraft}`);
+    assert.equal(conflictDraft.includes(root), true, 'the prepared draft must name the project root');
+    assert.equal(conflictDraft.includes(projectGit(['rev-parse', '--abbrev-ref', 'HEAD'])), true,
+      'the prepared draft must name the branch');
+    writeFileSync(join(userData, 'project-assets-conflict.png'), (await window.webContents.capturePage()).toPNG());
+    // Nothing was applied: same HEAD, no merge in progress, and the conflict never reaches the worktree.
+    assert.equal(projectGit(['rev-parse', 'HEAD']), conflictHead);
+    assert.equal(existsSync(join(root, '.git', 'MERGE_HEAD')), false);
+    assert.equal(projectGit(['status', '--porcelain']), '');
+    assert.equal(readFileSync(join(root, 'AGENT.md'), 'utf8'), '# local line\n');
+
+    // The overview is where the resource pass below expects to start.
+    window.setSize(1180, 820); await frame(window);
+    await click(window, '资源');
+    await wait(window, `document.querySelector('.project-panel h1')?.textContent === '资源'`);
 
     // Empty resource pages/counts still exclude the retained root binding.
     for (const id of ['backend', 'web']) {
