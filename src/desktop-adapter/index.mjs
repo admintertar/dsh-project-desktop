@@ -11,6 +11,16 @@ import {assertProjectRecoveryComplete} from './stable/recovery.mjs';
 import {safeHostEnvironment} from './stable/safe-mode.mjs';
 import {projectProfiles} from './stable/project-profiles.mjs';
 
+// The boot RPC is the only long-running operation on this channel: it covers
+// Profile takeover, first-time dependency materialization (the pinned official
+// materializer allows that pnpm install 120s) and the whole official plugin
+// tree. Leaving it on the generic control-call budget reported a normal cold
+// start as 'DSH Host call cancelled or timed out' while pnpm was still running.
+const HOST_BOOT_TIMEOUT_MS = 300_000;
+// Finishing the Host entry's module graph is a cold-start cost as well, and it
+// is unrelated to the boot budget above; keep the two waits separable.
+const HOST_READY_TIMEOUT_MS = 120_000;
+
 /** One supervisor, with Node transport for headless checks and UtilityProcess for the app. */
 export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit}) {
   verifyRuntimeDependencies();
@@ -71,7 +81,7 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
     rpc?.close('Project Host stopped');
   })().catch(error => {stopped = undefined; throw error});
   try {
-    const [message] = await Promise.race([once(child, 'message', {signal: AbortSignal.timeout(30000)}),
+    const [message] = await Promise.race([once(child, 'message', {signal: AbortSignal.timeout(HOST_READY_TIMEOUT_MS)}),
       exited.then(() => {throw new Error('Host exited before becoming ready')})]);
     if (!message?.ready) throw new Error('Host worker did not become ready');
     rpc = new HostRpc({send: data => child.send(data), listen: receive => {
@@ -89,7 +99,7 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
     rpc.handle('project:windows:list', () => windows.list?.() ?? [{id: manifestPath, title: projectRoot, current: true}]);
     rpc.handle('project:windows:open', () => windows.open?.());
     rpc.handle('project:windows:focus', ([id]) => windows.focus?.(id));
-    const result = await rpc.call('boot', [{manifestPath, stateDirectory, homeDir, safeMode, profileName}, runtimeSnapshot(runtime), randomBytes(32).toString('base64url')]);
+    const result = await rpc.call('boot', [{manifestPath, stateDirectory, homeDir, safeMode, profileName}, runtimeSnapshot(runtime), randomBytes(32).toString('base64url')], undefined, HOST_BOOT_TIMEOUT_MS);
     if (!specification) throw new Error('Official Host did not register its renderer');
     const headers = {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value};
     const auth = await fetch(specification.authenticationUrl, {headers, redirect: 'manual'});
