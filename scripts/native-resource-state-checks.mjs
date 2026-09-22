@@ -215,6 +215,11 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `[...(${section}?.querySelectorAll('button') ?? [])]
       .find(item => item.textContent.trim() === ${JSON.stringify(copy.clear)})?.disabled === false`);
     assert.equal(await evaluate(window, `${submit}?.disabled`), true);
+    // Refreshing the snapshot must not re-tick what the user just cleared.
+    await evaluate(window, `[...(${section}?.querySelectorAll('.project-card-top > button') ?? [])][0]?.click()`);
+    await frame(window);
+    await wait(window, `Boolean(${section}?.querySelector('.project-change-card'))`);
+    assert.equal(await evaluate(window, `${submit}?.disabled`), true);
     await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.click()`);
     await frame(window);
     // The adaptation keeps native keyboard semantics: focus the checkbox and press Space twice.
