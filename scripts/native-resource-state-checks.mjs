@@ -80,17 +80,14 @@ export async function checkResourceStates({electron, userData}) {
   // is open, which adds a second "Skills" card and made position-based lookup flaky (Windows CI).
   writeFileSync(join(root, 'skills', 'index.yaml'),
     'schemaVersion: 1\nskills:\n  review-fixture:\n    enabled: true\n');
-  // Disabled, so the MCP runtime never starts a process during the check. Two declarations share the
-  // legacy file and a third lives in its own file, so the review must keep them apart.
-  writeFileSync(join(root, 'mcp', 'servers.yaml'),
-    'schemaVersion: 1\nservers:\n  - id: review-fixture\n    serverName: review-fixture\n    enabled: false\n'
-    + '    toolCallTimeoutMs: 30000\n    transport: stdio\n    command: node\n    args: []\n'
-    + '  - id: review-second\n    serverName: review-second\n    enabled: false\n'
-    + '    toolCallTimeoutMs: 30000\n    transport: stdio\n    command: node\n    args: []\n');
+  // Disabled, so the MCP runtime never starts a process during the check. Every declaration owns a
+  // file of its own, which is what lets the review commit one server without dragging the others.
   mkdirSync(join(root, 'mcp', 'servers'), {recursive: true});
-  writeFileSync(join(root, 'mcp', 'servers', 'review-own.yaml'),
-    'id: review-own\nserverName: review-own\nenabled: false\ntoolCallTimeoutMs: 30000\n'
-    + 'transport: stdio\ncommand: node\nargs: []\n');
+  for (const name of ['review-fixture', 'review-second', 'review-own']) {
+    writeFileSync(join(root, 'mcp', 'servers', `${name}.yaml`),
+      `id: ${name}\nserverName: ${name}\nenabled: false\ntoolCallTimeoutMs: 30000\n`
+      + 'transport: stdio\ncommand: node\nargs: []\n');
+  }
   writeFileSync(join(root, 'AGENT.md'), '# review fixture\n');
   // Windows pins the browse directory-picker backend, so the panel asks the Desktop runtime for a
   // directory instead of the native seam. Replace only the OS chooser, through a prototype overlay
