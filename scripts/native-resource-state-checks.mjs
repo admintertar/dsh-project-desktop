@@ -46,6 +46,38 @@ export async function checkResourceStates({electron, userData}) {
   const manifest = await createProjectFromPlan({location: userData, name: 'Resource states', templateId: 'fullstack'});
   const root = dirname(manifest), backend = join(root, 'resources/Resource states-backend');
   const git = (args, cwd = backend) => execFileSync('git', args, {cwd, encoding: 'utf8', stdio: 'pipe'}).trim();
+  // The project root itself is a Git working tree. The overview's project-repository block is the
+  // only surface that manages it, and the resource list must keep excluding it.
+  const projectGit = args => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
+  projectGit(['init', '-b', 'main']);
+  projectGit(['config', 'user.name', 'Fixture']);
+  projectGit(['config', 'user.email', 'fixture@example.invalid']);
+  projectGit(['add', '-A']);
+  projectGit(['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '-m', 'project fixture']);
+  projectGit(['remote', 'add', 'origin', 'https://example.invalid/project.git']);
+  // A real upstream makes "ahead" computable, so the push action is exercised rather than absent.
+  projectGit(['update-ref', 'refs/remotes/origin/main', projectGit(['rev-parse', 'HEAD'])]);
+  projectGit(['config', 'branch.main.remote', 'origin']);
+  projectGit(['config', 'branch.main.merge', 'refs/heads/main']);
+  // Project assets the review must find: a new task, a new Skill, an MCP declaration and a changed file.
+  // A non-ASCII directory name proves Git's C-quoting never reaches the review.
+  mkdirSync(join(root, 'tasks', '中文验收样例'), {recursive: true});
+  writeFileSync(join(root, 'tasks', '中文验收样例', 'task.md'),
+    '---\nschemaVersion: 3\ndirectory: 中文验收样例\nid: task-00000000-0000-4000-8000-000000000000\n'
+    + 'title: Native review fixture\nobjective: Prove the project change review groups assets.\nstatus: active\n'
+    + 'createdAt: 2026-01-01T00:00:00.000Z\nupdatedAt: 2026-01-01T00:00:00.000Z\n'
+    + 'archived: false\nartifacts: []\nreferences: []\nentries: []\noperations: {}\n---\n\n# Native review fixture\n');
+  // The task asset owns its whole directory: the record and one attachment arrive as one card.
+  mkdirSync(join(root, 'tasks', '中文验收样例', 'artifacts'), {recursive: true});
+  writeFileSync(join(root, 'tasks', '中文验收样例', 'artifacts', 'evidence.md'), '# evidence\n');
+  mkdirSync(join(root, 'skills', 'review-fixture'), {recursive: true});
+  writeFileSync(join(root, 'skills', 'review-fixture', 'SKILL.md'),
+    '---\nname: review-fixture\ndescription: Review fixture skill\n---\nUse this skill.\n');
+  // Disabled, so the MCP runtime never starts a process during the check.
+  writeFileSync(join(root, 'mcp', 'servers.yaml'),
+    'schemaVersion: 1\nservers:\n  - id: review-fixture\n    serverName: review-fixture\n    enabled: false\n'
+    + '    toolCallTimeoutMs: 30000\n    transport: stdio\n    command: node\n    args: []\n');
+  writeFileSync(join(root, 'AGENT.md'), '# review fixture\n');
   // Windows pins the browse directory-picker backend, so the panel asks the Desktop runtime for a
   // directory instead of the native seam. Replace only the OS chooser, through a prototype overlay
   // that leaves every other Electron face untouched: the Host, the runtime RPC bridge, the panel and
@@ -67,6 +99,146 @@ export async function checkResourceStates({electron, userData}) {
   window.setMinimumSize(420, 460);
   const measurements = [];
   let remoteServer;
+  /**
+   * The overview reviews project assets, not repository files: a changed task, Skill, memory
+   * document or MCP declaration becomes a row the user decides to commit. Live DOM, never pixels.
+   */
+  const assertProjectChanges = async (locale, theme, width) => {
+    const copy = locale === 'zh'
+      ? {section: '项目资产', task: '任务', skill: '技能', mcp: 'MCP', file: '其他文件', clear: '清空', commit: '提交所选'}
+      : {section: 'Project assets', task: 'Tasks', skill: 'Skills', mcp: 'MCP', file: 'Other files', clear: 'Clear', commit: 'Commit'};
+    const section = `[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(copy.section)})`;
+    const group = kind => `[...(${section}?.querySelectorAll('.project-change-group') ?? [])].find(item => item.querySelector('h3')?.textContent === ${JSON.stringify(kind)})`;
+    const row = kind => `${group(kind)}?.querySelector('.project-change-card')`;
+    await wait(window, `Boolean(${group(copy.task)}?.querySelector('.project-change-card'))`);
+    // Each kind is its own group, and a task is named by its record title, not its directory.
+    assert.equal(await evaluate(window, `${row(copy.task)}?.querySelector('.project-change-name')?.textContent`), 'Native review fixture');
+    // The directory arrives decoded: no octal escapes and no surrounding quotes.
+    assert.equal(await evaluate(window, `${row(copy.task)}?.querySelector('.project-change-path')?.textContent`), 'tasks/中文验收样例');
+    // One asset can own several files; the card says how many it would commit.
+    assert.equal(await evaluate(window, `${row(copy.task)}?.textContent.includes(${JSON.stringify(locale === 'zh' ? '2 个文件' : '2 files')})`), true);
+    assert.equal(await evaluate(window, `${row(copy.skill)}?.querySelector('.project-change-name')?.textContent`), 'review-fixture');
+    assert.equal(await evaluate(window, `Boolean(${row(copy.mcp)})`), true);
+    assert.equal(await evaluate(window, `Boolean(${row(copy.file)})`), true);
+    // Project assets are selected by default; unrecognized files are not.
+    assert.equal(await evaluate(window, `Boolean(${row(copy.task)}?.querySelector('input[type=checkbox]')?.checked)`), true);
+    assert.equal(await evaluate(window, `Boolean(${row(copy.file)}?.querySelector('input[type=checkbox]')?.checked)`), false);
+    // Branch and sync state share the title's line whenever the panel is wide enough; a narrow panel
+    // legitimately wraps them below it. Font sizes differ, so compare vertical spans, not tops.
+    if (width >= 700) {
+      const heading = await evaluate(window, `(() => {const item=${section};
+        const box=selector => {const node=item.querySelector(selector); if (!node) return undefined; const r=node.getBoundingClientRect();
+          return {top: Math.round(r.top), bottom: Math.round(r.bottom)};};
+        return {title: box('.project-change-title h2'), branch: box('.project-change-title .project-resource-branch'),
+          tag: box('.project-change-title [data-tone]')};})()`);
+      const center = box => Math.round((box.top + box.bottom) / 2);
+      assert.equal(Math.abs(center(heading.title) - center(heading.branch)) <= 3, true,
+        `branch not vertically centred with the title: ${JSON.stringify(heading)}`);
+      assert.equal(Math.abs(center(heading.title) - center(heading.tag)) <= 3, true,
+        `sync state not vertically centred with the title: ${JSON.stringify(heading)}`);
+    }
+    // The section refresh mirrors the panel header's refresh control, icon included.
+    assert.equal(await evaluate(window, `Boolean(document.querySelector('.project-panel-actions button svg'))`), true);
+    assert.equal(await evaluate(window, `Boolean(${section}.querySelector('.project-card-top button svg'))`), true);
+    // Pushing is a repository action: the section itself offers checking and details only.
+    const pushLabel = locale === 'zh' ? '推送' : 'Push';
+    assert.equal(await evaluate(window, `[...(${section}?.querySelectorAll('button') ?? [])]
+      .some(item => item.textContent.trim().startsWith(${JSON.stringify(pushLabel)}))`), false);
+    // The repository state is the entry point: it opens the details, where the actions live.
+    await evaluate(window, `${section}.querySelector('.project-change-repository')?.click()`);
+    await wait(window, `Boolean(document.querySelector('.project-resource-details'))`);
+    // Actions live in the dialog footer, so read the whole dialog rather than its body region.
+    const dialog = `[...document.querySelectorAll('[role=dialog]')].find(item => item.querySelector('.project-resource-details'))`;
+    const repoCopy = locale === 'zh' ? ['检查更新', '目录'] : ['Check for updates', 'Directory'];
+    for (const label of repoCopy) {
+      assert.equal(await evaluate(window, `${dialog}?.textContent.includes(${JSON.stringify(label)})`), true,
+        `repository details missing ${label}`);
+    }
+    await evaluate(window, `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+    await wait(window, `!document.querySelector('.project-resource-details')`);
+    writeFileSync(join(userData, `project-changes-${locale}-${theme}-${width}.png`), (await window.webContents.capturePage()).toPNG());
+    // The block never widens the window, at either width. Measure the existing Resources block too:
+    // both sections share the overview's layout, so a narrow-window squeeze is not this block's.
+    const layout = await evaluate(window, `(() => {
+      const section=${section};
+      const resources=[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(locale === 'zh' ? '资源' : 'Resources')});
+      const rows=[...section.querySelectorAll('.project-change-card')].map(item => item.getBoundingClientRect());
+      const measure=item => item ? {scrollWidth: item.scrollWidth, clientWidth: item.clientWidth} : null;
+      return {bodyOverflow: document.body.scrollWidth > innerWidth, innerWidth,
+        rowLeft: Math.round(Math.min(...rows.map(item => item.left))), rowRight: Math.round(Math.max(...rows.map(item => item.right))),
+        changes: measure(section), resources: measure(resources)};})()`);
+    assert.equal(layout.bodyOverflow, false, `project changes overflow ${locale}/${theme}/${width}: ${JSON.stringify(layout)}`);
+    assert.equal(layout.rowLeft >= -1 && layout.rowRight <= layout.innerWidth + 1, true,
+      `project change rows outside the viewport ${locale}/${theme}/${width}: ${JSON.stringify(layout)}`);
+    measurements.push({locale, theme, width, changes: layout});
+    // Run the selection and the commit once, on the last pass, so earlier passes still see every asset.
+    if (locale === 'zh' && theme === 'dark' && width === 420) await assertProjectCommit();
+  };
+  /** Select one asset, watch the message follow the selection, commit it and verify Git and the review. */
+  const assertProjectCommit = async () => {
+    const copy = {section: '项目资产', task: '任务', skill: '技能', clear: '清空', commit: '提交所选'};
+    window.setSize(1180, 820); await frame(window);
+    const section = `[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(copy.section)})`;
+    const group = kind => `[...(${section}?.querySelectorAll('.project-change-group') ?? [])].find(item => item.querySelector('h3')?.textContent === ${JSON.stringify(kind)})`;
+    const row = kind => `${group(kind)}?.querySelector('.project-change-card')`;
+    const toggle = kind => `${row(kind)}?.querySelector('input[type=checkbox]')`;
+    const submit = `[...(${section}?.querySelectorAll('button') ?? [])].find(item => item.textContent.trim().startsWith(${JSON.stringify(copy.commit)}))`;
+    const plan = `(${submit}?.getAttribute('aria-description') ?? '').split('\\n').filter(Boolean)`;
+    // Clear, then select the task: the plan follows the selection.
+    await evaluate(window, `[...(${section}?.querySelectorAll('button') ?? [])].find(item => item.textContent.trim() === ${JSON.stringify(copy.clear)})?.click()`);
+    await frame(window);
+    // Toolbar must be usable even while the automatic check is in flight.
+    await wait(window, `[...(${section}?.querySelectorAll('button') ?? [])]
+      .find(item => item.textContent.trim() === ${JSON.stringify(copy.clear)})?.disabled === false`);
+    assert.equal(await evaluate(window, `${submit}?.disabled`), true);
+    await evaluate(window, `${toggle(copy.task)}.click()`);
+    await frame(window);
+    // The adaptation keeps native keyboard semantics: focus the checkbox and press Space twice.
+    await evaluate(window, `${toggle(copy.task)}.focus()`);
+    window.focus(); await frame(window);
+    const press = () => {
+      window.webContents.sendInputEvent({type: 'keyDown', keyCode: 'Space'});
+      window.webContents.sendInputEvent({type: 'char', keyCode: ' '});
+      window.webContents.sendInputEvent({type: 'keyUp', keyCode: 'Space'});
+    };
+    press(); await frame(window);
+    assert.equal(await evaluate(window, `${toggle(copy.task)}.checked`), false);
+    // One real Space already proved the keyboard semantics; restore the selection with a click,
+    // because a second synthetic key press is occasionally dropped by the hidden window.
+    await evaluate(window, `${toggle(copy.task)}.click()`);
+    await frame(window);
+    assert.equal(await evaluate(window, `${toggle(copy.task)}.checked`), true);
+    assert.deepEqual(await evaluate(window, plan), ['feat(task): 收录「Native review fixture」']);
+    // A second asset joins the plan: two assets, two commits, not one mixed changeset.
+    await evaluate(window, `${toggle(copy.skill)}.click()`);
+    await frame(window);
+    assert.deepEqual(await evaluate(window, plan),
+      ['feat(task): 收录「Native review fixture」', 'feat(skills): 新增技能 review-fixture']);
+    writeFileSync(join(userData, 'project-changes-selection.png'), (await window.webContents.capturePage()).toPNG());
+    // The plan appears from the submit button's tooltip; the window must be visible to receive hover.
+    window.show(); window.focus(); await frame(window);
+    const submitBox = await evaluate(window, `(() => {const r=${submit}.getBoundingClientRect();
+      return {x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2)};})()`);
+    window.webContents.sendInputEvent({type: 'mouseMove', x: submitBox.x, y: submitBox.y});
+    await wait(window, `document.body.textContent.includes('feat(skills): 新增技能 review-fixture')`);
+    writeFileSync(join(userData, 'project-changes-plan-tooltip.png'), (await window.webContents.capturePage()).toPNG());
+    await evaluate(window, `${submit}?.click()`);
+    // Both assets leave the review; the unselected MCP and file changes stay.
+    await wait(window, `![...${section}.querySelectorAll('.project-change-group')].some(item => item.querySelector('h3')?.textContent === ${JSON.stringify(copy.task)})`);
+    await wait(window, `![...${section}.querySelectorAll('.project-change-group')].some(item => item.querySelector('h3')?.textContent === ${JSON.stringify(copy.skill)})`);
+    assert.deepEqual(projectGit(['log', '-2', '--pretty=%s']).split('\n'),
+      ['feat(skills): 新增技能 review-fixture', 'feat(task): 收录「Native review fixture」']);
+    const latest = projectGit(['-c', 'core.quotePath=false', 'show', '--name-only', '--pretty=format:', 'HEAD']).split('\n').filter(Boolean);
+    const earlier = projectGit(['-c', 'core.quotePath=false', 'show', '--name-only', '--pretty=format:', 'HEAD~1']).split('\n').filter(Boolean);
+    assert.equal(latest.length > 0 && latest.every(name => name.startsWith('skills/')), true, `skill commit contents: ${JSON.stringify(latest)}`);
+    assert.equal(earlier.length > 0 && earlier.every(name => name.startsWith('tasks/')), true, `task commit contents: ${JSON.stringify(earlier)}`);
+    assert.equal(projectGit(['status', '--porcelain']).includes('AGENT.md'), true);
+    // Two local commits now sit ahead of the upstream; pushing is offered in the details, not here.
+    assert.equal(projectGit(['rev-list', '--count', '@{u}..HEAD']).trim(), '2');
+    assert.equal(await evaluate(window, `[...(${section}?.querySelectorAll('button') ?? [])]
+      .some(item => item.textContent.trim().startsWith('推送'))`), false);
+    writeFileSync(join(userData, 'project-changes-after-commit.png'), (await window.webContents.capturePage()).toPNG());
+  };
   try {
     window.showInactive();
     await project.host.updateShellSettings('locale', {preference: 'en'});
@@ -81,6 +253,15 @@ export async function checkResourceStates({electron, userData}) {
       const labels = locale === 'zh' ? {resources: '资源', link: '关联远端', state: '需要关联远端', check: '检查更新', overview: '项目概览'}
         : {resources: 'Resources', link: 'Link remote', state: 'Link a remote', check: 'Check for updates', overview: 'Project'};
       await wait(window, `document.body.hasAttribute('data-ds-dark-theme') === ${theme === 'dark'}`);
+      // The project repository lives on the overview, so check it there before the resource pass.
+      await click(window, locale === 'zh' ? '项目概览' : 'Project overview');
+      await wait(window, `document.querySelector('.project-panel h1')?.textContent === 'Resource states'`);
+      await assertProjectChanges(locale, theme, 1180);
+      window.setSize(420, 820); await frame(window);
+      await wait(window, `Math.abs(innerWidth - 420) <= 2`);
+      await assertProjectChanges(locale, theme, 420);
+      window.setSize(1180, 820); await frame(window);
+      await click(window, labels.resources);
       await wait(window, `document.querySelector('.project-panel h1')?.textContent === ${JSON.stringify(labels.resources)}`);
       await wait(window, `document.querySelectorAll('.project-resource-card').length === 2`);
       assert.deepEqual(await evaluate(window, `[...document.querySelectorAll('.project-resource-sync-label')].map(item => item.textContent)`), [labels.state, labels.state]);
@@ -164,7 +345,9 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `!document.querySelector('[role=dialog]')`);
     assert.equal(git(['remote', 'get-url', 'origin']), remoteUrl);
     assert.equal(git(['config', `branch.${branch}.merge`]), `refs/heads/${branch}`);
-    assert.equal(git(['remote'], root), '');
+    // Associating a resource remote never touches the project root's own remote.
+    assert.equal(git(['remote'], root), 'origin');
+    assert.equal(projectGit(['remote', 'get-url', 'origin']), 'https://example.invalid/project.git');
     assert.equal(readFileSync(join(backend, 'AGENT.md'), 'utf8'), original);
     assert.equal(parse(readFileSync(manifest, 'utf8')).resources[1].url, remoteUrl);
     // A real check must succeed before the card offers any action at all.
