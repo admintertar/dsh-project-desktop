@@ -56,9 +56,12 @@ export async function checkResourceStates({electron, userData}) {
   projectGit(['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '-m', 'project fixture']);
   projectGit(['remote', 'add', 'origin', 'https://example.invalid/project.git']);
   // A real upstream makes "ahead" computable, so the push action is exercised rather than absent.
-  projectGit(['update-ref', 'refs/remotes/origin/main', projectGit(['rev-parse', 'HEAD'])]);
-  projectGit(['config', 'branch.main.remote', 'origin']);
-  projectGit(['config', 'branch.main.merge', 'refs/heads/main']);
+  // The host creates the project root before this fixture runs, so take the branch it is actually on:
+  // `git init -b main` above only takes effect for a fresh directory (CI uses the default `master`).
+  const rootBranch = projectGit(['symbolic-ref', '--short', 'HEAD']);
+  projectGit(['update-ref', `refs/remotes/origin/${rootBranch}`, projectGit(['rev-parse', 'HEAD'])]);
+  projectGit(['config', `branch.${rootBranch}.remote`, 'origin']);
+  projectGit(['config', `branch.${rootBranch}.merge`, `refs/heads/${rootBranch}`]);
   // Project assets the review must find: a new task, a new Skill, an MCP declaration and a changed file.
   // A non-ASCII directory name proves Git's C-quoting never reaches the review.
   mkdirSync(join(root, 'tasks', '中文验收样例'), {recursive: true});
