@@ -166,18 +166,19 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
   }, []);
 
   useEffect(() => {
-    const frame = document.querySelector('.dshDesktopFrame');
-    if (!frame) return undefined;
+    const surface = document.querySelector('.dshDesktopSidebarSurface');
+    if (!surface) return undefined;
     const read = () => {
-      const column = getComputedStyle(frame).gridTemplateColumns.split(/\s+/)[0];
-      const parsed = Number.parseFloat(column);
-      if (Number.isFinite(parsed)) setSidebarWidth(parsed);
+      const width = surface.getBoundingClientRect().width;
+      // The collapsed rail (56px) also passes through here while the sidebar animates; ignore it
+      // and keep the last expanded width, otherwise the cap sticks at the rail size and a short
+      // project name gets truncated even in a maximised window.
+      if (width > 100) setSidebarWidth(width);
     };
     read();
-    const observer = new MutationObserver(read);
-    observer.observe(frame, {attributes: true, attributeFilter: ['style']});
-    window.addEventListener('resize', read);
-    return () => {observer.disconnect(); window.removeEventListener('resize', read)};
+    const observer = new ResizeObserver(read);
+    observer.observe(surface);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
