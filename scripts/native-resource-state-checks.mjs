@@ -73,6 +73,10 @@ export async function checkResourceStates({electron, userData}) {
   mkdirSync(join(root, 'skills', 'review-fixture'), {recursive: true});
   writeFileSync(join(root, 'skills', 'review-fixture', 'SKILL.md'),
     '---\nname: review-fixture\ndescription: Review fixture skill\n---\nUse this skill.\n');
+  // Declare the Skill up front: otherwise the Skill service rewrites this index while the project
+  // is open, which adds a second "Skills" card and made position-based lookup flaky (Windows CI).
+  writeFileSync(join(root, 'skills', 'index.yaml'),
+    'schemaVersion: 1\nskills:\n  review-fixture:\n    enabled: true\n');
   // Disabled, so the MCP runtime never starts a process during the check.
   writeFileSync(join(root, 'mcp', 'servers.yaml'),
     'schemaVersion: 1\nservers:\n  - id: review-fixture\n    serverName: review-fixture\n    enabled: false\n'
@@ -110,21 +114,25 @@ export async function checkResourceStates({electron, userData}) {
     const section = `[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(copy.section)})`;
     const group = kind => `[...(${section}?.querySelectorAll('.project-change-group') ?? [])].find(item => item.querySelector('h3')?.textContent === ${JSON.stringify(kind)})`;
     const row = kind => `${group(kind)}?.querySelector('.project-change-card')`;
+    // Look a card up by its asset name: a group can hold more than one card, so position is not identity.
+    const cardNamed = (kind, name) => `[...(${group(kind)}?.querySelectorAll('.project-change-card') ?? [])]
+      .find(card => card.querySelector('.project-change-name')?.textContent === ${JSON.stringify(name)})`;
     // One diagnostic line per pass: which overview sections rendered at all.
     console.log('overview sections:', await evaluate(window,
       `JSON.stringify([...document.querySelectorAll('.project-panel section')].map(item => item.querySelector('h2')?.textContent ?? '(no h2)'))`));
     await wait(window, `Boolean(${group(copy.task)}?.querySelector('.project-change-card'))`);
     // Each kind is its own group, and a task is named by its record title, not its directory.
-    assert.equal(await evaluate(window, `${row(copy.task)}?.querySelector('.project-change-name')?.textContent`), 'Native review fixture');
+    const task = cardNamed(copy.task, 'Native review fixture');
+    assert.equal(await evaluate(window, `Boolean(${task})`), true);
     // The directory arrives decoded: no octal escapes and no surrounding quotes.
-    assert.equal(await evaluate(window, `${row(copy.task)}?.querySelector('.project-change-path')?.textContent`), 'tasks/中文验收样例');
+    assert.equal(await evaluate(window, `${task}?.querySelector('.project-change-path')?.textContent`), 'tasks/中文验收样例');
     // One asset can own several files; the card says how many it would commit.
-    assert.equal(await evaluate(window, `${row(copy.task)}?.textContent.includes(${JSON.stringify(locale === 'zh' ? '2 个文件' : '2 files')})`), true);
-    assert.equal(await evaluate(window, `${row(copy.skill)}?.querySelector('.project-change-name')?.textContent`), 'review-fixture');
+    assert.equal(await evaluate(window, `${task}?.textContent.includes(${JSON.stringify(locale === 'zh' ? '2 个文件' : '2 files')})`), true);
+    assert.equal(await evaluate(window, `Boolean(${cardNamed(copy.skill, 'review-fixture')})`), true);
     assert.equal(await evaluate(window, `Boolean(${row(copy.mcp)})`), true);
     assert.equal(await evaluate(window, `Boolean(${row(copy.file)})`), true);
     // Project assets are selected by default; unrecognized files are not.
-    assert.equal(await evaluate(window, `Boolean(${row(copy.task)}?.querySelector('input[type=checkbox]')?.checked)`), true);
+    assert.equal(await evaluate(window, `Boolean(${task}?.querySelector('input[type=checkbox]')?.checked)`), true);
     assert.equal(await evaluate(window, `Boolean(${row(copy.file)}?.querySelector('input[type=checkbox]')?.checked)`), false);
     // Branch and sync state share the title's line whenever the panel is wide enough; a narrow panel
     // legitimately wraps them below it. Font sizes differ, so compare vertical spans, not tops.
@@ -194,8 +202,10 @@ export async function checkResourceStates({electron, userData}) {
     window.setSize(1180, 820); await frame(window);
     const section = `[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(copy.section)})`;
     const group = kind => `[...(${section}?.querySelectorAll('.project-change-group') ?? [])].find(item => item.querySelector('h3')?.textContent === ${JSON.stringify(kind)})`;
-    const row = kind => `${group(kind)}?.querySelector('.project-change-card')`;
-    const toggle = kind => `${row(kind)}?.querySelector('input[type=checkbox]')`;
+    // Asset name is the identity: a group may hold more than one card (e.g. the Skill index).
+    const cardNamed = (kind, name) => `[...(${group(kind)}?.querySelectorAll('.project-change-card') ?? [])]
+      .find(card => card.querySelector('.project-change-name')?.textContent === ${JSON.stringify(name)})`;
+    const toggleNamed = (kind, name) => `${cardNamed(kind, name)}?.querySelector('input[type=checkbox]')`;
     const submit = `[...(${section}?.querySelectorAll('button') ?? [])].find(item => item.textContent.trim().startsWith(${JSON.stringify(copy.commit)}))`;
     const plan = `(${submit}?.getAttribute('aria-description') ?? '').split('\\n').filter(Boolean)`;
     // Clear, then select the task: the plan follows the selection.
@@ -205,10 +215,10 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `[...(${section}?.querySelectorAll('button') ?? [])]
       .find(item => item.textContent.trim() === ${JSON.stringify(copy.clear)})?.disabled === false`);
     assert.equal(await evaluate(window, `${submit}?.disabled`), true);
-    await evaluate(window, `${toggle(copy.task)}.click()`);
+    await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.click()`);
     await frame(window);
     // The adaptation keeps native keyboard semantics: focus the checkbox and press Space twice.
-    await evaluate(window, `${toggle(copy.task)}.focus()`);
+    await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.focus()`);
     window.focus(); await frame(window);
     const press = () => {
       window.webContents.sendInputEvent({type: 'keyDown', keyCode: 'Space'});
@@ -216,15 +226,15 @@ export async function checkResourceStates({electron, userData}) {
       window.webContents.sendInputEvent({type: 'keyUp', keyCode: 'Space'});
     };
     press(); await frame(window);
-    assert.equal(await evaluate(window, `${toggle(copy.task)}.checked`), false);
+    assert.equal(await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.checked`), false);
     // One real Space already proved the keyboard semantics; restore the selection with a click,
     // because a second synthetic key press is occasionally dropped by the hidden window.
-    await evaluate(window, `${toggle(copy.task)}.click()`);
+    await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.click()`);
     await frame(window);
-    assert.equal(await evaluate(window, `${toggle(copy.task)}.checked`), true);
+    assert.equal(await evaluate(window, `${toggleNamed(copy.task, 'Native review fixture')}.checked`), true);
     assert.deepEqual(await evaluate(window, plan), ['feat(task): 收录「Native review fixture」']);
     // A second asset joins the plan: two assets, two commits, not one mixed changeset.
-    await evaluate(window, `${toggle(copy.skill)}.click()`);
+    await evaluate(window, `${toggleNamed(copy.skill, 'review-fixture')}.click()`);
     await frame(window);
     assert.deepEqual(await evaluate(window, plan),
       ['feat(task): 收录「Native review fixture」', 'feat(skills): 新增技能 review-fixture']);
@@ -238,8 +248,9 @@ export async function checkResourceStates({electron, userData}) {
     writeFileSync(join(userData, 'project-changes-plan-tooltip.png'), (await window.webContents.capturePage()).toPNG());
     await evaluate(window, `${submit}?.click()`);
     // Both assets leave the review; the unselected MCP and file changes stay.
-    await wait(window, `![...${section}.querySelectorAll('.project-change-group')].some(item => item.querySelector('h3')?.textContent === ${JSON.stringify(copy.task)})`);
-    await wait(window, `![...${section}.querySelectorAll('.project-change-group')].some(item => item.querySelector('h3')?.textContent === ${JSON.stringify(copy.skill)})`);
+    // The committed assets leave the review; other cards in the same group may remain.
+    await wait(window, `!${cardNamed(copy.task, 'Native review fixture')}`);
+    await wait(window, `!${cardNamed(copy.skill, 'review-fixture')}`);
     assert.deepEqual(projectGit(['log', '-2', '--pretty=%s']).split('\n'),
       ['feat(skills): 新增技能 review-fixture', 'feat(task): 收录「Native review fixture」']);
     const latest = projectGit(['-c', 'core.quotePath=false', 'show', '--name-only', '--pretty=format:', 'HEAD']).split('\n').filter(Boolean);
