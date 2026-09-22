@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync, spawn} from 'node:child_process';
 import {createServer as createHttpsServer} from 'node:https';
 import {dirname, join} from 'node:path';
-import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {parse} from 'yaml';
 import {createProjectFromPlan} from '../src/app/project-bootstrap.mjs';
 import {openNativeProject} from '../src/desktop-adapter/native.mjs';
@@ -478,6 +478,99 @@ export async function checkResourceStates({electron, userData}) {
     git(['switch', '--quiet', branch]);
     await project.host.updateShellSettings('locale', {preference: 'zh'});
     await wait(window, `document.querySelector('.project-panel h1')?.textContent === '资源'`);
+
+    // --- Project repository update: new remote commits are applied from the overview's details ---
+    // The overview's project-repository block is the only surface that manages the project root, so
+    // its details dialog has to offer the same update a resource card does, under the same rules.
+    projectGit(['add', '-A']);
+    projectGit(['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '--quiet', '-m', 'project fixture assets']);
+    assert.equal(projectGit(['status', '--porcelain']), '');
+    // The loopback Git server already running for the backend resource also serves the project root.
+    projectGit(['config', 'http.sslVerify', 'false']);
+    const projectRemote = join(remoteRoot, 'project.git');
+    execFileSync('git', ['init', '--bare', '--quiet', projectRemote], {stdio: 'pipe'});
+    execFileSync('git', ['--git-dir', projectRemote, 'config', 'http.receivepack', 'true'], {stdio: 'pipe'});
+    projectGit(['remote', 'set-url', 'origin', `https://127.0.0.1:${remoteServer.address().port}/project.git`]);
+    // Seed the remote over the local path: pushing to loopback HTTPS would wait for a credential helper.
+    projectGit(['push', '--quiet', '--', projectRemote, `${rootBranch}:${rootBranch}`]);
+    /** One new remote commit that rewrites AGENT.md, built directly in the bare repository. */
+    const advanceProjectRemote = (message, content) => {
+      const env = {...process.env, GIT_DIR: projectRemote, GIT_INDEX_FILE: join(userData, `project-remote-index-${message.replace(/\W+/g, '-')}`)};
+      const blob = execFileSync('git', ['--git-dir', projectRemote, 'hash-object', '-w', '--stdin'], {input: content, encoding: 'utf8'}).trim();
+      execFileSync('git', ['read-tree', `${rootBranch}^{tree}`], {env});
+      execFileSync('git', ['update-index', '--add', '--cacheinfo', `100644,${blob},AGENT.md`], {env});
+      const tree = execFileSync('git', ['write-tree'], {env, encoding: 'utf8'}).trim();
+      const parent = execFileSync('git', ['rev-parse', rootBranch], {env, encoding: 'utf8'}).trim();
+      const commit = execFileSync('git', ['-c', 'user.name=Remote', '-c', 'user.email=remote@example.invalid',
+        'commit-tree', tree, '-p', parent, '-m', message], {env, encoding: 'utf8'}).trim();
+      execFileSync('git', ['update-ref', `refs/heads/${rootBranch}`, commit], {env});
+    };
+    const assetsSection = locale => `[...document.querySelectorAll('.project-panel section')]
+      .find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(locale === 'zh' ? '项目资产' : 'Project assets')})`;
+    const repoState = locale => `${assetsSection(locale)}?.querySelector('.project-change-title [data-tone]')?.textContent`;
+    const openRepositoryDetails = async locale => {
+      await evaluate(window, `${assetsSection(locale)}?.querySelector('.project-change-repository')?.click()`);
+      await wait(window, `Boolean(document.querySelector('.project-resource-details'))`);
+    };
+    const closeRepositoryDetails = async () => {
+      await evaluate(window, `document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+      await wait(window, `!document.querySelector('.project-resource-details')`);
+    };
+    /** The control reports its own progress, so wait for the idle label before clicking it. */
+    const clickRepositoryCheck = async label => {
+      await wait(window, `Boolean(${dialogButton(label)})`);
+      await evaluate(window, `${dialogButton(label)}.click()`);
+      await frame(window);
+    };
+    const repositoryText = `document.querySelector('.project-resource-details')?.textContent ?? ''`;
+    // The overview owns the project repository; the resource pass left the sidebar on Resources,
+    // and the narrow-window pass above collapsed the navigation, so restore the wide layout first.
+    window.setSize(1180, 820); await frame(window);
+    await wait(window, `Math.abs(innerWidth - 1180) <= 2`);
+    await click(window, '项目概览');
+    await wait(window, `Boolean(${assetsSection('zh')})`);
+    await openRepositoryDetails('zh');
+    // A successful check against the real remote is what makes the comparison readable at all.
+    await clickRepositoryCheck('检查更新');
+    await wait(window, `${repoState('zh')} === '已是最新'`);
+    advanceProjectRemote('remote update', '# updated by the remote\n');
+    await clickRepositoryCheck('检查更新');
+    await wait(window, `${repoState('zh')} === '有 1 个新提交'`);
+    // The state the user reported: new commits on the remote now come with the action that applies them.
+    assert.equal(await evaluate(window, `Boolean(${dialogButton('更新资源')})`), true, 'the overview offers no update for a behind project repository');
+    assert.equal(await evaluate(window, `${dialogButton('更新资源')}.disabled`), false);
+    await evaluate(window, `${dialogButton('更新资源')}.click()`);
+    await wait(window, `${repoState('zh')} === '已是最新'`);
+    await waitGit(() => readFileSync(join(root, 'AGENT.md'), 'utf8'), '# updated by the remote\n');
+    await closeRepositoryDetails();
+    // A dirty working tree keeps the action visible but disabled, and the dialog says why.
+    await project.host.updateShellSettings('locale', {preference: 'en'});
+    await wait(window, `Boolean(${assetsSection('en')})`);
+    advanceProjectRemote('remote update two', '# updated by the remote again\n');
+    writeFileSync(join(root, 'uncommitted-fixture.txt'), 'local change\n');
+    await openRepositoryDetails('en');
+    await clickRepositoryCheck('Check for updates');
+    await wait(window, `${repoState('en')}?.includes('new commits') === true`);
+    assert.equal(await evaluate(window, `Boolean(${dialogButton('Update resource')})`), true);
+    assert.equal(await evaluate(window, `${dialogButton('Update resource')}.disabled`), true, 'local changes must block the fast-forward');
+    assert.equal(String(await evaluate(window, repositoryText)).includes('Commit or otherwise handle local changes'), true);
+    // The extra footer action must not push the dialog past a narrow window.
+    window.setSize(420, 820); await frame(window);
+    await wait(window, `Math.abs(innerWidth - 420) <= 2`);
+    assert.equal(await evaluate(window, `(() => {const dialog=document.querySelector('[role=dialog]');
+      return dialog.scrollWidth > dialog.clientWidth || document.body.scrollWidth > innerWidth;})()`), false);
+    writeFileSync(join(userData, 'project-assets-update-blocked.png'), (await window.webContents.capturePage()).toPNG());
+    window.setSize(1180, 820); await frame(window);
+    rmSync(join(root, 'uncommitted-fixture.txt'));
+    await clickRepositoryCheck('Check for updates');
+    await wait(window, `${dialogButton('Update resource')}?.disabled === false`);
+    await evaluate(window, `${dialogButton('Update resource')}.click()`);
+    await wait(window, `${repoState('en')} === 'Up to date'`);
+    await waitGit(() => readFileSync(join(root, 'AGENT.md'), 'utf8'), '# updated by the remote again\n');
+    writeFileSync(join(userData, 'project-assets-updated.png'), (await window.webContents.capturePage()).toPNG());
+    await closeRepositoryDetails();
+    await project.host.updateShellSettings('locale', {preference: 'zh'});
+    await wait(window, `document.body.textContent.includes('项目资产')`);
 
     // Empty resource pages/counts still exclude the retained root binding.
     for (const id of ['backend', 'web']) {
