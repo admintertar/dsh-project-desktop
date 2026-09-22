@@ -80,10 +80,17 @@ export async function checkResourceStates({electron, userData}) {
   // is open, which adds a second "Skills" card and made position-based lookup flaky (Windows CI).
   writeFileSync(join(root, 'skills', 'index.yaml'),
     'schemaVersion: 1\nskills:\n  review-fixture:\n    enabled: true\n');
-  // Disabled, so the MCP runtime never starts a process during the check.
+  // Disabled, so the MCP runtime never starts a process during the check. Two declarations share the
+  // legacy file and a third lives in its own file, so the review must keep them apart.
   writeFileSync(join(root, 'mcp', 'servers.yaml'),
     'schemaVersion: 1\nservers:\n  - id: review-fixture\n    serverName: review-fixture\n    enabled: false\n'
+    + '    toolCallTimeoutMs: 30000\n    transport: stdio\n    command: node\n    args: []\n'
+    + '  - id: review-second\n    serverName: review-second\n    enabled: false\n'
     + '    toolCallTimeoutMs: 30000\n    transport: stdio\n    command: node\n    args: []\n');
+  mkdirSync(join(root, 'mcp', 'servers'), {recursive: true});
+  writeFileSync(join(root, 'mcp', 'servers', 'review-own.yaml'),
+    'id: review-own\nserverName: review-own\nenabled: false\ntoolCallTimeoutMs: 30000\n'
+    + 'transport: stdio\ncommand: node\nargs: []\n');
   writeFileSync(join(root, 'AGENT.md'), '# review fixture\n');
   // Windows pins the browse directory-picker backend, so the panel asks the Desktop runtime for a
   // directory instead of the native seam. Replace only the OS chooser, through a prototype overlay
@@ -132,7 +139,10 @@ export async function checkResourceStates({electron, userData}) {
     // One asset can own several files; the card says how many it would commit.
     assert.equal(await evaluate(window, `${task}?.textContent.includes(${JSON.stringify(locale === 'zh' ? '2 个文件' : '2 files')})`), true);
     assert.equal(await evaluate(window, `Boolean(${cardNamed(copy.skill, 'review-fixture')})`), true);
-    assert.equal(await evaluate(window, `Boolean(${row(copy.mcp)})`), true);
+    // Every declaration is its own card: two share the legacy file, one owns a file of its own.
+    for (const name of ['review-fixture', 'review-second', 'review-own']) {
+      assert.equal(await evaluate(window, `Boolean(${cardNamed(copy.mcp, name)})`), true, `missing MCP card ${name}`);
+    }
     assert.equal(await evaluate(window, `Boolean(${row(copy.file)})`), true);
     // Project assets are selected by default; unrecognized files are not.
     assert.equal(await evaluate(window, `Boolean(${task}?.querySelector('input[type=checkbox]')?.checked)`), true);
