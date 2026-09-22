@@ -95,6 +95,11 @@ body:is([data-dsh-desktop-mode="advanced"][data-dsh-desktop-platform="win32"], [
    sidebar draw the same divider from below the titlebar instead. */
 .dshDesktopFrame:not([data-sidebar-collapsed]) .dshDesktopSidebarSurface { border-right-color: transparent; }
 .dshDesktopFrame:not([data-sidebar-collapsed]) .dshDesktopSidebarSurface::after { content: ""; position: absolute; z-index: 1; top: ${height}px; right: 0; bottom: 0; width: 1px; background: var(--dsw-alias-border-l1, rgba(127,127,127,.28)); }
+/* The official scrim sits BELOW the official overlay we render into, so the titlebar used to float
+   above the scrim (never dimmed) and cover the top of the dialog. Keep the bar rendered, but drop
+   the overlay underneath the scrim while a modal is open: the bar then dims together with the rest
+   of the window, matching the main window's own chrome instead of disappearing. */
+html:has([role="dialog"], [aria-modal="true"]) .dshDesktopOverlay { z-index: 0; }
 /* Codex layout: the project identity lives in the titlebar, so the expanded sidebar hides its own
    identity row (the official suffix *_logoRow, which holds the brand button and its collapse control).
    The collapsed rail keeps everything: it is the official compact rail, and the titlebar already
