@@ -110,6 +110,9 @@ export async function checkResourceStates({electron, userData}) {
     const section = `[...document.querySelectorAll('.project-panel section')].find(item => item.querySelector('h2')?.textContent === ${JSON.stringify(copy.section)})`;
     const group = kind => `[...(${section}?.querySelectorAll('.project-change-group') ?? [])].find(item => item.querySelector('h3')?.textContent === ${JSON.stringify(kind)})`;
     const row = kind => `${group(kind)}?.querySelector('.project-change-card')`;
+    // One diagnostic line per pass: which overview sections rendered at all.
+    console.log('overview sections:', await evaluate(window,
+      `JSON.stringify([...document.querySelectorAll('.project-panel section')].map(item => item.querySelector('h2')?.textContent ?? '(no h2)'))`));
     await wait(window, `Boolean(${group(copy.task)}?.querySelector('.project-change-card'))`);
     // Each kind is its own group, and a task is named by its record title, not its directory.
     assert.equal(await evaluate(window, `${row(copy.task)}?.querySelector('.project-change-name')?.textContent`), 'Native review fixture');
@@ -149,10 +152,11 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `Boolean(document.querySelector('.project-resource-details'))`);
     // Actions live in the dialog footer, so read the whole dialog rather than its body region.
     const dialog = `[...document.querySelectorAll('[role=dialog]')].find(item => item.querySelector('.project-resource-details'))`;
-    const repoCopy = locale === 'zh' ? ['检查更新', '目录'] : ['Check for updates', 'Directory'];
+    // The check control may already be reporting progress from the previous pass, so match its stem.
+    const repoCopy = locale === 'zh' ? ['检查', '目录'] : ['Check', 'Directory'];
+    const dialogText = String(await evaluate(window, `${dialog}?.textContent ?? '(no dialog found)'`));
     for (const label of repoCopy) {
-      assert.equal(await evaluate(window, `${dialog}?.textContent.includes(${JSON.stringify(label)})`), true,
-        `repository details missing ${label}`);
+      assert.equal(dialogText.includes(label), true, `repository details missing ${label}: ${dialogText}`);
     }
     // A click must reach the Host: the repository route has to receive the action.
     if (locale === 'en' && theme === 'light' && width === 1180) {
