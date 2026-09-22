@@ -7,6 +7,7 @@ import {ProjectWorkspace} from './project-workspace.mjs';
 import {SessionState} from './session-state.mjs';
 import {SharedTheme} from './shared-theme.mjs';
 import {nativeRoleMenus} from './native-menus.mjs';
+import {installWindowAccelerators, WINDOW_ACCELERATOR_COMMANDS} from './window-accelerators.mjs';
 import {projectStatePath} from './project-state.mjs';
 import {RecentProjects, resolveProjectFile} from './project-files.mjs';
 import {openNativeProject} from '../desktop-adapter/native.mjs';
@@ -246,6 +247,23 @@ async function run() {
           onWarning: error => console.error('Project checkpoint:', error),
           windowState: session.window(manifest), saveWindowState: safeMode ? undefined : bounds => session.saveWindow(manifest, bounds),
           onFocus: () => session.focus(manifest),
+          // Commands behind the self-drawn titlebar menu (Windows/Linux have no native menu
+          // bar on our window shape); they reuse exactly the application-menu implementations.
+          newProject: () => perform(newProject),
+          openProject: () => perform(pickOpen),
+          showWelcome: () => perform(showGuide),
+          closeProject: () => perform(() => close(manifest)),
+          recentProjects: () => recent.list().map(item => ({title: item.title, path: item.path, available: item.available !== false})),
+          openRecent: path => perform(() => open(path)),
+          showProfile: () => perform(() => showProfileSurface(manifest)),
+          restartProject: () => perform(() => restart(manifest)),
+          recoverProject: () => perform(() => recover(manifest)),
+          toggleSafeMode: () => perform(async () => {
+            const entry = [...projects].find(([, project]) => project === active());
+            if (!entry) return;
+            if (entry[1].safeMode) {await workspace.exitSafeMode(entry[0]); await recover(entry[0], {source: 'safe-mode-exit'})}
+            else {await dismissSurface(entry[0]); await workspace.safeMode(entry[0])}
+          }),
           onFailure: error => perform(async () => {
             if (quitting) return;
             const locale = value?.locale;
@@ -293,6 +311,9 @@ async function run() {
     lastLocale = zh ? 'zh' : 'en';
     const current = active();
     const command = (label, action, extra = {}) => ({label, click: () => perform(action), ...extra});
+    // Windows 窗口没有原生菜单栏（见 window-accelerators.mjs）：这三个快捷键改由窗口级绑定提供，
+    // 这里只保留菜单项本身，不再注册 accelerator，避免同一组合被两处触发。
+    const fileAccelerator = value => process.platform === 'win32' ? {} : {accelerator: value};
     const updateCommand = () => command(updates?.label() ?? (zh ? '检查更新…' : 'Check for Updates…'),
       () => updates?.checkNow(BrowserWindow.getFocusedWindow()), {id: 'project-check-for-updates', enabled: Boolean(updates) && !updates.busy});
     const roles = nativeRoleMenus(lastLocale, process.platform, app.name, [updateCommand()]);
@@ -303,12 +324,12 @@ async function run() {
     const template = [
       ...roles.application,
       {label: zh ? '文件' : 'File', submenu: [
-        command(zh ? '新建项目…' : 'New Project…', newProject, {accelerator: 'CmdOrCtrl+Shift+N'}),
-        command(zh ? '打开项目…' : 'Open Project…', pickOpen, {accelerator: 'CmdOrCtrl+O'}),
+        command(zh ? '新建项目…' : 'New Project…', newProject, fileAccelerator('CmdOrCtrl+Shift+N')),
+        command(zh ? '打开项目…' : 'Open Project…', pickOpen, fileAccelerator('CmdOrCtrl+O')),
         {label: zh ? '最近项目' : 'Recent Projects', submenu: recentItems, enabled: recentItems.length > 0},
         command(zh ? '欢迎窗口' : 'Welcome Window', showGuide),
         {type: 'separator'}, command(zh ? '关闭项目' : 'Close Project', () => {const entry = [...projects].find(([, value]) => value === active()); if (entry) return close(entry[0])},
-          {accelerator: 'CmdOrCtrl+W', enabled: Boolean(current)})]},
+          {...fileAccelerator('CmdOrCtrl+W'), enabled: Boolean(current)})]},
       roles.edit, roles.view,
       {label: zh ? '项目工具' : 'Project Tools', submenu: [...tools,
         command(zh ? '打开项目终端' : 'Open Project Terminal', () => active()?.terminal(), {enabled: Boolean(current) && !current.safeMode}),
@@ -393,6 +414,14 @@ async function run() {
   if (process.platform === 'darwin') icon.setTemplateImage(true);
   tray = new Tray(icon); tray.setToolTip('DSH Project Desktop');
   tray.on('click', () => perform(showApplication));
+  // Windows 上窗口没有原生菜单栏，application menu 也不再注册这三个快捷键（见 refreshMenus），
+  // 因此把它们绑在窗口级：官方 win32 策略 removeMenu() 之后依然可用。
+  installWindowAccelerators({app, BrowserWindow, run: (command, window) => {
+    if (command === WINDOW_ACCELERATOR_COMMANDS.newProject) return perform(newProject);
+    if (command === WINDOW_ACCELERATOR_COMMANDS.openProject) return perform(pickOpen);
+    const entry = [...projects].find(([, project]) => project.window === window) ?? [...projects].find(([, project]) => project === active());
+    if (entry) return perform(() => close(entry[0]));
+  }});
   refreshMenus();
   if (updateTest) {
     startupComplete = true;

@@ -9,6 +9,7 @@ import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
 import {createWindowMaterialRefresher} from '../windows/window-material-refresh.mjs';
+import {createShellTitlebarActionRunner, shellTitlebarRequest} from './stable/shell-titlebar-actions.mjs';
 import {productVersion, productName} from '../app/product.mjs';
 
 function spawnUtility(electron, entry, args, options) {
@@ -174,8 +175,42 @@ export async function openNativeProject(electron, options) {
       reload: runtime.reloadRenderer, developerTools: runtime.toggleDeveloperTools,
       checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportDiagnostics,
     }, message => options.onError(new Error(message)));
+    // The official dispatcher only knows the pinned official action whitelist; the Shell
+    // titlebar actions are ours, so they are matched first and everything else still
+    // travels through the official dispatcher untouched.
+    const runShellTitlebarAction = createShellTitlebarActionRunner({
+      title: () => options.title ?? '',
+      'project-new': () => options.newProject?.(),
+      'project-open': () => options.openProject?.(),
+      'project-welcome': () => options.showWelcome?.(),
+      'project-close': () => options.close?.(),
+      'recent-list': () => options.recentProjects?.() ?? [],
+      'recent-open': path => options.openRecent?.(path),
+      profile: () => options.showProfile?.(),
+      restart: () => options.restartProject?.(),
+      'safe-mode': () => options.toggleSafeMode?.(),
+      recover: () => options.recoverProject?.(),
+      // Plugin-contributed project tools reach the renderer by index: the registry is
+      // rebuilt on every menu refresh, so an index is only valid within one refresh.
+      contributions: () => [...contributions.values()].map((item, index) => ({id: String(index), title: item.label(), enabled: item.enabled?.() ?? true})),
+      contribution: id => {
+        const item = [...contributions.values()][Number(id)];
+        if (!item) throw new Error(`Shell titlebar: unknown project tool ${JSON.stringify(id)}`);
+        return item.invoke();
+      },
+      edit: command => {contents[command]?.()},
+      view: command => {
+        if (command === 'reload') return contents.reload();
+        if (command === 'developerTools') return contents.toggleDevTools();
+        if (command === 'fullscreen') {window.setFullScreen(!window.isFullScreen()); return undefined}
+        const level = contents.getZoomLevel();
+        return contents.setZoomLevel(command === 'zoomIn' ? level + 0.5 : command === 'zoomOut' ? level - 0.5 : 0);
+      },
+    });
     contents.ipc.handle('dsh-desktop:renderer-action', (event, action) => {
       if (!trustedSender(event, contents, specification.url)) throw new Error('Untrusted renderer');
+      const request = shellTitlebarRequest(action);
+      if (request) return runShellTitlebarAction(request.action, request.argument);
       return dispatch(action);
     });
     await options.connectTheme(host);
