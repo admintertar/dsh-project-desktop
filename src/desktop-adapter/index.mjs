@@ -10,6 +10,7 @@ import {verifyRuntimeDependencies} from './stable/verify.mjs';
 import {assertProjectRecoveryComplete} from './stable/recovery.mjs';
 import {safeHostEnvironment} from './stable/safe-mode.mjs';
 import {projectProfiles} from './stable/project-profiles.mjs';
+import {detectSystemProxy, proxyHostEnvironment, redactProxy} from './stable/system-proxy.mjs';
 
 // The boot RPC is the only long-running operation on this channel: it covers
 // Profile takeover, first-time dependency materialization (the pinned official
@@ -24,7 +25,7 @@ const HOST_BOOT_TIMEOUT_MS = 120_000;
 const HOST_READY_TIMEOUT_MS = 120_000;
 
 /** One supervisor, with Node transport for headless checks and UtilityProcess for the app. */
-export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit}) {
+export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit, onProxyDiagnostic}) {
   verifyRuntimeDependencies();
   claimProjectState(stateDirectory, manifestPath);
   let profileName = 'desktop';
@@ -51,9 +52,23 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
   }};
   let errors = '';
   const themeObservers = new Set();
+  // A Git child process never sees the Windows system proxy, and the plugin owns no platform
+  // code. Resolve it here, once per Host boot, and hand the whole Host the environment that
+  // makes Git and Git LFS use it. Safe Mode keeps the trimmed environment on purpose: it must
+  // not inherit proxies.
+  const proxy = safeMode ? {proxied: false, reason: 'safe-mode'} : await detectSystemProxy({resolveProxy: nativeRuntime?.resolveProxy});
+  const proxyDiagnostic = {...proxy,
+    ...(proxy.proxy ? {proxy: redactProxy(proxy.proxy)} : {}),
+    ...(proxy.alternatives?.length ? {alternatives: proxy.alternatives.map(redactProxy)} : {})};
+  if (onProxyDiagnostic) onProxyDiagnostic(proxyDiagnostic);
+  else if (proxy.proxied) console.log(`System proxy: ${proxyDiagnostic.proxy} (${proxyDiagnostic.reason})`);
+  else if (!safeMode && !['direct', 'no-resolver'].includes(proxy.reason)) {
+    console.error(`System proxy: not used (${proxy.reason}); Git traffic falls back to a direct connection`);
+  }
   const child = spawnHost(fileURLToPath(new URL('./stable/host-entry.mjs', import.meta.url)), [], {
     cwd: projectRoot, execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'advanced',
-    env: {...(safeMode ? safeHostEnvironment(process.env) : process.env), DSH_HOME: homeDir, DSH_AGENTS_HOME: join(homeDir, 'agents'),
+    env: {...(safeMode ? safeHostEnvironment(process.env) : process.env), ...proxyHostEnvironment(proxy),
+      DSH_HOME: homeDir, DSH_AGENTS_HOME: join(homeDir, 'agents'),
       DSH_TELEMETRY_DISABLED: '1', ...(safeMode ? {DSH_PROJECT_SAFE_MODE: '1'} : {DSH_PROJECT_MANIFEST: manifestPath})},
   });
   child.stderr.on('data', data => {errors = (errors + String(data)).slice(-16000)});

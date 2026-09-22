@@ -75,6 +75,10 @@ export async function openNativeProject(electron, options) {
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
   const runtime = {
     platform: process.platform, windowsBuild: process.platform === 'win32' ? windowsBuildNumber() : undefined, locale,
+    // Chromium already knows this machine's proxy (WinINET or PAC) and answers DIRECT for
+    // loopback targets. The Host supervisor asks for it and hands Git the resulting environment;
+    // Git for Windows reads neither the registry nor the Electron session.
+    resolveProxy: url => electron.session.defaultSession.resolveProxy(url),
     updates: {isPackaged: false, canDownload: false, currentVersion: productVersion, statePath: join(options.stateDirectory, 'updates-disabled'),
       request: disabled, confirmDownload: disabled, showManualCheckResult: disabled, downloadAndOpen: disabled, notify() {}},
     schedule(spec) {
