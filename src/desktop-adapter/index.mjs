@@ -14,9 +14,11 @@ import {projectProfiles} from './stable/project-profiles.mjs';
 // The boot RPC is the only long-running operation on this channel: it covers
 // Profile takeover, first-time dependency materialization (the pinned official
 // materializer allows that pnpm install 120s) and the whole official plugin
-// tree. Leaving it on the generic control-call budget reported a normal cold
-// start as 'DSH Host call cancelled or timed out' while pnpm was still running.
-const HOST_BOOT_TIMEOUT_MS = 300_000;
+// tree. Measured: 5.5-7.1s on a 4-vCPU Windows runner, 2.5-3.0s on macOS arm64.
+// Keep this aligned with the official Desktop shell's own boot budget instead of
+// the generic control-call default, which reported a normal cold start as
+// 'DSH Host call cancelled or timed out' while the Host was still starting.
+const HOST_BOOT_TIMEOUT_MS = 120_000;
 // Finishing the Host entry's module graph is a cold-start cost as well, and it
 // is unrelated to the boot budget above; keep the two waits separable.
 const HOST_READY_TIMEOUT_MS = 120_000;
