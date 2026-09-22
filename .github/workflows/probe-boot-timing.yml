@@ -1,0 +1,247 @@
+name: Probe project boot timing
+
+# Attribution data for the "DSH Host call cancelled or timed out" report at the
+# 'host-boot' stage. The official HostRpc message cannot distinguish a slow
+# start from a cancelled one, so the stage costs have to be measured:
+#   - a source build, split into Host entry, Profile preparation and full boot;
+#   - the latest packaged portable asset, opened twice so a roaming user-data
+#     root can be compared against an isolated local one.
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/probe-boot-timing.yml'
+      - 'upstream.lock.json'
+      - 'src/desktop-adapter/**'
+      - 'scripts/probe-host-boot-timing.mjs'
+      - 'scripts/probe-packaged-boot.ps1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-boot-timing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      desktop_repository: ${{ steps.pins.outputs.desktop_repository }}
+      desktop_commit: ${{ steps.pins.outputs.desktop_commit }}
+      harness_repository: ${{ steps.pins.outputs.harness_repository }}
+      harness_commit: ${{ steps.pins.outputs.harness_commit }}
+      project_repository: ${{ steps.pins.outputs.project_repository }}
+      project_commit: ${{ steps.pins.outputs.project_commit }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+      - name: Resolve immutable source pins
+        id: pins
+        env:
+          PACKAGE_PLATFORM: win
+        run: node scripts/ci-plan.mjs
+
+  timing:
+    needs: plan
+    name: Source build on windows-2022
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          architecture: x64
+      - name: Prepare Git and Corepack
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+          git config --global core.symlinks true
+          corepack enable
+      # Import the pinned stable sources exactly as the packaging workflow does.
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.desktop_repository }}
+          ref: ${{ needs.plan.outputs.desktop_commit }}
+          path: .cache/ci-sources/desktop
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.harness_repository }}
+          ref: ${{ needs.plan.outputs.harness_commit }}
+          path: .cache/ci-sources/harness
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ needs.plan.outputs.project_repository }}
+          ref: ${{ needs.plan.outputs.project_commit }}
+          path: .cache/ci-sources/project
+          persist-credentials: false
+      - name: Resolve Yarn download cache
+        id: yarn-cache
+        working-directory: .cache/ci-sources/desktop
+        run: echo "dir=$(corepack yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('yarn.lock', '.cache/ci-sources/desktop/yarn.lock', '.cache/ci-sources/project/yarn.lock') }}
+      - name: Install official locked dependencies
+        working-directory: .cache/ci-sources/desktop
+        run: corepack yarn install --immutable
+      - name: Prepare official Electron and native bindings
+        working-directory: .cache/ci-sources/desktop/dsh-plugin-desktop
+        run: |
+          node node_modules/electron/install.js
+          corepack yarn prepare:electron-native
+      - name: Install pinned plugin build dependencies
+        working-directory: .cache/ci-sources/project
+        run: corepack yarn install --immutable
+      - name: Install shell build dependencies
+        run: corepack yarn install --immutable
+      - name: Import verified stable snapshots and independent caches
+        run: |
+          corepack yarn run setup -- \
+            --desktop-source .cache/ci-sources/desktop \
+            --harness-source .cache/ci-sources/harness \
+            --project-source .cache/ci-sources/project \
+            --desktop-dependencies .cache/ci-sources/desktop/dsh-plugin-desktop/node_modules \
+            --project-dependencies .cache/ci-sources/project/node_modules
+      - name: Build the shell
+        run: corepack yarn run build
+      - name: Report the Windows IO environment under test
+        shell: pwsh
+        run: |
+          '--- Defender real-time protection'
+          try { Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | Format-List } catch { 'unavailable' }
+          '--- shell folders (a redirected AppData is a candidate cause)'
+          Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' |
+            Select-Object 'AppData', 'Local AppData' | Format-List
+          '--- volumes'
+          Get-Volume | Select-Object DriveLetter, FileSystemType, SizeRemaining | Format-Table
+      - name: Probe source-build boot timing
+        run: node scripts/probe-host-boot-timing.mjs
+      - name: Publish the timing summary
+        if: always()
+        run: |
+          {
+            echo '## Source-build boot timing (windows-2022)'
+            echo ''
+            if [ -f .runtime/host-boot-timing/summary.md ]; then
+              cat .runtime/host-boot-timing/summary.md
+            else
+              echo 'the probe produced no summary'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-timing-windows-${{ github.sha }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          path: |
+            .runtime/host-boot-timing/result.json
+            .runtime/host-boot-timing/summary.md
+
+  packaged:
+    name: Packaged build on windows-2022
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          architecture: x64
+      - name: Download the latest portable package
+        id: package
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime/packaged
+          if ! curl -fsSL -o .runtime/packaged/update.json \
+            https://github.com/admintertar/dsh-project-desktop/releases/latest/download/update.json; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            {
+              echo '## Packaged build opening a project (windows-2022)'
+              echo ''
+              echo 'No published stable release is reachable, so the packaged probe did not run.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node -e '
+            const {readFileSync, writeFileSync} = require("node:fs");
+            const manifest = JSON.parse(readFileSync(".runtime/packaged/update.json", "utf8"));
+            const asset = manifest.assets.find(item => item.name.endsWith("win-x64-Portable.zip"));
+            if (!asset) throw new Error("the update manifest has no portable Windows package");
+            writeFileSync(".runtime/packaged/asset.json", JSON.stringify(asset, undefined, 2));
+            console.log(manifest.version);
+          ' > .runtime/packaged/version.txt
+          url=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".runtime/packaged/asset.json","utf8")).url)')
+          name=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".runtime/packaged/asset.json","utf8")).name)')
+          expected=$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".runtime/packaged/asset.json","utf8")).sha256)')
+          curl -fsSL -o ".runtime/packaged/$name" "$url"
+          actual=$(sha256sum ".runtime/packaged/$name" | cut -d' ' -f1)
+          if [ "$expected" != "$actual" ]; then
+            echo "checksum mismatch for $name" >&2
+            exit 1
+          fi
+          mkdir -p .runtime/packaged/app
+          unzip -q ".runtime/packaged/$name" -d .runtime/packaged/app
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "version=$(cat .runtime/packaged/version.txt)" >> "$GITHUB_OUTPUT"
+      - name: Probe with the default user-data root
+        if: steps.package.outputs.available == 'true'
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/probe-packaged-boot.ps1 -AppDirectory .runtime/packaged/app -WorkRoot .runtime/packaged/roaming -Label roaming
+      - name: Probe with an isolated local user-data root
+        if: steps.package.outputs.available == 'true'
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/probe-packaged-boot.ps1 -AppDirectory .runtime/packaged/app -WorkRoot .runtime/packaged/local -Label local -UserDataDirectory .runtime/packaged/userdata-local
+      - name: Publish the packaged summary
+        if: always()
+        run: |
+          {
+            echo '## Packaged build opening a project (windows-2022)'
+            echo ''
+            echo "Version: ${{ steps.package.outputs.version }}"
+            echo ''
+            for file in .runtime/packaged/roaming/packaged-probe-*.json .runtime/packaged/local/packaged-probe-*.json; do
+              [ -f "$file" ] || continue
+              echo "### ${file}"
+              echo ''
+              echo '```json'
+              cat "$file"
+              echo '```'
+              echo ''
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload packaged evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-timing-packaged-${{ github.sha }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          path: |
+            .runtime/packaged/*.json
+            .runtime/packaged/*.txt
+            .runtime/packaged/roaming/*.json
+            .runtime/packaged/local/*.json
