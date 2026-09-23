@@ -27,6 +27,10 @@ function spawnUtility(electron, entry, args, options) {
 
 export async function openNativeProject(electron, options) {
   const {BrowserWindow, nativeImage, dialog, shell, Notification} = electron;
+  // Project-open timing, owned by the caller in main.mjs: measuring a slow window here and
+  // guessing about it afterwards is what this replaces.
+  const {trace} = options;
+  trace?.stage('window options requested');
   const {advancedWindowOptions} = await loadDesktop('window-options');
   const {createDesktopRendererActionDispatcher} = await loadDesktop('renderer-actions-dispatch');
   const {openDesktopTerminal} = await loadDesktop('desktop-terminal');
@@ -34,6 +38,7 @@ export async function openNativeProject(electron, options) {
   const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
+  trace?.stage('official modules loaded');
   // The official Electron runtime exposes windowsBuild on its own runtime object.
   // Our hand-written replacement must carry the same value, or every capability
   // gate that reads it (Mica support, window material resolution) silently
@@ -125,14 +130,27 @@ export async function openNativeProject(electron, options) {
     },
     reloadRenderer() {window?.webContents.reload()},
     toggleDeveloperTools() {window?.webContents.toggleDevTools()},
-    async exportDiagnostics() {
-      const confirmation = await dialog.showMessageBox(window, {type: 'question',
-        message: locale === 'zh' ? '导出当前项目的诊断日志？' : 'Export this project’s diagnostic logs?',
-        buttons: locale === 'zh' ? ['取消', '导出'] : ['Cancel', 'Export'], defaultId: 0, cancelId: 0});
-      if (confirmation.response !== 1) return;
-      const path = await exportDiagnosticsZip(join(options.stateDirectory, 'logs'), options.stateDirectory,
+    /**
+     * One export for everything needed to diagnose "it is slow": the launch trace, every
+     * project-open trace, the Recovery Mode reasons and this project's official diagnostics
+     * archive, gathered under one destination the operator picks and then sends on.
+     */
+    async exportLogs() {
+      const zh = locale === 'zh';
+      const picked = await dialog.showSaveDialog(window, {title: zh ? '导出日志与诊断' : 'Export Logs and Diagnostics',
+        defaultPath: join(electron.app.getPath('documents'), `dsh-startup-log-${new Date().toISOString().replace(/[:.]/gu, '-')}.log`)});
+      if (picked.canceled || !picked.filePath) return;
+      const diagnostics = async directory => await exportDiagnosticsZip(join(options.stateDirectory, 'logs'), options.stateDirectory,
         {appVersion: `${productName} ${productVersion} / Desktop ${lock.desktop.version}`});
-      shell.showItemInFolder(path);
+      const written = await options.exportStartupLog?.(picked.filePath, diagnostics);
+      if (!written) {
+        // Reuse the official export-failure dialog copy rather than inventing a parallel one.
+        const native = desktopNativeCopy(zh ? 'zh' : 'en');
+        await showDesktopMessageBox({type: 'error', title: native.diagnosticsErrorTitle,
+          message: native.diagnosticsErrorMessage, buttons: [native.ok], defaultId: 0, cancelId: 0}, window);
+        return;
+      }
+      shell.showItemInFolder(picked.filePath);
     },
     async pickDirectory() {
       return await pickRememberedDirectory(lastDirectories, 'resource', async previous => {
@@ -161,12 +179,15 @@ export async function openNativeProject(electron, options) {
     if (options.safeMode && chromiumSession) await chromiumSession.clearStorageData();
   };
   try {
+    trace?.stage('host start requested');
     host = await startProjectHost({...options, onUnexpectedExit: error => {error.failureStage = 'host-boot'; failed(error)}, nativeRuntime: runtime, spawnHost: (...args) => spawnUtility(electron, ...args)});
+    trace?.stage('host ready', `renderer=${specification.url} profile=${host.result.profileName}`);
     failureStage = 'renderer-startup';
     const preferences = advancedWindowOptions(specification, nativeImage.createFromPath(specification.iconPath), process.platform, join(runtimePackage, 'lib/preload.cjs'));
     preferences.webPreferences.partition = options.partition ?? `persist:project-${basename(options.stateDirectory)}`;
     if (options.hidden) preferences.webPreferences.backgroundThrottling = false;
     window = new BrowserWindow({...preferences, ...visibleBounds(options.windowState, electron.screen.getAllDisplays()), title: options.title});
+    trace?.stage('browser window created', `material=${String(specification.material)}`);
     if (options.windowState?.maximized) window.maximize();
     if (options.windowState?.fullScreen) window.setFullScreen(true);
     saveWindow = trackWindowState(window, state => options.saveWindowState?.(state), options.onError);
@@ -190,6 +211,7 @@ export async function openNativeProject(electron, options) {
       headers: {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value}});
     await auth.body?.cancel();
     if (auth.status !== 200) throw new Error(`Renderer authentication failed (${auth.status})`);
+    trace?.stage('renderer session authenticated');
     session.webRequest.onBeforeSendHeaders({urls: ['<all_urls>']}, (details, callback) => {
       callback({requestHeaders: rendererHeaders(details, contents.id, origin, specification.rendererAccessHeader)});
     });
@@ -206,7 +228,7 @@ export async function openNativeProject(electron, options) {
     const dispatch = createDesktopRendererActionDispatcher({
       openTerminal: runtime.openTerminal, restart: runtime.requestRestart, restartToRecovery: runtime.requestRecoveryRestart,
       reload: runtime.reloadRenderer, developerTools: runtime.toggleDeveloperTools,
-      checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportDiagnostics,
+      checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportLogs,
     }, message => options.onError(new Error(message)));
     // The official dispatcher only knows the pinned official action whitelist; the Shell
     // titlebar actions are ours, so they are matched first and everything else still
@@ -250,18 +272,25 @@ export async function openNativeProject(electron, options) {
       return dispatch(action);
     });
     await options.connectTheme(host);
+    trace?.stage('theme connected');
     healthTimer = setTimeout(() => health.reject(new Error('Project renderer boot timed out')), 45000);
+    // Keep the official order: the page load finishes before the renderer health report is
+    // awaited. Timing instrumentation must not reorder startup work.
     await window.loadURL(specification.url);
     await health.promise;
+    trace?.stage('renderer page loaded and healthy');
     if (!options.safeMode) try {await captureProjectCheckpoint(options.stateDirectory, host.result.profileName)} catch (error) {options.onWarning?.(error)}
     if (bootFailure) throw bootFailure;
     ready = true;
+    trace?.stage('startup checkpoint captured');
     runtime.setLocalePreference(specification.readLocalePreference?.());
     if (!options.hidden) focus();
+    trace?.stage('window focused and shown');
     return {host, window, focus, close, get locale() {return locale}, contributions: () => [...contributions.values()],
       restart: runtime.requestRestart, recover: runtime.requestRecoveryRestart,
-      terminal: runtime.openTerminal, diagnostics: runtime.exportDiagnostics};
+      terminal: runtime.openTerminal, diagnostics: runtime.exportLogs};
   } catch (error) {
+    trace?.stage('project window failed', `stage=${failureStage} ${error?.message ?? String(error)}`);
     error.failureStage ??= failureStage;
     try {await close()} catch (shutdown) {
       const failure = new AggregateError([error, shutdown], 'Project window failed and Host shutdown is unconfirmed');

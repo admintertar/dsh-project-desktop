@@ -8,6 +8,22 @@ import {canInitializeBundledLock, materializeProjectDependencies} from './materi
 export const DEFAULT_PROJECT_MARKET = 'dsh-market';
 
 /**
+ * Time a dependency materialization. The first Profile preparation runs the bundled pnpm
+ * install and the pinned official materializer allows it 120s; that single step is the
+ * usual answer to "opening this project sometimes takes half a minute", so it is timed
+ * instead of being folded into the profile stage around it.
+ */
+function materializeWithTrace(trace, label) {
+  let count = 0;
+  return args => {
+    count += 1;
+    const name = count === 1 ? label : `${label} #${String(count)}`;
+    if (!trace) return materializeProjectDependencies(args);
+    return trace.measure(name, () => materializeProjectDependencies(args));
+  };
+}
+
+/**
  * Read the market selected for one isolated project before its Host exists.
  * Existing projects inherit the product default until they persist an override.
  */
@@ -21,13 +37,15 @@ export function readProjectMarketPreference(settingsPath) {
 }
 
 /** Runs only in the project's isolated process, before its Host starts. */
-export async function prepareProjectProfile(manifestPath, stateDirectory, {homeDir = join(stateDirectory, 'dsh'), safeMode = false, profileName = 'desktop'} = {}) {
+export async function prepareProjectProfile(manifestPath, stateDirectory, {homeDir = join(stateDirectory, 'dsh'), safeMode = false, profileName = 'desktop', trace} = {}) {
   const {assertDesktopProfileName} = await loadDesktop('profile-manager');
   assertDesktopProfileName(profileName);
+  trace?.stage('profile manager loaded');
   const profileDir = join(homeDir, 'profiles', profileName);
   const profileApi = await loadDesktop('profile');
   const {createDesktopWebProfile} = await loadDesktop('profile-manager');
   const fresh = !existsSync(join(profileDir, 'package.json'));
+  trace?.stage('official profile api loaded', `fresh=${String(fresh)}`);
   const patch = join(profileDir, 'cordis.patch.yml');
   if (!fresh && !existsSync(patch + '.project-desktop-owner')) throw new Error('Refusing to overwrite an unowned Profile');
   if (fresh) createDesktopWebProfile(homeDir, profileName);
@@ -86,9 +104,10 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
     ...(safeMode ? {'dsh-desktop-notifications': {enabled: false}, locale: {preference: 'system'}} : {}),
   }), {flag: 'wx', mode: 0o600});
   const requestedMarket = safeMode ? 'disabled' : readProjectMarketPreference(settingsPath);
+  const materialize = materializeWithTrace(trace, 'profile prepare: pnpm dependencies');
   if ((projectWasRuntimeDependency || projectLockWasRuntimeDependency) && existsSync(lockPath)) {
     // One-time owned migration: keep the lock aligned before any Market package operation can run.
-    await materializeProjectDependencies({stateDirectory, homeDir, profileDir, updateLockfile: true});
+    await materialize({stateDirectory, homeDir, profileDir, updateLockfile: true});
     runtimeLink(join(profileDir, '.project-plugin'), projectLink);
     runtimeLink(join(repository, '.cache/runtime/dsh-project-shell'), shellLink);
   }
@@ -124,11 +143,12 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
     if (!canInitializeBundledLock(profileDir)) {
       throw new Error('Profile dependencies need an explicit lockfile before startup');
     }
-    await materializeProjectDependencies({stateDirectory, homeDir, profileDir, updateLockfile: true});
+    await materialize({stateDirectory, homeDir, profileDir, updateLockfile: true});
     runtimeLink(join(profileDir, '.project-plugin'), projectLink);
     runtimeLink(join(repository, '.cache/runtime/dsh-project-shell'), shellLink);
     await profileApi.healDesktopProfileModuleFallback(homeDir, prepared.profile);
   }
+  trace?.stage('profile prepared');
   return {prepared, homeDir, profileDir, stateDirectory, runtimePackage};
 }
 

@@ -11,6 +11,7 @@ import {assertProjectRecoveryComplete} from './stable/recovery.mjs';
 import {safeHostEnvironment} from './stable/safe-mode.mjs';
 import {projectProfiles} from './stable/project-profiles.mjs';
 import {detectSystemProxy, hasExplicitProxyEnvironment, proxyHostEnvironment, redactProxy} from './stable/system-proxy.mjs';
+import {bootLogFile, bootSessionLabel} from '../app/boot-log.mjs';
 
 // The boot RPC is the only long-running operation on this channel: it covers
 // Profile takeover, first-time dependency materialization (the pinned official
@@ -25,17 +26,21 @@ const HOST_BOOT_TIMEOUT_MS = 120_000;
 const HOST_READY_TIMEOUT_MS = 120_000;
 
 /** One supervisor, with Node transport for headless checks and UtilityProcess for the app. */
-export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit, onProxyDiagnostic}) {
+export async function startProjectHost({manifestPath, projectRoot, stateDirectory, homeDir = join(stateDirectory, 'dsh'), safeMode = false, nativeRuntime, spawnHost = fork, windows = {}, onUnexpectedExit, onProxyDiagnostic, trace}) {
+  trace?.stage('host supervisor started');
   verifyRuntimeDependencies();
+  trace?.stage('runtime dependencies verified');
   claimProjectState(stateDirectory, manifestPath);
   let profileName = 'desktop';
   if (!safeMode) {
     try {profileName = (await projectProfiles({stateDirectory, manifestPath, homeDir})).startup().name}
     catch (error) {error.failureStage = 'profile-selection'; throw error}
   }
+  trace?.stage('profile selected', `profile=${profileName}`);
   if (!safeMode) assertProjectRecoveryComplete(stateDirectory, profileName);
   const {HostRpc} = await loadDesktop('host-rpc');
   const {bindNativeRuntime, runtimeSnapshot} = await loadDesktop('host-runtime-bridge');
+  trace?.stage('official rpc modules loaded');
   let specification;
   const contributions = new Map();
   const runtime = nativeRuntime ?? {
@@ -71,14 +76,20 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
   else if (!safeMode && !['direct', 'no-resolver'].includes(proxy.reason)) {
     console.error(`System proxy: not used (${proxy.reason}); Git traffic falls back to a direct connection`);
   }
+  trace?.stage('system proxy resolved', proxy.proxied ? String(proxyDiagnostic.proxy) : String(proxy.reason));
+  // Timing travels into the Host too: the profile preparation and the official plugin tree
+  // run there, and an open that is slow for one of those reasons must say so.
+  const traceFile = bootLogFile();
   const child = spawnHost(fileURLToPath(new URL('./stable/host-entry.mjs', import.meta.url)), [], {
     cwd: projectRoot, execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], serialization: 'advanced',
     env: {...(safeMode ? safeHostEnvironment(process.env) : process.env), ...proxyEnvironment,
+      ...(traceFile && trace ? {DSH_PROJECT_BOOT_LOG_FILE: traceFile, DSH_PROJECT_BOOT_SESSION: bootSessionLabel(trace.name)} : {}),
       DSH_HOME: homeDir, DSH_AGENTS_HOME: join(homeDir, 'agents'),
       DSH_TELEMETRY_DISABLED: '1', ...(safeMode ? {DSH_PROJECT_SAFE_MODE: '1'} : {DSH_PROJECT_MANIFEST: manifestPath})},
   });
   child.stderr.on('data', data => {errors = (errors + String(data)).slice(-16000)});
   child.stdout.resume();
+  trace?.stage('host process forked');
   let rpc;
   let release;
   let stopped;
@@ -107,6 +118,7 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
     const [message] = await Promise.race([once(child, 'message', {signal: AbortSignal.timeout(HOST_READY_TIMEOUT_MS)}),
       exited.then(() => {throw new Error('Host exited before becoming ready')})]);
     if (!message?.ready) throw new Error('Host worker did not become ready');
+    trace?.stage('host entry reported ready');
     rpc = new HostRpc({send: data => child.send(data), listen: receive => {
       child.on('message', receive); return () => child.off('message', receive);
     }}, 30000);
@@ -122,12 +134,19 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
     rpc.handle('project:windows:list', () => windows.list?.() ?? [{id: manifestPath, title: projectRoot, current: true}]);
     rpc.handle('project:windows:open', () => windows.open?.());
     rpc.handle('project:windows:focus', ([id]) => windows.focus?.(id));
+    // The heavy half of a project open: the official boot RPC covers Profile preparation
+    // (the first run may run a pnpm install the pinned materializer allows 120s for), the
+    // official plugin tree and the loopback renderer server. The line after it is what a
+    // "sometimes it is slow" report is actually about.
+    trace?.stage('host boot rpc requested', `budget=${String(HOST_BOOT_TIMEOUT_MS)}ms`);
     const result = await rpc.call('boot', [{manifestPath, stateDirectory, homeDir, safeMode, profileName}, runtimeSnapshot(runtime), randomBytes(32).toString('base64url')], undefined, HOST_BOOT_TIMEOUT_MS);
+    trace?.stage('host boot rpc returned');
     if (!specification) throw new Error('Official Host did not register its renderer');
     const headers = {[specification.rendererAccessHeader.name]: specification.rendererAccessHeader.value};
     const auth = await fetch(specification.authenticationUrl, {headers, redirect: 'manual'});
     await auth.body?.cancel();
     if (auth.status !== 303 || !auth.headers.get('set-cookie')) throw new Error('Official renderer authentication failed');
+    trace?.stage('renderer url authenticated');
     headers.Cookie = auth.headers.get('set-cookie').split(';')[0];
     ready = true;
     return {result, url: specification.url, specification, stateDirectory,
@@ -142,6 +161,7 @@ export async function startProjectHost({manifestPath, projectRoot, stateDirector
       observeTheme(observer) {themeObservers.add(observer); return () => themeObservers.delete(observer)},
       menuLabels: () => [...contributions.values()].map(item => item.label()), close};
   } catch (cause) {
+    trace?.stage('host start failed', cause?.message ?? String(cause));
     try {await close()} catch (shutdown) {
       const error = new AggregateError([cause, shutdown], 'Host failed to start and shutdown is unconfirmed');
       error.projectResource = {close}; throw error;

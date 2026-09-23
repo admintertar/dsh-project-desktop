@@ -6,6 +6,7 @@ import {prepareProjectProfile} from './profile.mjs';
 import {runtimePackage} from '../paths.mjs';
 import {verifyRuntimeDependencies} from './verify.mjs';
 import {bootProjectHost} from './project-bootstrap.mjs';
+import {hostTrace} from '../../app/boot-log.mjs';
 
 // The parent sets DSH_HOME/cwd before any DSH import. No process-wide switching between projects.
 if (!process.send && !process.parentPort) throw new Error('Start this Host through the Project Desktop supervisor');
@@ -38,7 +39,12 @@ rpc.handle('stop', async () => {
 rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   if (starting || stopping) throw new Error('Host already started or stopped');
   starting = true;
-  const launch = await prepareProjectProfile(request.manifestPath, request.stateDirectory, request);
+  // Continues the Shell's session for this project, so the wait that begins at
+  // `host boot rpc requested` is attributed here instead of staying a single opaque number.
+  const trace = hostTrace('host-entry');
+  trace?.stage('host boot requested');
+  const launch = await prepareProjectProfile(request.manifestPath, request.stateDirectory, {...request, trace});
+  trace?.stage('profile prepared', `profile=${launch.prepared.profile.name} market=${launch.prepared.market.effective}`);
   const {prepared, homeDir} = launch;
   const runtime = createHostRuntime(rpc, snapshot);
   // Extension of our supplied runtime; the official bridge and source stay untouched.
@@ -52,6 +58,7 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   const electronVersion = JSON.parse(readFileSync(desktopRequire.resolve('electron/package.json'), 'utf8')).version;
   pnpm = installDesktopPnpmRuntime({platform: process.platform, appExecutable: process.execPath,
     pnpmBinPath, electronVersion, stateDir: join(request.stateDirectory, 'commands'), environment: process.env});
+  trace?.stage('official host boot requested');
   await bootProjectHost({prepared,
     desktopLaunchEnvironment: withDesktopDshHome(loadLayeredEnv('dsh-project-desktop'), homeDir),
     desktopPnpmBootstrap: {activeProfileName: prepared.profile.name, activeProfileDir: prepared.profile.dir,
@@ -60,6 +67,7 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
       dshBootstrapPath: join(runtimePackage, 'lib/desktop-cli.js')},
     logDirectory: join(request.stateDirectory, 'logs'),
   }, runtime, browser, lan, value => {host = value}, code => {void rpc.call('quit', [code])});
+  trace?.stage('official host booted', 'plugin tree and loopback renderer server in place');
   if (stopping) {await host.fiber.dispose(); throw new Error('Host stopped during startup')}
   let applyingSharedTheme = false;
   const validateTheme = preference => {
@@ -89,7 +97,8 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   const pluginRequire = request.safeMode ? undefined : createRequire(join(prepared.profile.dir, '.project-plugin/package.json'));
   const projectSessionVersion = pluginRequire ? JSON.parse(readFileSync(pluginRequire.resolve('@deepseek-ai/dsh-session/package.json'), 'utf8')).version : null;
   const profileIdentity = host.get('desktopProfiles');
-  return {pid: process.pid, homeDir, profile: prepared.profile.dir, profileName: prepared.profile.name, ...verifyRuntimeDependencies(), projectSessionVersion,
+  trace?.stage('renderer registered');
+  const details = {pid: process.pid, homeDir, profile: prepared.profile.dir, profileName: prepared.profile.name, ...verifyRuntimeDependencies(), projectSessionVersion,
     safeMode: Boolean(request.safeMode),
     tools: host.tools.schemas().map(tool => tool.name),
     policy: {
@@ -98,6 +107,8 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
         && profileIdentity.current.dir === prepared.profile.dir,
       settingsController: Boolean(host.get('desktopSettingsController')),
     }};
+  trace?.end(`tools=${String(details.tools.length)}`);
+  return details;
 });
 process.on('disconnect', () => {process.exitCode = 1; void host?.fiber.dispose().finally(() => process.exit(1))});
 send({ready: true});

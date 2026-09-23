@@ -63,6 +63,12 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 手动恢复、启动失败、Host／Renderer 崩溃均打开所属项目的官方恢复助手，语言沿用该项目。修复后重启／安全模式／关闭仅作用于该项目；安全模式关闭后返回恢复助手。未确认 Host 停止或状态所有权时，仅提供官方诊断界面，不授予配置、Profile 切换或恢复写入能力。应用级 DSH Home 迁移和工厂重置不提供能力，官方对应页显示不可用。恢复 UI 不依赖失败项目的 Host、Renderer 或插件。恢复原因只作为窗口 query 参数交给官方恢复助手，窗口一关就消失，而 Host 日志在恢复之后才可能存在；因此壳把每次进入恢复的原因追加到项目状态目录的 `recovery-events.jsonl`（`src/app/recovery-journal.mjs`，有界且只保留最近记录），字段含来源（`startup-restore`／`open`／`restart`／`runtime`／`safe-mode`／`manual` 等）、`requested`、只读降级、失败阶段与详情、会话阶段和 manifest 路径。写入失败只记一行错误，不改变恢复行为；该文件是壳自有诊断记录，不进入官方诊断包（导出器只收 `dsh-<日期>.log`）。
 
+应用启动与打开项目的耗时有同一条常开追踪（`src/app/boot-log.mjs`）。启动失败会给出一句“Host call cancelled or timed out”，离线探针只在开发机上分阶段测量，两者都答不了“这台机器上到底是哪一段慢”，所以在真实进程里按阶段打时间戳：`boot` 是一次启动（从 `run()` 入口到欢迎窗口或首个项目窗口出现），`project/open:<项目>` 是打开一个项目（解析项目文件 → Host 监督 → 分阶段启动 → 建窗 → 渲染进程认证 → `loadURL` 与健康上报 → 启动检查点）。追踪对象显式传递而不是模块级“当前会话”——一次启动可能并行打开多个项目，它们的阶段会交错。写 `<userData>/boot.log`，每次写入都是同步追加一行（微秒级），超过 `DSH_PROJECT_BOOT_LOG_BYTES`（默认 256 KiB）时按半量截断保留最新记录；`DSH_PROJECT_BOOT_LOG` 指定别的文件（设为空字符串即关闭），`DSH_PROJECT_BOOT_TRACE=1` 同时把同样的行打到 stdout。单阶段 ≥ 1000 ms 打 `[SLOW >1000ms]`，一条追踪结束时输出 `total` 与最慢阶段。
+
+Host 是独立 `utilityProcess`，而打开项目最贵的一段就在它内部：首次 Profile 准备会跑受 120 秒预算约束的 pnpm 依赖实体化，之后还有官方插件树与 loopback 渲染服务器。因此监督进程把日志路径与会话标签经子进程环境传下去（`DSH_PROJECT_BOOT_LOG_FILE`／`DSH_PROJECT_BOOT_SESSION`），Host 用 `hostTrace()` 追加进同一段追踪（`profile prepare: pnpm dependencies`、官方 Host 启动、渲染进程注册），否则壳只能说“boot RPC 花了 25 秒”。恢复原因除了写入 `recovery-events.jsonl`，也一并记进该次追踪，方便一次性带走。
+
+项目工具菜单里的“导出日志与诊断…”是这些证据的唯一出口：它沿用官方 `diagnostics` 动作，写入一份报告（环境与数据来源、启动与打开项目追踪全文、各项目恢复原因清单），并把项目自己的官方诊断 zip（`dsh-diagnostics-*.zip`）复制到同一目录，随后在文件管理器中定位。报告与 zip 并排放置而不是互相替换：日志要能直接用编辑器打开，压缩包则满足官方诊断格式。导出失败复用官方 `diagnosticsErrorTitle`／`diagnosticsErrorMessage` 文案。
+
 `project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.11 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
 
 桌面设置通过原始 settingsScope / settings.section 注册，复用官方 Button/Menu/Switch。仅组合通知、材质、日志和当前项目原生操作，不注册原来的模式/Profile/应用更新页面。设置页头通过框架正式的 `settings.action` 插槽复用固定 Desktop 的原生操作组件，提供导出诊断、打开 DSH 终端及重新加载/重启/恢复模式菜单；通用设置框架继续提供打开配置文件。所有重启操作由项目窗口自己的 runtime 处理，不影响其他项目。Switch 尺寸按未导出的 DesktopSettingsSection.ToggleRow 最小适配；日志直接接入官方 FileExporter 的阈值。模型、主题、语言等其他页面仍由已有官方服务提供。

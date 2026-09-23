@@ -32,7 +32,7 @@ export const SHELL_TITLEBAR_COPY = {
     newProject: '新建项目…', openProject: '打开项目…', welcome: '欢迎窗口', closeProject: '关闭项目',
     undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
     reload: '重新加载', developerTools: '切换开发者工具', zoomReset: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
-    terminal: '打开项目终端', diagnostics: '导出项目诊断…', profile: 'Profile…', restart: '重启当前项目',
+    terminal: '打开项目终端', diagnostics: '导出日志与诊断…', profile: 'Profile…', restart: '重启当前项目',
     safeMode: '在安全模式中打开', recover: '项目恢复…', updates: '检查更新…', about: '关于 DSH Project Desktop',
     recentProjects: '最近项目', loading: '读取中…', noRecentProjects: '暂无记录',
     applicationMenu: '应用菜单', collapseSidebar: '收起/展开侧栏', collapseSidebarLabel: '收起或展开侧栏',
@@ -42,7 +42,7 @@ export const SHELL_TITLEBAR_COPY = {
     newProject: 'New Project…', openProject: 'Open Project…', welcome: 'Welcome Window', closeProject: 'Close Project',
     undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
     reload: 'Reload', developerTools: 'Toggle Developer Tools', zoomReset: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
-    terminal: 'Open Project Terminal', diagnostics: 'Export Project Diagnostics…', profile: 'Profiles…', restart: 'Restart Current Project',
+    terminal: 'Open Project Terminal', diagnostics: 'Export Logs and Diagnostics…', profile: 'Profiles…', restart: 'Restart Current Project',
     safeMode: 'Open in Safe Mode', recover: 'Project Recovery…', updates: 'Check for Updates…', about: 'About DSH Project Desktop',
     recentProjects: 'Recent Projects', loading: 'Loading…', noRecentProjects: 'No recent projects',
     applicationMenu: 'Application menu', collapseSidebar: 'Collapse/expand sidebar', collapseSidebarLabel: 'Collapse or expand the sidebar',
@@ -105,6 +105,8 @@ const TOOLS: Menu = {
   label: 'tools',
   items: [
     {id: 'terminal', label: 'terminal', official: 'terminal'},
+    // One export answers "it is slow": the launch and project-open trace plus this project's
+    // official diagnostics, gathered into one folder. A second entry would only split the evidence.
     {id: 'diagnostics', label: 'diagnostics', official: 'diagnostics'},
     {id: 'sep-1', separator: true},
     {id: 'profile', label: 'profile', action: SHELL_TITLEBAR_ACTIONS.profile},

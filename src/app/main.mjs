@@ -1,7 +1,7 @@
 import electron from 'electron';
 import {fileURLToPath} from 'node:url';
 import {basename, dirname, join} from 'node:path';
-import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync} from 'node:fs';
+import {copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {ProjectWorkspace} from './project-workspace.mjs';
 import {SessionState} from './session-state.mjs';
@@ -21,9 +21,10 @@ import {resolveUserData} from './user-data.mjs';
 import {cleanupGuideClones} from './guide-clones.mjs';
 import {restoreMissingResources} from './resource-restore.mjs';
 import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
-import {recordRecoveryEvent} from './recovery-journal.mjs';
+import {recordRecoveryEvent, readRecoveryEvents} from './recovery-journal.mjs';
 import {productName, productVersion} from './product.mjs';
 import {lock} from '../desktop-adapter/paths.mjs';
+import {bootLogDirectory, bootLogFile, describeRecoveryEvent, renderExportReport, session as startTrace} from './boot-log.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, dialog} = electron;
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -45,7 +46,16 @@ if (!app.requestSingleInstanceLock()) {app.quit()}
 else {void run().catch(error => {console.error(error); app.exit(1)})}
 
 async function run() {
+  bootLogDirectory(userData);
+  // Everything before this point is Electron's own cost and is reported as `early`; every
+  // stage after it is one this shell chose to spend. A slow launch is nearly always one
+  // entry of this list, and which one no longer needs a rebuild to find out.
+  const trace = startTrace('boot', `shell=${productVersion} desktop=${lock.desktop.version} `
+    + `harness=${lock.harness.version} platform=${process.platform} packaged=${String(app.isPackaged)} `
+    + `userData=${userData}${testing ? ' testing=1' : ''}`);
+  trace.stage('early electron main, before run');
   await cleanupGuideClones(userData);
+  trace.stage('cleanup guide clones');
   let guide, guideOpening, projectCreate, projectCreateOpening, tray, updates, updateExit, quitting = false, quitReady = false, startupComplete = false;
   const startupFiles = process.argv.filter(value => value.endsWith('.agent-project'));
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
@@ -63,10 +73,53 @@ async function run() {
       renameSync(themeFile + '.tmp', themeFile);
     }});
   if (storedTheme) nativeTheme.themeSource = storedTheme;
+  trace.stage('theme and recent-projects state', `storedTheme=${String(storedTheme)} recent=${String(recent.list().length)}`);
   const report = error => {console.error(error); if (!testing) dialog.showErrorBox('DSH Project Desktop', error.message ?? String(error))};
   const perform = action => {void Promise.resolve().then(action).catch(report)};
+  /**
+   * Write one report that answers both "the app starts slowly" and "opening a project is
+   * sometimes slow", plus the Recovery Mode reasons that used to live only inside each
+   * project's state directory — and, when a project window supplied it, that project's own
+   * official diagnostics archive, copied beside the report. One destination, send it on.
+   */
+  const exportStartupLog = async (destination, diagnostics) => {
+    const boot = bootLogFile();
+    let bootText;
+    try {bootText = boot && existsSync(boot) ? readFileSync(boot, 'utf8') : undefined}
+    catch (error) {console.error('Startup log export: the trace could not be read:', error.message)}
+    const projects = [...projectTraces].map(([path, entry]) => [path,
+      {...entry, recoveryEvents: readRecoveryEvents(entry.stateDirectory)}]);
+    const text = renderExportReport({trace: bootText, at: new Date().toISOString(),
+      product: `${productName} ${productVersion}`, platform: `${process.platform} ${process.arch}`,
+      sources: [`launch trace ${boot ?? 'unavailable'}`, `user data ${userData}`], projects});
+    let written = false;
+    let diagnosticsCopy;
+    try {
+      writeFileSync(destination, text);
+      written = true;
+    } catch (error) {console.error('Startup log export:', error)}
+    if (diagnostics && written) {
+      try {
+        // Gather the official archive next to the report instead of replacing it: opening a log
+        // in a text editor must keep working, and the archive still satisfies the official format.
+        const folder = dirname(destination);
+        mkdirSync(folder, {recursive: true});
+        const archive = await diagnostics(folder);
+        const copy = join(folder, `dsh-diagnostics-${basename(destination).replace(/\.log$/u, '')}.zip`);
+        copyFileSync(archive, copy);
+        diagnosticsCopy = copy;
+      } catch (error) {console.error('Startup log export: the diagnostics archive could not be added:', error)}
+    }
+    trace.event('logs exported', `${destination} bytes=${String(Buffer.byteLength(text))}`
+      + `${diagnosticsCopy ? ` diagnostics=${diagnosticsCopy}` : ' diagnostics=unavailable'}`);
+    return written;
+  };
   const surfaces = new Map();
   const preparedSafeModes = new Map();
+  // Every project this session touched, so one export can carry all of their traces and the
+  // recovery reasons that belong to them. Recovery Mode used to be recorded only in the
+  // project's own state directory, which is exactly the file nobody knows how to find.
+  const projectTraces = new Map();
   const workspace = new ProjectWorkspace({session, resolveProject: resolveProjectFile, create: createProject,
     recovery: async manifest => {
       const state = projectStatePath(userData, manifest, {allowMissing: true});
@@ -166,17 +219,33 @@ async function run() {
     if (showWelcome && !quitting && !projects.size && !surfaces.size) await showGuide();
   }
   async function open(target, {showWelcomeOnError = true} = {}) {
+    // One trace per open: the welcome window, a recent-project entry and a file association
+    // all arrive here, and the project's stages must not be mixed with the launch trace.
+    const openTrace = startTrace('project/open');
     let manifest;
     try {
+      openTrace.stage('open requested', String(target));
       if (quitting) throw new Error('Application is shutting down');
       manifest = resolveProjectFile(target);
+      openTrace.stage('project file resolved', manifest);
       assertProjectCreationReady(manifest);
-      if (surfaces.has(manifest)) {const handle = await surfaces.get(manifest).opening; handle.show(); return}
+      if (surfaces.has(manifest)) {
+        const existing = surfaces.get(manifest);
+        const handle = await existing.opening;
+        openTrace.stage('already open, raised window', `recovery=${String(existing.recoveryMode)}`);
+        openTrace.end('reused');
+        handle.show();
+        return;
+      }
       const project = await workspace.open(manifest);
+      openTrace.stage('workspace open returned');
       const previousGuide = guide;
       setImmediate(() => {if (previousGuide && !previousGuide.isDestroyed() && !workspace.failures().length) previousGuide.close()});
+      openTrace.end();
       return project;
     } catch (error) {
+      openTrace.stage('open failed', error?.message ?? String(error));
+      openTrace.end('failed');
       if (manifest && session.get(manifest) && !quitting) {await recover(manifest, {requested: false, error, source: 'open'}); return}
       if (showWelcomeOnError && startupComplete && !quitting) await showGuide();
       throw error;
@@ -225,10 +294,14 @@ async function run() {
       const failureDetail = error ? await describeProjectError(error) : workspace.errors.get(manifest);
       // The official Recovery Assistant only ever receives this reason as a window query
       // parameter, so a dismissed window used to leave no evidence anywhere while the Host
-      // log cannot exist yet. Keep the shell-owned copy beside the project's Host logs.
-      if (recoveryMode && !recordRecoveryEvent(state.stateDirectory, {source, requested, readOnly, failureStage,
-        detail: failureDetail ?? '', phase: session.get(manifest)?.phase ?? null, manifestPath: state.manifestPath})) {
-        console.error('Recovery journal: the Recovery Mode reason could not be recorded');
+      // log cannot exist yet. Keep the shell-owned copy beside the project's Host logs, and
+      // put the same reason in the launch trace so the exported log carries it too.
+      if (recoveryMode) {
+        const journaled = recordRecoveryEvent(state.stateDirectory, {source, requested, readOnly, failureStage,
+          detail: failureDetail ?? '', phase: session.get(manifest)?.phase ?? null, manifestPath: state.manifestPath});
+        if (!journaled) console.error('Recovery journal: the Recovery Mode reason could not be recorded');
+        trace.stage(`recovery mode entered (${source})`, describeRecoveryEvent(journaled ?? {source, requested, readOnly, failureStage,
+          detail: failureDetail ?? ''}));
       }
       const handle = await createProjectNativeWindow({...state, locale: entry.locale, recovery, requested, readOnly,
         failureDetail, failureStage, isClosing: () => quitting || entry.closing,
@@ -255,6 +328,12 @@ async function run() {
   }
   async function createProject(manifest, _signal, {safeMode = false} = {}) {
       const state = projectStatePath(userData, manifest, {allowMissing: safeMode});
+      // The Host and window launch: the slow half of opening a project, named per project so
+      // several opens interleaving in one log stay readable.
+      const trace = startTrace(`project/open:${basename(manifest, '.agent-project')}`, `safeMode=${String(safeMode)}`);
+      // Remember where this project's own state lives: one export must be able to carry every
+      // project's recovery reasons without the operator hunting for per-project directories.
+      projectTraces.set(manifest, {stateDirectory: state.stateDirectory, trace, at: new Date().toISOString()});
       let detach, stop, temporary;
       let value;
       try {
@@ -263,8 +342,10 @@ async function run() {
           preparedSafeModes.delete(manifest);
         }
         else await cleanupSafeMode(state.stateDirectory);
+        trace.stage('safe mode state prepared');
         const title = basename(manifest, '.agent-project');
         value = await openNativeProject(electron, {...state, projectRoot: dirname(manifest), ...temporary,
+          trace, exportStartupLog,
           title: safeMode ? `${title} — ${language() === 'zh' ? '安全模式' : 'Safe Mode'}` : title,
           locale: language(), hidden: testing, onMenuChanged: refreshMenus, onError: report,
           checkForUpdates: window => updates.checkNow(window),
@@ -309,14 +390,23 @@ async function run() {
         if (!safeMode) {
           recent.remember({path: manifest, title});
           session.update(manifest, {locale: value.locale});
+          trace.stage('project remembered, state saved');
           // A fresh checkout carries no resources/ directory at all, because the project
           // definition excludes every resource repository from the parent Git tree. Rebuild
           // them through the Host's own resource API: opening never waits, the Plugin's panel
           // shows progress and a failure stays recoverable from there.
-          if (!testing) void restoreMissingResources(value.host, {onError: error => console.error('Resource restore:', error.message)});
+          if (!testing) {
+            trace.stage('resource restore started (not awaited)');
+            void restoreMissingResources(value.host, {onError: error => {
+              console.error('Resource restore:', error.message);
+              trace.stage('resource restore failed', error.message);
+            }}).then(() => trace.stage('resource restore finished'));
+          }
         }
+        trace.end();
         return value;
       } catch (error) {
+        trace.stage('project launch failed', error?.message ?? String(error));
         stop?.(); await detach?.();
         try {await value?.close()} catch (shutdown) {
           const failure = new AggregateError([error, shutdown], 'Project startup cleanup is unconfirmed');
@@ -357,7 +447,7 @@ async function run() {
       roles.edit, roles.view,
       {label: zh ? '项目工具' : 'Project Tools', submenu: [...tools,
         command(zh ? '打开项目终端' : 'Open Project Terminal', () => active()?.terminal(), {enabled: Boolean(current) && !current.safeMode}),
-        command(zh ? '导出项目诊断…' : 'Export Project Diagnostics…', () => active()?.diagnostics(), {enabled: Boolean(current)}),
+        command(zh ? '导出日志与诊断…' : 'Export Logs and Diagnostics…', () => active()?.diagnostics(), {enabled: Boolean(current)}),
         command(zh ? 'Profile…' : 'Profiles…', () => {
           const entry = [...projects].find(([, value]) => value === active());
           if (entry) return showProfileSurface(entry[0]);
@@ -390,6 +480,10 @@ async function run() {
   });
   app.on('activate', () => {if (startupComplete) perform(showApplication)});
   app.on('window-all-closed', () => {});
+  // A launch trace that only ends when the welcome window appears says nothing about a slow
+  // quiet start; closing the app settles the `boot` total in every path, including the test
+  // modes that return before the normal tail of run().
+  app.on('will-quit', () => trace.end('quit'));
   app.on('before-quit', event => {
     if (quitReady) return;
     event.preventDefault(); if (quitting) return; quitting = true;
@@ -413,6 +507,7 @@ async function run() {
     });
   });
   await app.whenReady();
+  trace.stage('app.whenReady');
   // One panel serves both About entry points: the macOS application menu's native About item
   // (official `role: 'about'`) and the self-drawn titlebar entry on Windows/Linux. The shell
   // version alone never says which DSH runtime is pinned, and the Host refuses to start when the
@@ -424,6 +519,7 @@ async function run() {
   app.setAboutPanelOptions({applicationName: productName, applicationVersion: productVersion,
     ...(process.platform === 'darwin' ? {version: `DSH ${lock.harness.version}`} : {credits: harnessIdentity})});
   lastLocale = app.getLocale().startsWith('zh') ? 'zh' : 'en';
+  trace.stage('about panel and app locale');
   const updateFixtures = updateTest ? await import('../../scripts/native-update-fixture.mjs') : undefined;
   updates = await createProjectUpdates(electron, {userData, locale: language,
     getWindow: () => {const focused = BrowserWindow.getFocusedWindow(); return focused?.getParentWindow() ?? focused ?? active()?.window ?? guide},
@@ -434,13 +530,17 @@ async function run() {
     install: launch => new Promise((resolve, reject) => {updateExit = {launch, resolve, reject}; app.quit()}),
     ...(updateFixtures ? updateFixtures.options : {}),
   });
+  trace.stage('updates service');
   // Single-instance ownership is held and no Host has started. Remove only disposable trees.
   const stateRoot = join(userData, 'projects');
+  let disposableProjects = 0;
   if (existsSync(stateRoot)) for (const entry of readdirSync(stateRoot, {withFileTypes: true})) {
     if (entry.isDirectory() && /^[a-f0-9]{64}$/.test(entry.name)) {
+      disposableProjects += 1;
       try {await cleanupSafeMode(join(stateRoot, entry.name))} catch (error) {report(error)}
     }
   }
+  trace.stage('disposable project state cleanup', `projects=${String(disposableProjects)}`);
   // Shell-owned artwork supplies the application and tray identity on every window.
   app.dock?.setIcon(appIcon);
   const icon = nativeImage.createFromPath(trayIcon);
@@ -457,6 +557,7 @@ async function run() {
     if (entry) return perform(() => close(entry[0]));
   }});
   refreshMenus();
+  trace.stage('tray, accelerators, menus');
   if (updateTest) {
     startupComplete = true;
     try {await (await import('../../scripts/native-update-case.mjs')).runUpdateCase({electron, open, close, showGuide, updates, userData, workspace, fixture: updateFixtures})}
@@ -488,13 +589,19 @@ async function run() {
     return;
   }
   await workspace.restore();
+  trace.stage('workspace restore (session projects)', `projects=${String(projects.size)} failures=${String(workspace.failures().length)}`);
   for (const failure of workspace.failures()) {
     try {resolveProjectFile(failure.path)} catch {continue}
     await recover(failure.path, {requested: failure.phase === 'recovering', error: new Error(failure.error ?? 'Previous project startup failed'), source: 'startup-restore'});
   }
   while (startupFiles.length) await Promise.allSettled(startupFiles.splice(0).map(open));
   startupComplete = true;
-  if ((!projects.size && !surfaces.size) || workspace.failures().some(item => !surfaces.has(item.path))) await showGuide();
+  trace.stage('startup files opened', `files=${String(process.argv.filter(value => value.endsWith('.agent-project')).length)}`);
+  if ((!projects.size && !surfaces.size) || workspace.failures().some(item => !surfaces.has(item.path))) {
+    await showGuide();
+    trace.stage('welcome window created');
+  }
+  trace.end(`projects=${String(projects.size)}`);
   if (!testing) void updates.offerCleanup();
   if (lifecycleTest) {
     try {await (await import('../../scripts/native-lifecycle-case.mjs')).runLifecycleCase({electron, open, close, showGuide, dismissSurface,

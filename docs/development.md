@@ -110,6 +110,41 @@ The import refuses an already prepared destination. Do not overwrite an active
 runtime or rebuild dependencies used by running windows. For an upstream upgrade,
 use a separate checkout/cache and rerun acceptance before adopting the lock.
 
+### Startup and project-open timing / 启动与打开项目耗时
+
+每次启动都会写 `<userData>/boot.log`（`DSH_PROJECT_DESKTOP_USER_DATA` 生效时就在该目录下），
+不需要事先打开任何开关：`boot` 段是一次启动，`project/open:<项目>` 段是一次打开，
+Host 进程内部的阶段（首次 Profile 准备的 pnpm 依赖实体化、官方插件树、渲染进程注册）也追加在
+同一段里。每行是 `+该段开始以来的偏移` + `该阶段自己的耗时`，单阶段 ≥ 1 秒会带 `[SLOW >1000ms]`，
+段落结束时给出 `total` 与最慢阶段；文件超过 `DSH_PROJECT_BOOT_LOG_BYTES`（默认 256 KiB）时按半量
+截断，只保留最新记录。
+
+Every launch writes `<userData>/boot.log`, with no switch to remember first: `boot` covers the
+launch, `project/open:<name>` one project open, and the Host process appends its own stages
+(first-run pnpm materialization, the official plugin tree, renderer registration) to the same
+trace. Each line carries the offset since that trace began and the stage's own cost, a stage of
+1000 ms or more is marked `[SLOW >1000ms]`, and the trace ends with `total` and its slowest
+stage. The file is truncated to its newest half once it passes `DSH_PROJECT_BOOT_LOG_BYTES`
+(256 KiB by default).
+
+Follow it live while reproducing a slow launch:
+
+```sh
+DSH_PROJECT_BOOT_TRACE=1 DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start
+```
+
+`DSH_PROJECT_BOOT_LOG` points the trace at another file, and setting it to the empty string turns
+the trace off. In the app, 项目工具 → 导出日志与诊断… writes the whole trace plus each project's
+recovery reasons and the project's official diagnostics archive into one folder and reveals it.
+
+```powershell
+yarn probe:startup-trace <label>
+```
+
+runs one real native smoke launch with the trace on and fails unless the launch trace, a
+project-open trace, the Host-process stages and a `[SLOW >1000ms]` line are all present; its
+evidence lands in `.runtime/startup-trace-<stamp>-<label>-*/boot.log`.
+
 ## Checks and limits / 验证范围
 
 | Command | Scope |
@@ -118,6 +153,7 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 | `yarn run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
 | `yarn run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
 | `yarn run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
+| `yarn run probe:startup-trace` | Real launch writes a usable startup/open trace (`boot`, `project/open:*`, Host stages, a marked slow stage) |
 | `yarn run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
 | `yarn run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
 | `yarn run smoke:resources` | Native resource status and remote-association checks |
