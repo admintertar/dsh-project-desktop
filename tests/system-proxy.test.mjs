@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {EventEmitter} from 'node:events';
 import {test} from 'node:test';
-import {NO_PROXY, detectSystemProxy, parseProxyAnswer, probeProxy, proxyHostEnvironment, redactProxy}
-  from '../src/desktop-adapter/stable/system-proxy.mjs';
+import {NO_PROXY, detectSystemProxy, hasExplicitProxyEnvironment, mergeNoProxy, parseProxyAnswer, probeProxy,
+  proxyHostEnvironment, redactProxy} from '../src/desktop-adapter/stable/system-proxy.mjs';
 
 /**
  * The measured production failure these tests guard: Git for Windows never reads the WinINET
@@ -110,11 +110,66 @@ test('the Host supervisor injects the proxy only outside Safe Mode', async () =>
   assert.match(source,
     /const proxy = safeMode \? \{proxied: false, reason: 'safe-mode'\} : await detectSystemProxy\(\{resolveProxy: nativeRuntime\?\.resolveProxy\}\)/,
     'Safe Mode must not detect a proxy: its environment is trimmed on purpose');
-  assert.match(source, /env: \{\.\.\.\(safeMode \? safeHostEnvironment\(process\.env\) : process\.env\), \.\.\.proxyHostEnvironment\(proxy\)/,
-    'the resolved proxy must be spread after the inherited environment, which would otherwise win');
+  assert.match(source, /const proxyEnvironment = proxyHostEnvironment\(proxy, process\.env\)/,
+    'the inherited environment must be considered before a proxy is injected into the Host');
+  assert.match(source, /env: \{\.\.\.\(safeMode \? safeHostEnvironment\(process\.env\) : process\.env\), \.\.\.proxyEnvironment/,
+    'the resolved proxy environment must be spread after the inherited environment');
 });
 
 test('the proxy address is redacted before it reaches any diagnostic surface', () => {
   assert.equal(redactProxy('http://user:secret@proxy.corp:8080'), 'http://proxy.corp:8080');
   assert.equal(redactProxy('not a url'), 'the configured proxy');
+});
+
+/**
+ * macOS runs the same code path with no platform branch, and a system proxy there usually carries
+ * its own exception list (measured on the development machine: muyuan.do, timestamp.apple.com,
+ * *.local) that Chromium applies but a Git child never sees. Overwriting `no_proxy` therefore
+ * silently sent those targets through the local proxy. The operator's exclusions are a floor.
+ */
+test('operator exclusions survive the injection instead of being replaced by the defaults', async () => {
+  const detection = await detectSystemProxy({resolveProxy: async () => 'PROXY 127.0.0.1:7890', cache: probe('connect')});
+  const environment = proxyHostEnvironment(detection, {no_proxy: 'corp.example.com, .internal', NO_PROXY: 'muyuan.do'});
+  const entries = environment.no_proxy.split(',');
+  for (const kept of ['corp.example.com', '.internal', 'muyuan.do']) {
+    assert.ok(entries.includes(kept), `${kept} must stay excluded from the proxy`);
+  }
+  for (const fallback of ['localhost', '127.0.0.0/8', '192.168.0.0/16', '.local']) {
+    assert.ok(entries.includes(fallback), `${fallback} must still be excluded by default`);
+  }
+  assert.equal(environment.NO_PROXY, environment.no_proxy, 'both casings must carry the same merged list');
+  assert.equal(environment.http_proxy, 'http://127.0.0.1:7890',
+    'merging the exclusions must not drop the address Git is supposed to use');
+});
+
+test('an operator-exported proxy is kept and only the exclusions are enforced', async () => {
+  const detection = await detectSystemProxy({resolveProxy: async () => 'PROXY 127.0.0.1:7890', cache: probe('connect')});
+  for (const name of ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']) {
+    const environment = proxyHostEnvironment(detection, {[name]: 'http://corp.example.com:3128'});
+    assert.equal(environment.http_proxy, undefined, `${name} was exported by the operator: the resolved proxy must not replace it`);
+    assert.equal(environment.HTTPS_PROXY, undefined, name);
+    assert.ok(environment.no_proxy.includes('localhost'), `${name} must not disable the loopback exclusions`);
+  }
+  for (const [name, environment] of [
+    ['nothing set', {}],
+    ['blank value', {http_proxy: '   '}],
+    ['unrelated variable', {no_proxy: 'corp.example.com'}],
+  ]) {
+    assert.equal(hasExplicitProxyEnvironment(environment), false, name);
+  }
+  for (const environment of [{http_proxy: 'http://corp.example.com:3128'}, {HTTPS_PROXY: 'http://corp.example.com:3128'}]) {
+    assert.equal(hasExplicitProxyEnvironment(environment), true, JSON.stringify(environment));
+  }
+});
+
+test('the default exclusions cover the whole loopback block, not just 127.0.0.1', () => {
+  const entries = NO_PROXY.split(',');
+  for (const entry of ['localhost', '127.0.0.1', '127.0.0.0/8', '::1', '[::1]']) {
+    assert.ok(entries.includes(entry), `${entry} must be excluded by default`);
+  }
+  assert.equal(mergeNoProxy(), NO_PROXY, 'no inherited value must reproduce the previous default list exactly');
+  assert.ok(mergeNoProxy({no_proxy: 'corp.example.com'}).endsWith('corp.example.com'),
+    'an inherited exclusion is appended after the defaults');
+  assert.equal(mergeNoProxy({no_proxy: 'LOCALHOST, Corp.Example.com'}), `${NO_PROXY},Corp.Example.com`,
+    'duplicates are dropped by casing while the operator spelling is preserved');
 });

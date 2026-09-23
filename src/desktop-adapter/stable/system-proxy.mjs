@@ -22,9 +22,13 @@ import {connect} from 'node:net';
 const CACHE_TTL_MS = 30_000;
 const PRECHECK_TIMEOUT_MS = 500;
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-/** Private, link-local and loopback ranges stay out of the proxy for the same reason Chromium omits them. */
+/**
+ * Private, link-local and loopback ranges stay out of the proxy for the same reason Chromium
+ * omits them. `127.0.0.1` stays listed next to the whole `127.0.0.0/8` block because not every
+ * bundled tool expands CIDR notation, and `[::1]` covers the bracketed form Git writes.
+ */
 export const NO_PROXY = [
-  'localhost', '127.0.0.1', '::1', '0.0.0.0',
+  'localhost', '127.0.0.1', '127.0.0.0/8', '::1', '[::1]', '0.0.0.0',
   '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16',
   '169.254.0.0/16', 'fc00::/7', 'fe80::/10', '.local',
 ].join(',');
@@ -130,15 +134,55 @@ export async function detectSystemProxy({resolveProxy, probe, cache: probeCache 
     reason: decided.some(({result}) => result?.reason === 'remote') ? 'remote' : 'connected'};
 }
 
+/** Names that carry an operator-configured proxy in either casing. */
+const PROXY_ENVIRONMENT_NAMES = Object.freeze(['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']);
+
+/** Split one no_proxy value into its entries, dropping empty ones. */
+function noProxyEntries(value) {
+  return String(value ?? '').split(',').map(entry => entry.trim()).filter(Boolean);
+}
+
+/**
+ * The defaults are a floor, never a replacement. An operator who excluded a corporate host from
+ * their own proxy must keep that exclusion, so the inherited `no_proxy`/`NO_PROXY` entries are
+ * merged into the product's own list instead of being overwritten by it.
+ * @param {Record<string, string|undefined>} environment - the environment being inherited.
+ * @returns {string} one comma-separated exclusion list, defaults first, duplicates dropped.
+ */
+export function mergeNoProxy(environment = {}) {
+  const merged = [];
+  const seen = new Set();
+  for (const entry of [...noProxyEntries(NO_PROXY), ...noProxyEntries(environment.no_proxy), ...noProxyEntries(environment.NO_PROXY)]) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(entry);
+  }
+  return merged.join(',');
+}
+
+/** A proxy variable already present in the inherited environment is explicit operator intent. */
+export function hasExplicitProxyEnvironment(environment = {}) {
+  return PROXY_ENVIRONMENT_NAMES.some(name => typeof environment[name] === 'string' && environment[name].trim() !== '');
+}
+
 /**
  * The environment Git and its helpers inherit. Both letter cases are set: Git, curl and Git LFS
  * read the lowercase form, other bundled tools read the uppercase one, and Windows environment
  * blocks are case-insensitive, so one key would overwrite the other.
+ *
+ * This layer only fills the gap Git for Windows leaves open: when the operator already exported a
+ * proxy, that address is kept and only the exclusion list is enforced, because loopback and the
+ * product's own fixtures must never travel through a proxy the operator never excluded.
+ * @param {{proxied?: boolean, proxy?: string}} detection - result of detectSystemProxy.
+ * @param {Record<string, string|undefined>} environment - the environment being inherited.
  */
-export function proxyHostEnvironment(detection) {
+export function proxyHostEnvironment(detection, environment = {}) {
   if (!detection?.proxied || !detection.proxy) return {};
+  const noProxy = mergeNoProxy(environment);
+  if (hasExplicitProxyEnvironment(environment)) return {no_proxy: noProxy, NO_PROXY: noProxy};
   const {proxy} = detection;
   return {http_proxy: proxy, https_proxy: proxy, HTTP_PROXY: proxy, HTTPS_PROXY: proxy,
     // Explicitly keep the loopback and private targets the product talks to out of the proxy.
-    no_proxy: NO_PROXY, NO_PROXY};
+    no_proxy: noProxy, NO_PROXY: noProxy};
 }
