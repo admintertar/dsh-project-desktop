@@ -11,6 +11,7 @@ import {createProjectRestartRequest} from '../windows/project-restart.mjs';
 import {createWindowMaterialRefresher} from '../windows/window-material-refresh.mjs';
 import {createShellTitlebarActionRunner, shellTitlebarRequest} from './stable/shell-titlebar-actions.mjs';
 import {productVersion, productName} from '../app/product.mjs';
+import {LastDirectories, pickRememberedDirectory} from '../app/last-directories.mjs';
 
 function spawnUtility(electron, entry, args, options) {
   const child = electron.utilityProcess.fork(entry, args, {cwd: options.cwd, env: options.env, stdio: 'pipe', serviceName: 'DSH Project Host'});
@@ -37,6 +38,11 @@ export async function openNativeProject(electron, options) {
   // disables itself for project windows.
   const {windowsBuildNumber} = await loadDesktop('window-material');
   const {electronPlatformStrategy} = await loadDesktop('electron-platform');
+  // Where each in-project chooser went last time. The pinned Desktop profile serves Windows
+  // through the browse directory-picker backend, so the companion plugin asks this runtime for
+  // a directory there; keeping the last one makes the resource, relocation and skill pickers
+  // reopen where the user left off.
+  const lastDirectories = new LastDirectories(join(electron.app.getPath('userData'), 'last-directories.json'));
   let window, host, specification, removeHeaders, chromiumSession;
   let disposed = false, quitting = false;
   let locale = options.locale;
@@ -111,7 +117,13 @@ export async function openNativeProject(electron, options) {
         {appVersion: `${productName} ${productVersion} / Desktop ${lock.desktop.version}`});
       shell.showItemInFolder(path);
     },
-    async pickDirectory() {const result = await dialog.showOpenDialog(window, {properties: ['openDirectory', 'createDirectory']}); return result.canceled ? null : result.filePaths[0]},
+    async pickDirectory() {
+      return await pickRememberedDirectory(lastDirectories, 'resource', async previous => {
+        const result = await dialog.showOpenDialog(window, {properties: ['openDirectory', 'createDirectory'],
+          ...(previous ? {defaultPath: previous} : {})});
+        return result.canceled ? null : result.filePaths[0];
+      });
+    },
     async validateDirectory(path) {try {return typeof path === 'string' && statSync(path).isDirectory()} catch {return false}},
     reportRendererBoot(report) {clearTimeout(healthTimer); report.status === 'healthy' ? health.resolve(report) : failed(new Error(JSON.stringify(report)))},
     setLocalePreference(value) {locale = value === 'zh' || value === 'en' ? value : options.locale; options.onMenuChanged?.()},

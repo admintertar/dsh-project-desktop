@@ -116,6 +116,9 @@ footer p {font-size:12px;margin:0;width:100%;line-height:1.5}.empty {min-height:
 .remoteRepositoryField p {margin:6px 0 0;font-size:12px}
 .remoteUnlink {margin-right:auto}
 .remoteRepositoryForm .project-setting-row:last-child {border-bottom:0}
+/* The import dialog reports one real phase at a time, in the same place either way. */
+.cloneProgress {display:flex;align-items:center;gap:6px;margin:8px 0 0;font-size:12px;color:var(--dsw-alias-label-secondary)}
+.cloneProgress>svg {flex:none}
 /* The official frame owns glass surfaces, caption strips and drag exclusion. These
    selectors only adapt two panels to compact guide windows; no extra backdrop. */
 .guideFrame .dshDesktopConversationSurface {container-type:inline-size}

@@ -45,6 +45,12 @@ Harness 的模型插件把设置页面和首次弹窗注册放在同一个入口
 
 Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资源在应用 userData 的 `creation-drafts/draft-*` 中独立克隆，卡片显示阶段／进度、取消或错误；项目名称与目标父目录仍可编辑。只有状态为 completed 且地址和分支匹配的资源才能安装，创建时复制完整仓库到最终相对路径并再次检查 Git 根、origin 与指定分支，不重复请求远端。原 staging 保留到整个创建成功，保证创建失败能重试；切换模板、取消关联、移除资源、关闭窗口与退出应用负责取消并清理对应 staging，不删除外部关联目录。启动持有单实例锁后清理带有本应用标记的遗留草稿。引导克隆使用插件原有的 30 分钟操作超时及 5 分钟认证等待，普通 bootstrap Git 操作继续使用上述五分钟超时。
 
+欢迎窗口的“打开”原生选择器同时允许文件和文件夹（Windows/Linux 无法在一个对话框里双选，会退化为文件夹选择，遇到一个目录里有多个项目文件时再补一次文件选择）。选中的路径先由 Shell 的 `classifyProjectTarget` 分类，再交给固定插件的项目文件解析，因此“没有项目文件”“有多个项目文件”都以欢迎窗口自己的中英文案呈现，而不是只拿到插件的中文提示；菜单与窗口标题栏的“打开项目…”走同一套判定。
+
+“克隆仓库”复用同一套克隆与认证链：`RepositoryImports` 在选定父目录下为仓库名新建目标，校验地址、分支、文件夹名和目标是否存在后交给 `GuideClones` 克隆，完成后复制到目标并只接受根目录恰好一个 `.agent-project` 项目文件；没有项目文件时删除刚克隆的内容，有多个时保留并在提示中给出路径，成功则直接打开该项目。欢迎窗口的导入弹窗复用插件的 `ProjectScrollableModal`、`ProjectSettingRow` 与认证控制器，显示真实克隆阶段与百分比。
+
+欢迎窗口的导入弹窗与项目内的目录选择都记住上次用过的目录（`src/app/last-directories.mjs`，写在应用 userData 的 `last-directories.json`；读取时重新确认目录仍然存在，损坏或非法的状态文件重命名保留而不是阻塞窗口）。欢迎窗口用 `import` 键：浏览选中或成功发起一次导入即记住。项目内的资源、资源重定位与技能导入共用 `resource` 键：走 Shell 自有 runtime 的 `pickDirectory` 时以它为 `defaultPath`，选完即记住。Windows 的目录选择正好落在这条路径上：固定 Desktop 的 `profile.ts` 在 win32 上禁用 `directory-picker`（auto 后端）并插入 `dsh-host-directory-picker-browse`，Host 侧 `directoryPicker` 的能力位因此是 `browse`，插件的 `pickSource` 选择 `desktop`，目录选择交给 Shell 自有的 runtime。macOS 与 Linux 保留 auto 后端，由它按平台探测（Linux 还看 zenity/kdialog 是否存在）决定 native 还是 browse；走 native 时由固定 Desktop 的官方选择器负责，Shell 不介入那条路径，那里沿用官方实现与系统对话框自身的行为。
+
 手动“添加资源”沿用资源页的先填写、后加入流程，默认本地目录，也可切换 Git 仓库；模板仍可以预置空资源。Shell 的 `AddResourceModal` 只管理尚未创建项目的表单草稿，直接复用插件的 `ProjectSelect`、`ProjectScrollableModal`、`ProjectSettingRow`、`ProjectSettingsCard`、文案和样式，不挂载需要现有项目 Host 的 ResourcesPanel。主进程只检测原生选择器选中的目录，适配器调用固定插件的 `inspectResourceGit`，返回名称与安全的 Git 信息。选择 Git 类型的本地资源在最终创建时重新核验 origin，并保存类型与 URL；引用文件保持原位。远程名称和目标目录按地址建议，手动修改后不被覆盖；名称与目标路径独立，编辑名称／仓库不重置已选目标。客户端和创建事务共同校验目录边界及目标重叠，确认远程添加立即开始复用的异步克隆／认证，取消未保存表单不新增卡片。
 
 全新检出后项目根下没有 `resources/` 目录：根 Git 精确忽略每个子资源，所以新机器上所有 Git 资源都是缺失状态。项目窗口进入 `open` 后，主进程读取 Host 的资源快照，对「类型为 Git、声明了远端地址、目录为 ENOENT、没有机器本地绑定、也没有既有克隆作业」的资源逐个调用插件的资源克隆 API，并等前一个作业终结再推进（插件一次只允许一个克隆）。打开不等待克隆，失败只记录日志、仍可在资源页手动重试；安全模式、自检与测试模式不触发。机器本地绑定与项目外目录是用户决定，不覆盖；已有失败作业留给插件面板重试，避免每次打开都重复一次注定失败的克隆。

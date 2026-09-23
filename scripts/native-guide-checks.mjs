@@ -26,7 +26,7 @@ async function clickAndWaitForClose(window, selector) {
 
 /** Verify the application's real entry points share one window, preserving an in-progress draft. */
 export async function checkProjectCreateEntryPoints({electron, guide}) {
-  await guide.webContents.executeJavaScript(`document.querySelector('.actions button').click()`);
+  await guide.webContents.executeJavaScript(`document.querySelector('.actions button[data-guide-action=new]').click()`);
   await waitFor(guide, "!document.querySelector('section[aria-busy=\"true\"]')");
   const createWindows = () => electron.BrowserWindow.getAllWindows().filter(item => item.webContents.getURL().endsWith('?mode=create'));
   assert.equal(createWindows().length, 1);
@@ -69,7 +69,7 @@ export async function checkGuide({electron, repository, userData}) {
     launcher.showInactive();
     await waitFor(launcher, "document.querySelector('h1')?.textContent === 'Recent projects'");
     // Exercise the actual welcome button: its renderer must keep showing recent projects.
-    await launcher.webContents.executeJavaScript(`document.querySelector('.actions button').click()`);
+    await launcher.webContents.executeJavaScript(`document.querySelector('.actions button[data-guide-action=new]').click()`);
     await waitFor(launcher, "!document.querySelector('section[aria-busy=\"true\"]')");
     assert.ok(window); assert.notEqual(window.id, launcher.id);
     assert.notEqual(window.webContents.session, launcher.webContents.session);
@@ -250,4 +250,170 @@ export async function checkGuide({electron, repository, userData}) {
     await waitFor(welcome, "!document.body.hasAttribute('data-ds-dark-theme')");
     writeFileSync(join(userData, 'welcome-zh-light.png'), (await welcome.webContents.capturePage()).toPNG());
   } finally {welcome.destroy()}
+}
+
+const importManifest = 'schemaVersion: 1\nid: imported-1\nname: Imported\nresources:\n  - id: root\n    name: Imported\n    type: local\n    path: .\nmemory: []\n';
+
+/**
+ * Opening a folder and importing a repository are welcome-window entry points: the folder
+ * picker must also admit folders, and the import dialog must reach the project open flow
+ * through the plugin's clone chain, leaving no staging behind.
+ */
+export async function checkRepositoryImport({electron, repository, userData}) {
+  const fixtures = join(userData, 'import-fixtures');
+  const folder = join(fixtures, 'Folder Project'); mkdirSync(folder, {recursive: true});
+  writeFileSync(join(folder, 'Folder Project.agent-project'), importManifest);
+  const empty = join(fixtures, 'Empty Project'); mkdirSync(empty, {recursive: true});
+  const ambiguous = join(fixtures, 'Ambiguous'); mkdirSync(ambiguous, {recursive: true});
+  writeFileSync(join(ambiguous, 'One.agent-project'), importManifest);
+  writeFileSync(join(ambiguous, 'Two.agent-project'), importManifest);
+  const destination = join(fixtures, 'Destination'); mkdirSync(destination, {recursive: true});
+  const defaults = join(fixtures, 'Defaults'); mkdirSync(defaults, {recursive: true});
+  const picked = join(fixtures, 'Picked'); mkdirSync(picked, {recursive: true});
+  const opened = [], installed = [], picks = [];
+  let options, released = false;
+  // The pinned clone manager is exercised for real by the unit suite; here the dialog
+  // needs a deterministic job so the progress UI, IPC and open path can be verified natively.
+  const pool = {
+    entries: new Map(),
+    async start({id, name, url, branch}) {this.entries.set(id, {id, name, url, branch}); return {id, url, branch, status: 'cloning'}},
+    async snapshot() {return [...this.entries.values()].map(entry => ({...entry,
+      ...(released ? {status: 'completed', phase: 'checkout', percent: 100} : {status: 'cloning', phase: 'receiving', percent: 42})}))},
+    async cancel(id) {this.entries.delete(id); return true},
+    async remove(id) {this.entries.delete(id)},
+    async retain() {},
+    async authentication(value) {return value?.path === '/keys' ? {keys: []} : {requests: []}},
+    async install(item, target) {const entry = this.entries.get(item.id); mkdirSync(target, {recursive: true});
+      writeFileSync(join(target, `${entry.name}.agent-project`), importManifest); installed.push(target)},
+    async dispose() {this.entries.clear()},
+  };
+  const launch = locale => createGuideWindow({...electron, dialog: {...electron.dialog,
+    showOpenDialog: async (_window, value) => {options = value; return {canceled: false, filePaths: [picks.shift()]}}}},
+    {repository, locale, hidden: true, recent: {list: () => []}, defaultDirectory: defaults,
+      open: async target => {opened.push(target)}, createClonePool: async () => pool});
+  const invokeAndSettle = (window, action, value) => {
+    const closed = new Promise(resolve => window.once('closed', () => resolve('closed')));
+    const answer = window.webContents.executeJavaScript(
+      `window.projectGuide.invoke(${JSON.stringify(action)}, ${JSON.stringify(value)}).then(() => undefined, error => error.message)`).catch(() => 'closed');
+    return Promise.race([answer, closed]);
+  };
+  const setDialogInput = (window, index, value) => window.webContents.executeJavaScript(
+    `(() => {const input = document.querySelectorAll('[role=dialog] input')[${index}];
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input', {bubbles: true}))})()`);
+  const clickOpen = window => window.webContents.executeJavaScript(`document.querySelector('.actions button[data-guide-action=open]').click()`);
+  const clickClone = window => window.webContents.executeJavaScript(`document.querySelector('.actions button[data-guide-action=clone]').click()`);
+  const settled = promise => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('Import did not open the project')), 15000))]);
+  /** A successful open replies just before it destroys the window; the assertion must wait for that. */
+  const destroyed = window => new Promise((resolve, reject) => {
+    if (window.isDestroyed()) return resolve();
+    const timer = setTimeout(() => reject(new Error('Guide window did not close')), 10000);
+    window.once('closed', () => {clearTimeout(timer); resolve()});
+  });
+
+  // A folder with exactly one entry file opens like the file itself.
+  picks.length = 0; picks.push(folder);
+  let window = await launch('zh'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  const folderOpened = destroyed(window);
+  await settled(invokeAndSettle(window, 'open'));
+  await folderOpened;
+  assert.deepEqual(opened, [folder]);
+  assert.deepEqual(options.properties, ['openFile', 'openDirectory']);
+
+  // A folder without one explains itself in the window's own language instead of the plugin's.
+  picks.length = 0; picks.push(empty);
+  window = await launch('zh'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  await clickOpen(window);
+  await waitFor(window, "document.querySelector('.error')?.textContent.includes('不是 agent-project 项目')");
+  window.destroy();
+
+  // Only macOS can pick a file inside an ambiguous folder; the other platforms fall back to it.
+  picks.length = 0; picks.push(ambiguous, join(ambiguous, 'One.agent-project'));
+  window = await launch('en'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  if (process.platform === 'darwin') {
+    await clickOpen(window);
+    await waitFor(window, "document.querySelector('.error')?.textContent.includes('several .agent-project files')");
+    window.destroy();
+  } else {
+    const ambiguousOpened = destroyed(window);
+    await clickOpen(window);
+    await ambiguousOpened;
+    assert.equal(opened.at(-1), join(ambiguous, 'One.agent-project'));
+  }
+
+  // The import dialog validates its own form, prefills the folder name, and imports natively.
+  window = await launch('zh'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  const actionButtons = await window.webContents.executeJavaScript(
+    `[...document.querySelectorAll('.actions button')].map(button => ({action: button.dataset.guideAction, text: button.textContent}))`);
+  assert.deepEqual(actionButtons.map(item => item.action), ['clone', 'new', 'open']);
+  assert.equal(actionButtons[0].text, '克隆仓库');
+  assert.equal(actionButtons[1].text, '新建项目');
+  assert.match(actionButtons[2].text, /^打开/);
+  await clickClone(window);
+  await waitFor(window, "Boolean(document.querySelector('[role=dialog]'))");
+  assert.match(await window.webContents.executeJavaScript(`document.querySelector('[role=dialog]').textContent`), /从 Git 仓库克隆项目/);
+  // Nothing was imported yet, so the dialog still starts from the window default.
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('[role=dialog] input')[2].value`), defaults);
+  await window.webContents.executeJavaScript(`document.querySelector('[role=dialog] button[type=submit]').click()`);
+  await waitFor(window, "Boolean(document.querySelector('[role=dialog] [role=alert]'))");
+  await setDialogInput(window, 0, 'https://github.com/example/imported-project.git');
+  await setDialogInput(window, 2, destination);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('[role=dialog] input')[3].value`), 'imported-project');
+  assert.match(await window.webContents.executeJavaScript(`document.querySelector('[role=dialog] .projectPathPreview').textContent`), /imported-project$/);
+  const imported = new Promise(resolve => window.once('closed', resolve));
+  await window.webContents.executeJavaScript(`document.querySelector('[role=dialog] button[type=submit]').click()`).catch(() => {});
+  // The clone runs through the plugin's job records, so the dialog must report its real phase.
+  await waitFor(window, "document.querySelector('.cloneProgress')?.textContent.includes('42%')");
+  assert.match(await window.webContents.executeJavaScript(`document.querySelector('.cloneProgress').textContent`), /接收对象/);
+  released = true;
+  await settled(imported);
+  assert.deepEqual(installed, [join(destination, 'imported-project')]);
+  assert.equal(opened.at(-1), join(destination, 'imported-project', 'imported-project.agent-project'));
+
+  // The import directory survives the window: the next import starts where this one went,
+  // and browsing remembers the picked folder before any clone is started.
+  picks.length = 0; picks.push(picked);
+  window = await launch('zh'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  await clickClone(window);
+  await waitFor(window, `Boolean(document.querySelector('[role=dialog]')) && document.querySelectorAll('[role=dialog] input')[2].value === ${JSON.stringify(destination)}`);
+  await window.webContents.executeJavaScript(`document.querySelector('[role=dialog] .projectPathControl button').click()`);
+  await waitFor(window, `document.querySelectorAll('[role=dialog] input')[2].value === ${JSON.stringify(picked)}`);
+  window.webContents.sendInputEvent({type: 'keyDown', keyCode: 'Escape'});
+  window.webContents.sendInputEvent({type: 'keyUp', keyCode: 'Escape'});
+  await waitFor(window, "!document.querySelector('[role=dialog]')");
+  await clickClone(window);
+  await waitFor(window, `Boolean(document.querySelector('[role=dialog]')) && document.querySelectorAll('[role=dialog] input')[2].value === ${JSON.stringify(picked)}`);
+  assert.deepEqual(installed, [join(destination, 'imported-project')]);
+  window.destroy();
+
+  // English, dark theme and Escape must behave like every other official dialog.
+  window = await launch('en'); window.showInactive();
+  await waitFor(window, "document.querySelector('.actions')");
+  electron.nativeTheme.themeSource = 'dark';
+  await clickClone(window);
+  await waitFor(window, "document.querySelector('[role=dialog]') && document.body.hasAttribute('data-ds-dark-theme')");
+  assert.match(await window.webContents.executeJavaScript(`document.querySelector('[role=dialog]').textContent`), /Clone Project from Git Repository/);
+  assert.equal(await window.webContents.executeJavaScript(`document.querySelectorAll('[role=dialog] input')[2].value`), picked);
+  writeFileSync(join(userData, 'import-en-dark.png'), (await window.webContents.capturePage()).toPNG());
+  window.webContents.sendInputEvent({type: 'keyDown', keyCode: 'Escape'});
+  window.webContents.sendInputEvent({type: 'keyUp', keyCode: 'Escape'});
+  await waitFor(window, "!document.querySelector('[role=dialog]')");
+  electron.nativeTheme.themeSource = 'light';
+  await waitFor(window, "!document.body.hasAttribute('data-ds-dark-theme')");
+  await clickClone(window);
+  await waitFor(window, "Boolean(document.querySelector('[role=dialog]'))");
+  writeFileSync(join(userData, 'import-en-light.png'), (await window.webContents.capturePage()).toPNG());
+  // A compact window keeps the dialog inside the viewport and adds no horizontal scroll.
+  window.setSize(420, 460);
+  await waitFor(window, "innerWidth <= 420");
+  assert.equal(await window.webContents.executeJavaScript(
+    `document.querySelector('[role=dialog]').getBoundingClientRect().right <= innerWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1`), true);
+  writeFileSync(join(userData, 'import-narrow-en-light.png'), (await window.webContents.capturePage()).toPNG());
+  window.destroy();
+  console.log('Welcome folder opening, ambiguity copy and repository import passed.');
 }

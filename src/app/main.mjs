@@ -9,7 +9,7 @@ import {SharedTheme} from './shared-theme.mjs';
 import {nativeRoleMenus} from './native-menus.mjs';
 import {installWindowAccelerators, WINDOW_ACCELERATOR_COMMANDS} from './window-accelerators.mjs';
 import {projectStatePath} from './project-state.mjs';
-import {RecentProjects, resolveProjectFile} from './project-files.mjs';
+import {RecentProjects, classifyProjectTarget, resolveProjectFile} from './project-files.mjs';
 import {openNativeProject} from '../desktop-adapter/native.mjs';
 import {createProjectRecovery, describeProjectError} from '../desktop-adapter/stable/recovery.mjs';
 import {projectProfiles} from '../desktop-adapter/stable/project-profiles.mjs';
@@ -133,8 +133,30 @@ async function run() {
     return showProjectCreate();
   }
   async function pickOpen() {
-    const result = await dialog.showOpenDialog({properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}]});
-    if (!result.canceled) await open(result.filePaths[0]);
+    const zh = language() === 'zh';
+    // Windows/Linux degenerate this pair to a folder picker; macOS accepts either.
+    const result = await dialog.showOpenDialog({properties: ['openFile', 'openDirectory'],
+      filters: [{name: 'Project', extensions: ['agent-project']}],
+      message: zh ? '选择项目文件夹，或直接选择 .agent-project 项目文件。' : 'Select a project folder, or pick the .agent-project file directly.'});
+    if (result.canceled) return;
+    let target = result.filePaths[0];
+    let kind = classifyProjectTarget(target);
+    // The folder-only platforms still need the file picker when one folder holds several projects.
+    if (kind === 'multiple' && process.platform !== 'darwin') {
+      const pick = await dialog.showOpenDialog({properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}],
+        message: zh ? '这个文件夹里有多个项目，请选择要打开的项目文件。' : 'This folder holds several projects; select the project file to open.'});
+      if (pick.canceled) return;
+      target = pick.filePaths[0]; kind = classifyProjectTarget(target);
+    }
+    if (kind !== 'file') {
+      await dialog.showMessageBox({type: 'warning', title: app.name, noLink: true,
+        message: zh ? '这不是 agent-project 项目' : 'This is not an agent-project project',
+        detail: kind === 'multiple'
+          ? (zh ? '这个文件夹里有多个 .agent-project 项目文件，请选择其中一个打开。' : 'This folder contains several .agent-project files. Open one of them directly.')
+          : (zh ? '没有找到 .agent-project 项目文件。' : 'No .agent-project project file was found.')});
+      return;
+    }
+    await open(target);
   }
   async function close(id, {showWelcome = true} = {}) {
     await dismissSurface(id);

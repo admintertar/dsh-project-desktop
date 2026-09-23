@@ -7,6 +7,7 @@ import {createGuideLocale} from '../desktop-adapter/stable/guide-locale';
 import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResourceCopy, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
 import {RemoteRepositoryModal} from './RemoteRepositoryModal';
 import {AddResourceModal} from './AddResourceModal';
+import {CloneRepositoryModal} from './CloneRepositoryModal';
 import {defaultResourceTarget, draftResourceTarget} from '../shared/resource-draft.mjs';
 import {projectPathPreview} from '../shared/project-path.mjs';
 import {PROJECT_COMPOSITIONS as templates, RESOURCE_ROLE_KEYS} from '../shared/project-templates.mjs';
@@ -32,6 +33,11 @@ const copy = {
     details: '查看详情', pending: '项目尚未打开，可以重试或重新定位项目文件。',
     interrupted: '上次在启动这个项目时退出了。请手动重试，避免反复启动失败。',
     unreadable: '上次的窗口记录无法读取，原文件已保留。可以从最近项目重新打开。', historyUnreadable: '最近项目记录无法读取，原文件已保留。你仍然可以打开项目文件。', backProjects: '返回项目', sameConfig: '当前配置与检查点一致。',
+    clone: '克隆仓库', cloneTitle: '从 Git 仓库克隆项目', cloneStart: '克隆并打开', cloneCancel: '取消克隆', clonePreparing: '正在准备克隆…', cloneInstalling: '正在校验项目…', cloneFailed: '克隆失败。',
+    cloneUrlHint: '支持 HTTPS 或 SSH。克隆完成后会检测仓库里的 .agent-project 项目文件。', cloneDirectory: '本地目录', cloneDirectoryHint: '仓库会克隆到这个目录下新建的文件夹里。', cloneDirectoryRequired: '请选择本地目录。',
+    cloneName: '文件夹名称', cloneNameHint: '克隆后项目文件夹的名称，可直接修改。', cloneNameInvalid: '请输入合法的文件夹名称：不能包含 / 或 \\，也不能以 .agent-project 结尾。', cloneTargetExists: '这个目录下已有同名文件夹，请更改文件夹名称或本地目录。',
+    notAProject: '这个文件夹不是 agent-project 项目：没有找到 .agent-project 项目文件。', multipleProjects: '这个文件夹里有多个 .agent-project 项目文件，请直接选择其中一个打开。',
+    cloneNotAProject: '这个仓库不是 agent-project 项目：没有找到 .agent-project 项目文件，刚才克隆的内容已删除。', cloneAmbiguous: '这个仓库包含多个 .agent-project 项目文件，无法自动确定打开哪一个。克隆的内容已保留在 {path}。',
     projectTargetExists: '这个位置已有同名文件夹且不为空。请更换项目名称或路径，或改用「打开已有项目」。'},
   en: {title: 'Projects', body: 'A home for your conversations, resources, memory and tasks.', resizeSidebar: 'Resize sidebar',
     opening: 'Opening…', creating: 'Creating…', openingRecent: 'Opening…', preparing: 'Preparing a new project…', checkUpdates: 'Check for updates', checkingUpdates: 'Checking for updates…', downloading: 'Downloading',
@@ -51,16 +57,26 @@ const copy = {
     details: 'Show details', pending: 'This project is not open. Retry or locate the project file.',
     interrupted: 'The app exited while this project was starting. Retry manually to avoid a repeated startup failure.',
     unreadable: 'The last window record could not be read. The original file was preserved. Reopen a recent project to continue.', historyUnreadable: 'Recent history could not be read. The original file was preserved. You can still open project files.', backProjects: 'Back to projects', sameConfig: 'The current settings match this checkpoint.',
+    clone: 'Clone Repository', cloneTitle: 'Clone Project from Git Repository', cloneStart: 'Clone and open', cloneCancel: 'Cancel clone', clonePreparing: 'Preparing the clone…', cloneInstalling: 'Verifying the project…', cloneFailed: 'The clone failed.',
+    cloneUrlHint: 'HTTPS or SSH. The clone is accepted only when it contains an .agent-project file.', cloneDirectory: 'Local directory', cloneDirectoryHint: 'The repository is cloned into a new folder under this directory.', cloneDirectoryRequired: 'Choose a local directory.',
+    cloneName: 'Folder name', cloneNameHint: 'Name of the project folder the clone creates; edit it if you like.', cloneNameInvalid: 'Enter a valid folder name without / or \\ and without the .agent-project suffix.', cloneTargetExists: 'A folder with this name already exists there. Change the folder name or the local directory.',
+    notAProject: 'This folder is not an agent-project: no .agent-project file was found.', multipleProjects: 'This folder contains several .agent-project files. Open one of them directly.',
+    cloneNotAProject: 'This repository is not an agent-project: no .agent-project file was found, so the clone was removed.', cloneAmbiguous: 'This repository contains several .agent-project files, so none can be chosen automatically. The clone was kept at {path}.',
     projectTargetExists: 'A non-empty folder with this name already exists. Change the name or path, or open the existing project.'},
 };
 const api = (window as any).projectGuide;
 const localeService = createGuideLocale(copy);
 localeService.register('project-guide-resources', guideResourceCopy);
 /** Stable Host error codes become actionable, localized guide copy instead of a raw message. */
-const guideErrorKeys: Record<string, string> = {'project-target-exists': 'projectTargetExists'};
+const guideErrorKeys: Record<string, string> = {'project-target-exists': 'projectTargetExists', 'project-not-found': 'notAProject',
+  'project-ambiguous': 'multipleProjects', 'repository-name-invalid': 'cloneNameInvalid', 'repository-directory-invalid': 'cloneDirectoryRequired',
+  'repository-target-exists': 'cloneTargetExists', 'repository-not-project': 'cloneNotAProject', 'repository-ambiguous': 'cloneAmbiguous'};
 function guideErrorText(message: string, t: Record<string, string>): string {
-  const key = guideErrorKeys[message];
-  return key ? t[key] : message;
+  const separator = message.indexOf(':');
+  const key = guideErrorKeys[separator === -1 ? message : message.slice(0, separator)];
+  if (!key) return message;
+  // Only `repository-ambiguous` carries a path, so the placeholder is inert elsewhere.
+  return separator === -1 ? t[key] : t[key].replace('{path}', message.slice(separator + 1));
 }
 function makeResources(name: string, templateId: string) {
   const template = templates.find(item => item.id === templateId) ?? templates[0];
@@ -204,6 +220,7 @@ function Guide() {
   const [frameState, setFrameState] = useState<any>();
   const [details, setDetails] = useState<string>();
   const [selection, setSelection] = useState<any>();
+  const [cloningRepository, setCloningRepository] = useState(false);
   const [templateId, setTemplateId] = useState('fullstack');
   const [projectName, setProjectName] = useState('');
   const [draftResources, setDraftResources] = useState<any[]>([]);
@@ -222,10 +239,13 @@ function Guide() {
   const translate = localeService.bind('project-desktop-guide');
   const rt = localeService.bind('project-guide-resources');
   const t = Object.fromEntries(Object.keys(copy.en).map(key => [key, translate(key)]));
+  /** Guide-owned codes first, then the plugin's resource codes; unknown codes stay verbatim. */
+  const describeError = (message: string) => {const text = guideErrorText(message, t); return text === message ? resourceErrorText(message, rt) : text;};
   async function refresh() {const state = await api.invoke('state');
     setLocale(state.locale); setRecent(state.recent); setFailures(state.failures ?? []); setWarning(state.warning ?? ''); setVersion(state.version);
     setUpdates(state.updates);
-    setFrameState({chrome: state.chrome, sidebarWidth: state.sidebarWidth});
+    setFrameState({chrome: state.chrome, sidebarWidth: state.sidebarWidth, defaultDirectory: state.defaultDirectory,
+      importDirectory: state.importDirectory});
     document.documentElement.lang = state.locale;
   }
   useEffect(() => {
@@ -312,7 +332,9 @@ function Guide() {
   const resourcesReady = draftResources.every(item => item.mode !== 'remote' || clones.some(clone => clone.id === item.id
     && clone.url === item.url && clone.branch === (item.branch ?? '') && clone.status === 'completed'));
   const reset = () => {void api.invoke('clone-retain', {ids: []}).catch(() => {}); setSelection(undefined); setError(''); setDraftResources([])};
-  const dialogs = <><GuideResourceAuth controller={auth} t={rt}/>{addingResource && <AddResourceModal resources={draftResources} t={rt}
+  const dialogs = <><GuideResourceAuth controller={auth} t={rt}/>{cloningRepository && <CloneRepositoryModal t={t} rt={rt} clones={clones} invoke={api.invoke}
+    errorText={describeError} defaultDirectory={frameState?.importDirectory ?? frameState?.defaultDirectory} platform={frameState?.chrome?.platform}
+    onClose={() => setCloningRepository(false)}/>}{addingResource && <AddResourceModal resources={draftResources} t={rt}
     pickDirectory={() => api.invoke('pick-resource', {id: addingResource, inspect: true})} onClose={() => setAddingResource(undefined)}
     onSave={async (resource: any) => {
       const id = addingResource;
@@ -366,8 +388,14 @@ function Guide() {
       <header className="toolbar">{selection ? <><Button icon={<IconChevronLeftOutline14/>} disabled={busy} onClick={reset}>{t.backProjects}</Button><h1>{t.new}</h1></>
         : <><div className="search"><Input icon={<IconSearchOutline16/>} placeholder={t.search} aria-label={t.search} value={query}
           onChange={event => setQuery(event.target.value)}/></div><div className="actions">
-          <Button variant="outline" icon={<IconPlusOutline16/>} disabled={busy} onClick={() => run('new')}>{t.new}</Button>
-          <GuideActionButton variant="outline" label={t.openShort} phase={actionPhase('open')} t={t} disabled={busy} onClick={() => run('open')}/></div></>}</header>
+          <Button variant="outline" data-guide-action="clone" icon={<IconBranchOutline16/>} disabled={busy}
+            onClick={event => {
+              rememberModalOpener(event.currentTarget);
+              // Read the remembered import directory before the dialog mounts its default.
+              void refresh().catch(() => {}).then(() => setCloningRepository(true));
+            }}>{t.clone}</Button>
+          <Button variant="outline" data-guide-action="new" icon={<IconPlusOutline16/>} disabled={busy} onClick={() => run('new')}>{t.new}</Button>
+          <GuideActionButton variant="outline" data-guide-action="open" label={t.openShort} phase={actionPhase('open')} t={t} disabled={busy} onClick={() => run('open')}/></div></>}</header>
       <section className="guideBody" aria-busy={busy}>
       {warning && <p role="status">{warning === 'history-unreadable' ? t.historyUnreadable : t.unreadable}</p>}
       {selection ? <>{selection.existing ? <><div className="setting"><div><h2>{t.folder}</h2><p>{selection.directory}</p></div>

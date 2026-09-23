@@ -1,5 +1,5 @@
 // Manifest parsing stays compiled from the pinned Project plugin; creation orchestration is Shell-owned.
-import {existsSync, mkdirSync, renameSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync} from 'node:fs';
 import {basename, dirname} from 'node:path';
 import {RecentProjects as PluginRecentProjects} from '../../dist/project-files.mjs';
 import {createProjectFromPlan} from './project-bootstrap.mjs';
@@ -11,6 +11,23 @@ import {findProjectFile} from '../../dist/project-files.mjs';
 export async function createProjectInDirectory(directory) {
   const existing = findProjectFile(directory);
   return existing ?? createProjectFromPlan({rootDirectory: directory, name: basename(directory), templateId: 'empty', allowExistingRoot: true});
+}
+
+/**
+ * How a picked path answers "is this an agent-project?" without re-deriving the pinned
+ * plugin's Chinese-only messages. A folder with exactly one entry file is 'file', so the
+ * caller can hand the same target to `resolveProjectFile`.
+ */
+export function classifyProjectTarget(target) {
+  let info;
+  try {info = statSync(target);} catch {return 'missing';}
+  if (info.isFile()) return target.endsWith('.agent-project') ? 'file' : 'invalid';
+  if (!info.isDirectory()) return 'invalid';
+  let entries;
+  try {entries = readdirSync(target, {withFileTypes: true});} catch {return 'invalid';}
+  const files = entries.filter(entry => entry.isFile() && entry.name.endsWith('.agent-project'));
+  if (!files.length) return 'none';
+  return files.length === 1 ? 'file' : 'multiple';
 }
 
 /** Preserve corrupt history for diagnosis; it must not prevent opening the application. */

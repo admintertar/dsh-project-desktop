@@ -19,3 +19,24 @@ export function validResourceBranch(value) {
     && !value.includes('..') && !value.includes('@{') && !value.endsWith('.')
     && value.split('/').every(part => part && !part.startsWith('.') && !part.endsWith('.lock'));
 }
+
+/**
+ * One folder name for a repository checkout: never a path, never the `.agent-project`
+ * entry file's own suffix, and never a name Git reserves for its own metadata.
+ */
+export function validRepositoryName(value) {
+  if (typeof value !== 'string') return false;
+  const name = value.trim();
+  return Boolean(name) && name.length <= 160 && name !== '.' && name !== '..' && name !== '.git'
+    && !/[/\\\u0000-\u001f\u007f]/.test(name) && !name.toLowerCase().endsWith('.agent-project');
+}
+
+/** The folder name `git clone` itself would derive, so the import form can prefill it. */
+export function repositoryFolderName(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim().replace(/[/\\]+$/, '');
+  const scp = /^[^/@\s]+@[^/@\s:]+:(.+)$/.exec(trimmed);
+  const tail = (scp ? scp[1] : trimmed).split(/[/\\]/).filter(Boolean).at(-1) ?? '';
+  const name = tail.replace(/\.git$/i, '').trim();
+  return validRepositoryName(name) ? name : '';
+}

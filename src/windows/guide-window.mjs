@@ -1,8 +1,10 @@
 import {basename, join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {findProjectFile, createProjectFromPlan} from '../app/project-files.mjs';
+import {classifyProjectTarget, findProjectFile, createProjectFromPlan} from '../app/project-files.mjs';
 import {trustedSender} from './renderer-security.mjs';
 import {GuideClones} from '../app/guide-clones.mjs';
+import {RepositoryImports} from '../app/repository-import.mjs';
+import {LastDirectories, pickRememberedDirectory} from '../app/last-directories.mjs';
 import {inspectGuideResource} from '../desktop-adapter/stable/guide-resources.mjs';
 import {guideWindowOptions} from '../desktop-adapter/stable/guide-window-options.mjs';
 import {GuideLayoutState} from './guide-layout-state.mjs';
@@ -35,6 +37,7 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
     : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop');
   const expectedUrl = `${pathToFileURL(html).href}${createOnly ? '?mode=create' : ''}`;
   const layoutState = new GuideLayoutState(join(electron.app.getPath('userData'), 'guide-window-state.json'));
+  const directories = new LastDirectories(join(electron.app.getPath('userData'), 'last-directories.json'));
   const {options, chrome} = await guideWindowOptions(electron, {mode, title, iconPath, preload: join(repository, 'dist/guide/preload.cjs')});
   const window = new BrowserWindow({...options, webPreferences: {...options.webPreferences, backgroundThrottling: !hidden,
       partition: createOnly ? 'project-desktop-create' : 'project-desktop-guide'}});
@@ -48,6 +51,8 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
     if (!clonePool) {clonePool = createClonePool(); draftPools.add(clonePool);}
     return clonePool;
   };
+  let imports;
+  const importPool = async () => imports ??= new RepositoryImports(await pool());
   let operations = Promise.resolve();
   const queue = work => {
     const result = operations.then(() => {creationController.signal.throwIfAborted(); return work()});
@@ -74,6 +79,11 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
   contents.on('will-attach-webview', event => event.preventDefault());
   // Official parity: no renderer permission handler. See native.mjs for why a
   // deny-all policy silently breaks the client's clipboard copy affordances.
+  const pickProjectFile = async message => {
+    const result = await dialog.showOpenDialog(window, {properties: ['openFile'],
+      filters: [{name: 'Project', extensions: ['agent-project']}], message});
+    return result.canceled ? undefined : result.filePaths[0];
+  };
   const handle = async (event, action, value, operationId) => {
     if (!trustedSender(event, contents, expectedUrl, true)) throw new Error('Untrusted guide sender');
     if (action === 'state') {
@@ -81,7 +91,8 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
       window.setTitle(createOnly ? (locale === 'zh' ? '新建项目' : 'New Project')
         : (locale === 'zh' ? '欢迎使用 DSH Project Desktop' : 'Welcome to DSH Project Desktop'));
       ready.resolve();
-      return {locale, recent: recent.list(), failures: getFailures(), warning, version: productVersion, mode,
+      return {locale, recent: recent.list(), failures: getFailures(), warning, version: productVersion, mode, defaultDirectory,
+        importDirectory: directories.directory('import'),
         updates: updates ? {label: updates.label(), busy: updates.busy, phase: updates.phase, progress: updates.progress} : undefined,
         chrome, sidebarWidth: layoutState.width(mode)};
     }
@@ -99,6 +110,16 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         await manager.retain(value?.ids); return true;
       });
     }
+    // Repository import owns its own job id and never reuses the project-creation draft.
+    if (action === 'import-start') return queue(async () => {
+      const manager = await importPool();
+      creationController.signal.throwIfAborted();
+      const started = await manager.start(value);
+      // A typed or remembered destination counts too, so the next import starts there.
+      if (typeof value?.directory === 'string') directories.remember('import', value.directory);
+      return started;
+    });
+    if (action === 'import-cancel') return queue(async () => (await importPool()).cancel(value?.id));
     if (busy) throw new Error('A project operation is already in progress');
     busy = true;
     const progress = phase => {
@@ -129,7 +150,9 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
           return result.canceled ? null : result.filePaths[0];
         })();
         if (!directory) return null;
-        const existing = findProjectFile(directory);
+        const kind = classifyProjectTarget(directory);
+        if (kind === 'multiple') throw new Error('project-ambiguous');
+        const existing = kind === 'file' ? findProjectFile(directory) : undefined;
         pickedResources.clear();
         selection = {directory, existing, name: basename(directory), filename: basename(existing ?? join(directory, `${basename(directory)}.agent-project`))};
         return selection;
@@ -140,6 +163,15 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
           return result.canceled ? null : result.filePaths[0];
         })();
         return directory;
+      }
+      if (action === 'browse-import-directory') {
+        // Reopen where the last import went instead of trusting the platform chooser's
+        // own memory, which differs per OS and per dialog style.
+        return await pickRememberedDirectory(directories, 'import', async previous => {
+          const result = await dialog.showOpenDialog(window, {properties: ['openDirectory', 'createDirectory'],
+            ...(previous ? {defaultPath: previous} : {})});
+          return result.canceled ? null : result.filePaths[0];
+        });
       }
       if (action === 'pick-resource') {
         if (typeof value?.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value.id)) throw new Error('Invalid resource selection');
@@ -165,11 +197,10 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
         if (action === 'forget') {await forget(path); return true}
         if (action === 'retry') await openProject(path);
         if (action === 'relocate') {
-          const result = await dialog.showOpenDialog(window, {properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}],
-            message: locale === 'zh' ? '选择项目文件。其他路径使用各自的项目环境，原有运行数据会保留。' : 'Select a project file. Other locations use their own project environment; existing runtime data is preserved.'});
-          if (result.canceled) return null;
+          const replacement = await pickProjectFile(locale === 'zh' ? '选择项目文件。其他路径使用各自的项目环境，原有运行数据会保留。' : 'Select a project file. Other locations use their own project environment; existing runtime data is preserved.');
+          if (!replacement) return null;
           progress('opening');
-          await relocate(path, result.filePaths[0]);
+          await relocate(path, replacement);
         }
       } else if (action === 'confirm') {
         await operations;
@@ -196,9 +227,27 @@ export async function createGuideWindow(electron, {repository, iconPath, locale,
           await openProject(manifest);
         }
       } else if (action === 'open') {
-        const result = await dialog.showOpenDialog(window, {properties: ['openFile'], filters: [{name: 'Project', extensions: ['agent-project']}]});
+        // Windows and Linux cannot show a file and a folder picker at once, so this pair
+        // degrades to a folder picker there; macOS accepts either.
+        const result = await dialog.showOpenDialog(window, {properties: ['openFile', 'openDirectory'],
+          filters: [{name: 'Project', extensions: ['agent-project']}],
+          message: locale === 'zh' ? '选择项目文件夹，或直接选择 .agent-project 项目文件。'
+            : 'Select a project folder, or pick the .agent-project file directly.'});
         if (result.canceled) return null;
-        await openProject(result.filePaths[0]);
+        let target = result.filePaths[0];
+        let kind = classifyProjectTarget(target);
+        // Only macOS can pick a file inside an ambiguous folder; the folder-only platforms
+        // must fall back to an explicit file picker instead of failing the user's click.
+        if (kind === 'multiple' && process.platform !== 'darwin') {
+          target = await pickProjectFile(locale === 'zh' ? '这个文件夹里有多个项目，请选择要打开的项目文件。'
+            : 'This folder holds several projects; select the project file to open.');
+          if (!target) return null;
+          kind = classifyProjectTarget(target);
+        }
+        if (kind !== 'file') throw new Error(kind === 'multiple' ? 'project-ambiguous' : 'project-not-found');
+        await openProject(target);
+      } else if (action === 'import-finish') {
+        await openProject(await (await importPool()).finish(value?.id, creationController.signal));
       } else if (action === 'recent') {
         const item = typeof value === 'string' ? recent.list().find(item => item.path === value) : undefined;
         if (!item) throw new Error('Unknown recent project');

@@ -76,8 +76,9 @@ export async function checkResourceStates({electron, userData}) {
   mkdirSync(join(root, 'skills', 'review-fixture'), {recursive: true});
   writeFileSync(join(root, 'skills', 'review-fixture', 'SKILL.md'),
     '---\nname: review-fixture\ndescription: Review fixture skill\n---\nUse this skill.\n');
-  // Declare the Skill up front: otherwise the Skill service rewrites this index while the project
-  // is open, which adds a second "Skills" card and made position-based lookup flaky (Windows CI).
+  // Declare the Skill up front so the check exercises a real switch change: the panel turns it off
+  // through the shared index, which must arrive as this Skill's own card rather than its own card
+  // for the index file (an earlier revision named `index.yaml` leaked into the review).
   writeFileSync(join(root, 'skills', 'index.yaml'),
     'schemaVersion: 1\nskills:\n  review-fixture:\n    enabled: true\n');
   // Disabled, so the MCP runtime never starts a process during the check. Every declaration owns a
@@ -251,6 +252,10 @@ export async function checkResourceStates({electron, userData}) {
     // A second asset joins the plan: two assets, two commits, not one mixed changeset.
     await evaluate(window, `${toggleNamed(copy.skill, 'review-fixture')}.click()`);
     await frame(window);
+    // The switch lives in the shared index, so it must arrive as the Skill's own card instead of a
+    // second card literally named after the index file.
+    assert.equal(await evaluate(window, `Boolean(${cardNamed(copy.skill, 'index.yaml')})`), false,
+      'the shared Skill index must not appear as its own card');
     assert.deepEqual(await evaluate(window, plan),
       ['feat(task): 收录「Native review fixture」', 'feat(skills): 新增技能 review-fixture']);
     writeFileSync(join(userData, 'project-changes-selection.png'), (await window.webContents.capturePage()).toPNG());
@@ -262,8 +267,7 @@ export async function checkResourceStates({electron, userData}) {
     await wait(window, `document.body.textContent.includes('feat(skills): 新增技能 review-fixture')`);
     writeFileSync(join(userData, 'project-changes-plan-tooltip.png'), (await window.webContents.capturePage()).toPNG());
     await evaluate(window, `${submit}?.click()`);
-    // Both assets leave the review; the unselected MCP and file changes stay.
-    // The committed assets leave the review; other cards in the same group may remain.
+    // The committed assets leave the review; the unselected MCP and file changes stay.
     await wait(window, `!${cardNamed(copy.task, 'Native review fixture')}`);
     await wait(window, `!${cardNamed(copy.skill, 'review-fixture')}`);
     assert.deepEqual(projectGit(['log', '-2', '--pretty=%s']).split('\n'),
@@ -271,6 +275,10 @@ export async function checkResourceStates({electron, userData}) {
     const latest = projectGit(['-c', 'core.quotePath=false', 'show', '--name-only', '--pretty=format:', 'HEAD']).split('\n').filter(Boolean);
     const earlier = projectGit(['-c', 'core.quotePath=false', 'show', '--name-only', '--pretty=format:', 'HEAD~1']).split('\n').filter(Boolean);
     assert.equal(latest.length > 0 && latest.every(name => name.startsWith('skills/')), true, `skill commit contents: ${JSON.stringify(latest)}`);
+    // The bundle and its switch land in one commit, and no Skill change may be left behind: an index
+    // left uncommitted is exactly the defect this check guards against.
+    assert.equal(latest.includes('skills/index.yaml'), true, `the Skill switch must be committed: ${JSON.stringify(latest)}`);
+    assert.equal(projectGit(['status', '--porcelain', 'skills/']).trim(), '', 'no Skill change may be left behind');
     assert.equal(earlier.length > 0 && earlier.every(name => name.startsWith('tasks/')), true, `task commit contents: ${JSON.stringify(earlier)}`);
     assert.equal(projectGit(['status', '--porcelain']).includes('AGENT.md'), true);
     // Two local commits now sit ahead of the upstream; pushing is offered in the details, not here.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {existsSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createGuideWindow} from '../src/windows/guide-window.mjs';
 
@@ -26,6 +26,11 @@ const geometry = (window, selectors) => evaluate(window, `(() => {
 /** Hold external opening/picker callbacks while exercising the actual preload,
  * main-process progress events, React controls and real project file creation. */
 export async function checkGuideLoading({electron, repository, userData}) {
+  // Opening a folder or file is now classified before the plugin resolves it, so the
+  // picker fixture must be a real entry file rather than a display-only recent path.
+  const openTarget = join(userData, 'loading-fixtures', 'Open Target.agent-project');
+  mkdirSync(dirname(openTarget), {recursive: true});
+  writeFileSync(openTarget, 'schemaVersion: 1\nid: open-target\nname: Open Target\nresources: []\nmemory: []\n');
   for (const locale of ['en', 'zh']) for (const theme of ['light', 'dark']) {
     electron.nativeTheme.themeSource = theme;
     const openLabel = locale === 'zh' ? '打开中…' : 'Opening…';
@@ -60,18 +65,18 @@ export async function checkGuideLoading({electron, repository, userData}) {
       assert.equal(await evaluate(window, 'document.querySelectorAll(".recentTrailing[data-opening]").length'), 0);
 
       // Selecting or cancelling a file is not yet opening a project.
-      const buttonBefore = await geometry(window, ['.actions>button:last-child', '.toolbar', '.welcomeContent>footer']);
-      await click(window, '.actions>button:last-child');
+      const buttonBefore = await geometry(window, ['.actions>button[data-guide-action=open]', '.toolbar', '.welcomeContent>footer']);
+      await click(window, '.actions>button[data-guide-action=open]');
       await wait(window, 'document.querySelector("section[aria-busy=true]")');
-      assert.equal(await evaluate(window, 'document.querySelector(".actions>button:last-child").getAttribute("aria-busy")'), 'false');
+      assert.equal(await evaluate(window, 'document.querySelector(".actions>button[data-guide-action=open]").getAttribute("aria-busy")'), 'false');
       picker.resolve({canceled: true, filePaths: []});
       await wait(window, '!document.querySelector("section[aria-busy=true]")');
       assert.equal(calls, 1);
       opening = Promise.withResolvers(); picker = Promise.withResolvers();
-      await click(window, '.actions>button:last-child');
-      picker.resolve({canceled: false, filePaths: [recent.list()[0].path]});
-      await wait(window, `document.querySelector('.actions>button:last-child').getAttribute('aria-label')===${JSON.stringify(openLabel)}`);
-      assert.deepEqual(await geometry(window, ['.actions>button:last-child', '.toolbar', '.welcomeContent>footer']), buttonBefore);
+      await click(window, '.actions>button[data-guide-action=open]');
+      picker.resolve({canceled: false, filePaths: [openTarget]});
+      await wait(window, `document.querySelector('.actions>button[data-guide-action=open]').getAttribute('aria-label')===${JSON.stringify(openLabel)}`);
+      assert.deepEqual(await geometry(window, ['.actions>button[data-guide-action=open]', '.toolbar', '.welcomeContent>footer']), buttonBefore);
       assert.equal(await evaluate(window, 'document.querySelectorAll(".recentTrailing[data-opening]").length'), 0);
       opening.resolve();
       await wait(window, '!document.querySelector("section[aria-busy=true]")');
