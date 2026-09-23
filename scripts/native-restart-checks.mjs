@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, realpathSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {parse} from 'yaml';
@@ -28,7 +28,14 @@ export async function checkNativeRestart({electron, workspace, manifests, userDa
   let project = workspace.projects.get(manifests[0]);
   const original = project, otherPid = bravo.host.result.pid;
   const dialogs = [];
-  const dialogUrl = pathToFileURL(join(runtimePackage, 'lib/native-ui/desktop-dialog.html')).href;
+  // A worktree can expose `.cache` through a junction to the main checkout.
+  // The official dialog module is then imported through that junction, and its
+  // `import.meta.url` resolves to the canonical target path. Electron reports
+  // that canonical path in `webContents.getURL()`, not the worktree spelling
+  // used by `runtimePackage`; canonicalize the expected URL as well or a
+  // visible dialog is mistaken for a missing one and the smoke times out.
+  const dialogDocument = realpathSync(join(runtimePackage, 'lib/native-ui/desktop-dialog.html'));
+  const dialogUrl = pathToFileURL(dialogDocument).href;
   const windows = () => electron.BrowserWindow.getAllWindows().filter(window =>
     window.getParentWindow() === project.window && window.webContents.getURL().split('?')[0] === dialogUrl);
   const waitDialog = async count => {
