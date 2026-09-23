@@ -3,6 +3,8 @@ import {loadDesktop, loadDependency} from './modules.mjs';
 import {repository} from '../paths.mjs';
 import {readProjectAgentInstructions} from '../../app/project-agent.mjs';
 import {productVersion} from '../../app/product.mjs';
+import {installRevealAdapter} from './windows-reveal.mjs';
+import {hostTrace} from '../../app/boot-log.mjs';
 
 const {desktopRendererUrl, Config} = await loadDesktop('index');
 const {handleRendererBootRequest, RENDERER_BOOT_REPORT_PATH} = await loadDesktop('renderer-boot');
@@ -18,6 +20,18 @@ const desktopLocalePreference = value => value === 'zh' || value === 'en' ? valu
 
 export function apply(ctx, config) {
   const runtime = ctx.desktopRuntime;
+  // Windows: the pinned official reveal runs explorer.exe through a runner that hides every
+  // native command's window, so the revealed Explorer window is created hidden and the click
+  // looks like it did nothing. Replace that one call, and only on Windows — Finder and the
+  // Linux openers are correct as they are. `revealPath` is an official internal, so a missing
+  // field is reported rather than silently leaving the broken behaviour in place.
+  ctx.inject(['sessionController'], sessionCtx => {
+    const trace = hostTrace('shell-host');
+    const installed = installRevealAdapter(sessionCtx.sessionController, {
+      report: message => console.error(`Project reveal adapter: ${message}`),
+    });
+    trace?.event('windows reveal adapter', installed ? 'installed' : 'not applicable on this platform');
+  });
   ctx.systemPrompt.variable('project_agent_instructions', () => {
     const manifestPath = process.env.DSH_PROJECT_MANIFEST;
     if (!manifestPath) return '';

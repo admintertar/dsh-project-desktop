@@ -118,6 +118,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 | `desktop-dialog-window`、native-ui 的 `desktop-dialog` 与官方 Vite 配置 | 完整复用官方独立确认窗口、页面及样式，保留窗口安全策略、取消和键盘行为 |
 | `update-lifecycle`、`update-checker`、`update-download`、`native-dialog-copy` | 主进程仅创建一个官方更新生命周期。通过 request 适配自有 GitHub Release，保留官方版本比较、检查合并、通知去重、临时下载/原子替换及安装包清理。私有 ElectronRuntime 提示和平台交接在 `project-updates.mjs` 最小适配为自有品牌、动态所属窗口和全项目退出；上游源码及 bundle 不改写。官方下载器既无进度回调也不经过 Electron download manager，Shell 因此只在自有校验流上额外上报字节进度（`project-release-feed.mjs` 的 `onProgress`），由 `createUpdateProgress` 折算为 `downloading` 阶段与节流后的百分比，只供欢迎窗口按钮使用；应用菜单与托盘保持官方文案不变 |
 | `desktop-terminal`、`diagnostic-export` | 原始命令环境和诊断归档；尚待人工验收 |
+| Harness `@deepseek-ai/dsh-native-command` 的 `revealNativePath`（经 `api-session-controller` 的 `sessionController.revealPath`） | 固定版本在 Windows 上用 `execFile('explorer.exe', …, {windowsHide:true})` 执行 reveal：explorer 是唯一“被启动进程本身即窗口进程”的 native 命令，隐藏启动使资源管理器窗口以不可见方式创建，表现为「在文件资源管理器中显示」点击无反应（同一菜单的「用默认应用打开」走 powershell，不受影响）。壳在自己的 Host 插件里只替换这一个方法（`src/desktop-adapter/stable/windows-reveal.mjs`），保留官方对 `/select,` 的 URI 目标（避免路径中的逗号被 explorer 截断）与“exit 1 视为委派成功”的容忍，仅改为不隐藏窗口；macOS/Linux 保留官方实现。`revealPath` 是官方内部字段，适配前做存在性校验并在缺失时明确报错，避免静默失效。上游到 `0.1.7-rc.1`（master）仍未修，pin 升级后需复查此适配是否可移除 |
 | `profile-checkpoint`、`startup-recovery-controller` | 健康配置检查点、预览与确认 token、恢复校验，不调用官方应用级重启 |
 | `startup-recovery-window`、`profile-selection-window`、`profile-create-window` 及其 native-ui 页面 | 完整复用官方恢复／选择／创建界面与交互，回调限定当前项目；仅补生命周期归属 |
 | `recovery-plugin-uninstall` | 在确认 Host 停止后通过官方 CLI 移除当前 Profile 的第三方依赖 |

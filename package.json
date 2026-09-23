@@ -33,6 +33,7 @@
     "sign:mac": "node scripts/sign-macos.mjs",
     "smoke:host": "node scripts/smoke-host.mjs",
     "probe:startup-trace": "node scripts/probe-startup-trace.mjs",
+    "probe:reveal-adapter": "node scripts/probe-reveal-adapter.mjs",
     "check": "yarn run verify:upstream && yarn run build && yarn run test && yarn run test:recovery && yarn run test:safe-mode && node scripts/check-project-files.mjs && yarn run smoke:host"
   },
   "dependencies": {
