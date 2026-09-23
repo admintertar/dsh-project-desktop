@@ -93,7 +93,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 安全模式复用官方 `safe-mode` 的路径/标记/reset/cleanup，并接入恢复助手的原始入口与确认窗口，不调用 compatibility 或首次向导入口。每项目停止确认后创建临时 dsh-home、desktop-state 和空白工作目录，仅加载官方基础 Profile 与自有 advanced Shell。Host 环境采用允许列表，阻止继承 API key、代理、npm hook 和 DSH 路径覆盖。Renderer 使用随机非持久 Session。退出等待 Host 停止后清除 Session 和临时目录，再打开原项目恢复助手；下次启动在所有 Host 创建前清理遗留临时树。故障项目不自动启动正常 Host；安全模式不捕获正常检查点、不覆盖正常窗口布局，主题不传播到正常项目。
 
-原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。macOS 应用名称菜单直接调用官方 `macApplicationMenuTemplate` 的应用分组，将应用级检查更新作为 additions 放在“关于”之后、“服务”之前；File 与项目工具仍由 Shell 组合。欢迎页聚焦时沿用最近项目语言。托盘与欢迎页继续提供更新入口；不额外建立帮助菜单或设置页版本浮层。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
+原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。macOS 应用名称菜单直接调用官方 `macApplicationMenuTemplate` 的应用分组，将应用级检查更新作为 additions 放在“关于”之后、“服务”之前；File 与项目工具仍由 Shell 组合。欢迎页聚焦时沿用最近项目语言。托盘与欢迎页继续提供更新入口；不额外建立帮助菜单或设置页版本浮层。关于面板由主进程用 `app.setAboutPanelOptions` 统一配置：应用名与壳版本取自有 `product.mjs`，并把当前固定运行时的 Harness 版本一并显示出来（锁与实际安装版本不符时 Host 拒绝启动，因此该值即实际运行版本）。macOS 把它放进 `version` 字段，面板的版本行因此渲染成「版本 0.1.8（DSH 0.1.5-rc.2）」——DSH 版本与壳版本同处一行、同一字号；Win32/Linux 的面板没有构建号字段，改由 credits 行输出 `DSH (DeepSeek Harness) <lock.harness.version>`。macOS 的「关于 DSH Project Desktop」走官方菜单的 `role: 'about'`；Windows/Linux 看不到原生应用菜单，因此自绘顶栏「项目工具」末尾追加同一面板的入口，经 Shell titlebar action `about` 调用 `app.showAboutPanel()`，两处显示内容一致。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
 
 这些是编译自固定官方源码的库，不是上游承诺的稳定 API。只允许适配器导入。
 

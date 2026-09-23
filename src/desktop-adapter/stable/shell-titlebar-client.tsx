@@ -72,6 +72,10 @@ const TOOLS: Menu = {
     {id: 'recover', words: {zh: '项目恢复…', en: 'Project Recovery…'}, action: SHELL_TITLEBAR_ACTIONS.recover},
     {id: 'sep-2', words: {zh: '', en: ''}, separator: true},
     {id: 'updates', words: {zh: '检查更新…', en: 'Check for Updates…'}, official: 'check-for-updates'},
+    {id: 'sep-3', words: {zh: '', en: ''}, separator: true},
+    // Windows never shows the native application menu, so its About entry has to live here —
+    // the same panel macOS reaches from the application menu.
+    {id: 'about', words: {zh: '关于 DSH Project Desktop', en: 'About DSH Project Desktop'}, action: SHELL_TITLEBAR_ACTIONS.about},
   ],
 };
 

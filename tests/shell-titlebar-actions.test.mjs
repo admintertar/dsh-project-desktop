@@ -17,6 +17,7 @@ function runner(overrides = {}) {
     restart: () => calls.push('restart'),
     'safe-mode': () => calls.push('safe-mode'),
     recover: () => calls.push('recover'),
+    about: () => calls.push('about'),
     contributions: () => [{id: '0', title: 'Tool', enabled: true}],
     contribution: id => calls.push(`contribution:${id}`),
     edit: command => calls.push(`edit:${command}`),
@@ -48,12 +49,13 @@ test('every titlebar command reaches its handler', async () => {
   await run(SHELL_TITLEBAR_ACTIONS.restart);
   await run(SHELL_TITLEBAR_ACTIONS.safeMode);
   await run(SHELL_TITLEBAR_ACTIONS.recover);
+  await run(SHELL_TITLEBAR_ACTIONS.about);
   assert.deepEqual(await run(SHELL_TITLEBAR_ACTIONS.listContributions), [{id: '0', title: 'Tool', enabled: true}]);
   await run(SHELL_TITLEBAR_ACTIONS.invokeContribution, '0');
   await run(SHELL_TITLEBAR_ACTIONS.edit, 'selectAll');
   await run(SHELL_TITLEBAR_ACTIONS.view, 'zoomReset');
   assert.deepEqual(calls, ['new', 'open', 'welcome', 'close', 'recent:C:/p/x.agent-project', 'profile', 'restart',
-    'safe-mode', 'recover', 'contribution:0', 'edit:selectAll', 'view:zoomReset']);
+    'safe-mode', 'recover', 'about', 'contribution:0', 'edit:selectAll', 'view:zoomReset']);
 });
 
 test('unknown actions, bad arguments and unavailable commands are rejected', async () => {

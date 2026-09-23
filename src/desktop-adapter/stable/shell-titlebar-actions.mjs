@@ -28,6 +28,7 @@ export const SHELL_TITLEBAR_ACTIONS = Object.freeze({
   restart: 'restart',
   safeMode: 'safe-mode',
   recover: 'recover',
+  about: 'about',
   listContributions: 'contributions',
   invokeContribution: 'contribution',
 });

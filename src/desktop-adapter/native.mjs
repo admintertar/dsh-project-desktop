@@ -206,6 +206,9 @@ export async function openNativeProject(electron, options) {
       restart: () => options.restartProject?.(),
       'safe-mode': () => options.toggleSafeMode?.(),
       recover: () => options.recoverProject?.(),
+      // The panel is configured once in main.mjs; both the native application menu
+      // (macOS) and this titlebar entry show the same shell + DSH versions.
+      about: () => electron.app.showAboutPanel(),
       // Plugin-contributed project tools reach the renderer by index: the registry is
       // rebuilt on every menu refresh, so an index is only valid within one refresh.
       contributions: () => [...contributions.values()].map((item, index) => ({id: String(index), title: item.label(), enabled: item.enabled?.() ?? true})),

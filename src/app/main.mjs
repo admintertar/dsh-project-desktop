@@ -22,6 +22,8 @@ import {cleanupGuideClones} from './guide-clones.mjs';
 import {restoreMissingResources} from './resource-restore.mjs';
 import {createProjectUpdates} from '../desktop-adapter/stable/project-updates.mjs';
 import {recordRecoveryEvent} from './recovery-journal.mjs';
+import {productName, productVersion} from './product.mjs';
+import {lock} from '../desktop-adapter/paths.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, nativeTheme, dialog} = electron;
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -411,6 +413,16 @@ async function run() {
     });
   });
   await app.whenReady();
+  // One panel serves both About entry points: the macOS application menu's native About item
+  // (official `role: 'about'`) and the self-drawn titlebar entry on Windows/Linux. The shell
+  // version alone never says which DSH runtime is pinned, and the Host refuses to start when the
+  // installed one differs from the lock, so this is the running runtime's identity.
+  // macOS draws the `version` field inside the shell version's own line ("版本 0.1.8 (DSH
+  // 0.1.5-rc.2)"), which keeps the DSH version at the same type size; Windows/Linux have no build
+  // field on their panel and read the credits line instead.
+  const harnessIdentity = `DSH (DeepSeek Harness) ${lock.harness.version}`;
+  app.setAboutPanelOptions({applicationName: productName, applicationVersion: productVersion,
+    ...(process.platform === 'darwin' ? {version: `DSH ${lock.harness.version}`} : {credits: harnessIdentity})});
   lastLocale = app.getLocale().startsWith('zh') ? 'zh' : 'en';
   const updateFixtures = updateTest ? await import('../../scripts/native-update-fixture.mjs') : undefined;
   updates = await createProjectUpdates(electron, {userData, locale: language,
