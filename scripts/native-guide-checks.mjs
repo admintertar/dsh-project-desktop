@@ -339,7 +339,11 @@ export async function checkRepositoryImport({electron, repository, userData}) {
     window.destroy();
   } else {
     const ambiguousOpened = destroyed(window);
-    await clickOpen(window);
+    // The fallback folder picker reopens as a file picker and this click closes the window
+    // itself. A window destroyed inside the call never answers executeJavaScript, so the
+    // click promise must be raced against the close instead of awaited on its own
+    // (clickAndWaitForClose above exists for exactly that reason).
+    await Promise.race([ambiguousOpened, clickOpen(window)]);
     await ambiguousOpened;
     assert.equal(opened.at(-1), join(ambiguous, 'One.agent-project'));
   }
