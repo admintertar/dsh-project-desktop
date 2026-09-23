@@ -9,73 +9,114 @@
  * Geometry comes from the official client contract (`ctx.desktopWindow.dragRegion`), the sidebar
  * toggle from the official layout service (`ctx.layout.toggleSidebar`), and commands travel over
  * the official renderer bridge. No official source is modified.
+ *
+ * Text comes from the official locale service, not from `document.documentElement.lang`: measured
+ * in the running app, switching the preference to English leaves `<html lang>` at `zh-CN`, so a
+ * titlebar that read the document language kept showing the old language. The namespace is
+ * registered here and the slot declares it, which is what the official settings sections do.
  */
 import {createElement as h, useCallback, useEffect, useRef, useState} from 'react';
 import {DESKTOP_RENDERER_ACTIONS_BRIDGE} from '../../../.upstream/desktop/dsh-plugin-desktop/src/renderer-actions-contract.ts';
 import {SHELL_TITLEBAR_ACTIONS, SHELL_TITLEBAR_REQUEST} from './shell-titlebar-actions.mjs';
 
-type Words = {zh: string; en: string};
-type Item = {id: string; words: Words; shortcut?: string; action?: string; argument?: string; official?: string; separator?: boolean};
-type Menu = {id: string; words: Words; items: Item[]};
+type Item = {id: string; label?: string; shortcut?: string; action?: string; argument?: string; official?: string; separator?: boolean};
+type Menu = {id: string; label: string; items: Item[]};
+
+/** Locale namespace owned by the Shell titlebar. */
+export const SHELL_TITLEBAR_LOCALE = 'project.shell';
+
+/** Every label the titlebar prints, in both supported languages. */
+export const SHELL_TITLEBAR_COPY = {
+  zh: {
+    file: '文件', edit: '编辑', view: '视图', tools: '项目工具',
+    newProject: '新建项目…', openProject: '打开项目…', welcome: '欢迎窗口', closeProject: '关闭项目',
+    undo: '撤销', redo: '重做', cut: '剪切', copy: '复制', paste: '粘贴', selectAll: '全选',
+    reload: '重新加载', developerTools: '切换开发者工具', zoomReset: '实际大小', zoomIn: '放大', zoomOut: '缩小', fullscreen: '切换全屏',
+    terminal: '打开项目终端', diagnostics: '导出项目诊断…', profile: 'Profile…', restart: '重启当前项目',
+    safeMode: '在安全模式中打开', recover: '项目恢复…', updates: '检查更新…', about: '关于 DSH Project Desktop',
+    recentProjects: '最近项目', loading: '读取中…', noRecentProjects: '暂无记录',
+    applicationMenu: '应用菜单', collapseSidebar: '收起/展开侧栏', collapseSidebarLabel: '收起或展开侧栏',
+  },
+  en: {
+    file: 'File', edit: 'Edit', view: 'View', tools: 'Project Tools',
+    newProject: 'New Project…', openProject: 'Open Project…', welcome: 'Welcome Window', closeProject: 'Close Project',
+    undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select All',
+    reload: 'Reload', developerTools: 'Toggle Developer Tools', zoomReset: 'Actual Size', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', fullscreen: 'Toggle Full Screen',
+    terminal: 'Open Project Terminal', diagnostics: 'Export Project Diagnostics…', profile: 'Profiles…', restart: 'Restart Current Project',
+    safeMode: 'Open in Safe Mode', recover: 'Project Recovery…', updates: 'Check for Updates…', about: 'About DSH Project Desktop',
+    recentProjects: 'Recent Projects', loading: 'Loading…', noRecentProjects: 'No recent projects',
+    applicationMenu: 'Application menu', collapseSidebar: 'Collapse/expand sidebar', collapseSidebarLabel: 'Collapse or expand the sidebar',
+  },
+};
 
 const FILE: Menu = {
   id: 'file',
-  words: {zh: '文件', en: 'File'},
+  label: 'file',
   items: [
-    {id: 'new', words: {zh: '新建项目…', en: 'New Project…'}, shortcut: 'Ctrl+Shift+N', action: SHELL_TITLEBAR_ACTIONS.newProject},
-    {id: 'open', words: {zh: '打开项目…', en: 'Open Project…'}, shortcut: 'Ctrl+O', action: SHELL_TITLEBAR_ACTIONS.openProject},
-    {id: 'welcome', words: {zh: '欢迎窗口', en: 'Welcome Window'}, action: SHELL_TITLEBAR_ACTIONS.welcome},
-    {id: 'sep-1', words: {zh: '', en: ''}, separator: true},
-    {id: 'close', words: {zh: '关闭项目', en: 'Close Project'}, shortcut: 'Ctrl+W', action: SHELL_TITLEBAR_ACTIONS.closeProject},
+    {id: 'new', label: 'newProject', shortcut: 'Ctrl+Shift+N', action: SHELL_TITLEBAR_ACTIONS.newProject},
+    {id: 'open', label: 'openProject', shortcut: 'Ctrl+O', action: SHELL_TITLEBAR_ACTIONS.openProject},
+    {id: 'welcome', label: 'welcome', action: SHELL_TITLEBAR_ACTIONS.welcome},
+    {id: 'sep-1', separator: true},
+    {id: 'close', label: 'closeProject', shortcut: 'Ctrl+W', action: SHELL_TITLEBAR_ACTIONS.closeProject},
   ],
 };
 
 const EDIT: Menu = {
   id: 'edit',
-  words: {zh: '编辑', en: 'Edit'},
+  label: 'edit',
+  // The accelerators are Electron's own defaults for these roles on Windows/Linux
+  // (`MenuItem` `role` accelerators, read back from the pinned runtime: undo=CommandOrControl+Z,
+  // redo=Control+Y, cut/copy/paste=CommandOrControl+X/C/V, selectAll=CommandOrControl+A).
+  // This titlebar replaces the native menu bar, which Windows can never show, so the text has to
+  // be spelled out here or the items look like they have no shortcut at all. The smoke check
+  // verifies the printed chord really reaches a focused editor instead of only looking right.
   items: [
-    {id: 'undo', words: {zh: '撤销', en: 'Undo'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'undo'},
-    {id: 'redo', words: {zh: '重做', en: 'Redo'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'redo'},
-    {id: 'sep-1', words: {zh: '', en: ''}, separator: true},
-    {id: 'cut', words: {zh: '剪切', en: 'Cut'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'cut'},
-    {id: 'copy', words: {zh: '复制', en: 'Copy'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'copy'},
-    {id: 'paste', words: {zh: '粘贴', en: 'Paste'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'paste'},
-    {id: 'selectAll', words: {zh: '全选', en: 'Select All'}, action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'selectAll'},
+    {id: 'undo', label: 'undo', shortcut: 'Ctrl+Z', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'undo'},
+    {id: 'redo', label: 'redo', shortcut: 'Ctrl+Y', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'redo'},
+    {id: 'sep-1', separator: true},
+    {id: 'cut', label: 'cut', shortcut: 'Ctrl+X', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'cut'},
+    {id: 'copy', label: 'copy', shortcut: 'Ctrl+C', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'copy'},
+    {id: 'paste', label: 'paste', shortcut: 'Ctrl+V', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'paste'},
+    {id: 'selectAll', label: 'selectAll', shortcut: 'Ctrl+A', action: SHELL_TITLEBAR_ACTIONS.edit, argument: 'selectAll'},
   ],
 };
 
 const VIEW: Menu = {
   id: 'view',
-  words: {zh: '视图', en: 'View'},
+  label: 'view',
+  // No shortcut column on purpose: measured in a real project window, F11 and Ctrl+Shift+I do
+  // fire, but Ctrl+R and the zoom chords do not, because the pinned Windows strategy removes the
+  // native menu bar that would have carried their role accelerators. Printing them before the
+  // window owns those bindings would promise keys that do nothing.
   items: [
-    {id: 'reload', words: {zh: '重新加载', en: 'Reload'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'reload'},
-    {id: 'developerTools', words: {zh: '切换开发者工具', en: 'Toggle Developer Tools'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'developerTools'},
-    {id: 'sep-1', words: {zh: '', en: ''}, separator: true},
-    {id: 'zoomReset', words: {zh: '实际大小', en: 'Actual Size'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomReset'},
-    {id: 'zoomIn', words: {zh: '放大', en: 'Zoom In'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomIn'},
-    {id: 'zoomOut', words: {zh: '缩小', en: 'Zoom Out'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomOut'},
-    {id: 'sep-2', words: {zh: '', en: ''}, separator: true},
-    {id: 'fullscreen', words: {zh: '切换全屏', en: 'Toggle Full Screen'}, action: SHELL_TITLEBAR_ACTIONS.view, argument: 'fullscreen'},
+    {id: 'reload', label: 'reload', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'reload'},
+    {id: 'developerTools', label: 'developerTools', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'developerTools'},
+    {id: 'sep-1', separator: true},
+    {id: 'zoomReset', label: 'zoomReset', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomReset'},
+    {id: 'zoomIn', label: 'zoomIn', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomIn'},
+    {id: 'zoomOut', label: 'zoomOut', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'zoomOut'},
+    {id: 'sep-2', separator: true},
+    {id: 'fullscreen', label: 'fullscreen', action: SHELL_TITLEBAR_ACTIONS.view, argument: 'fullscreen'},
   ],
 };
 
 const TOOLS: Menu = {
   id: 'tools',
-  words: {zh: '项目工具', en: 'Project Tools'},
+  label: 'tools',
   items: [
-    {id: 'terminal', words: {zh: '打开项目终端', en: 'Open Project Terminal'}, official: 'terminal'},
-    {id: 'diagnostics', words: {zh: '导出项目诊断…', en: 'Export Project Diagnostics…'}, official: 'diagnostics'},
-    {id: 'sep-1', words: {zh: '', en: ''}, separator: true},
-    {id: 'profile', words: {zh: 'Profile…', en: 'Profiles…'}, action: SHELL_TITLEBAR_ACTIONS.profile},
-    {id: 'restart', words: {zh: '重启当前项目', en: 'Restart Current Project'}, action: SHELL_TITLEBAR_ACTIONS.restart},
-    {id: 'safeMode', words: {zh: '在安全模式中打开', en: 'Open in Safe Mode'}, action: SHELL_TITLEBAR_ACTIONS.safeMode},
-    {id: 'recover', words: {zh: '项目恢复…', en: 'Project Recovery…'}, action: SHELL_TITLEBAR_ACTIONS.recover},
-    {id: 'sep-2', words: {zh: '', en: ''}, separator: true},
-    {id: 'updates', words: {zh: '检查更新…', en: 'Check for Updates…'}, official: 'check-for-updates'},
-    {id: 'sep-3', words: {zh: '', en: ''}, separator: true},
+    {id: 'terminal', label: 'terminal', official: 'terminal'},
+    {id: 'diagnostics', label: 'diagnostics', official: 'diagnostics'},
+    {id: 'sep-1', separator: true},
+    {id: 'profile', label: 'profile', action: SHELL_TITLEBAR_ACTIONS.profile},
+    {id: 'restart', label: 'restart', action: SHELL_TITLEBAR_ACTIONS.restart},
+    {id: 'safeMode', label: 'safeMode', action: SHELL_TITLEBAR_ACTIONS.safeMode},
+    {id: 'recover', label: 'recover', action: SHELL_TITLEBAR_ACTIONS.recover},
+    {id: 'sep-2', separator: true},
+    {id: 'updates', label: 'updates', official: 'check-for-updates'},
+    {id: 'sep-3', separator: true},
     // Windows never shows the native application menu, so its About entry has to live here —
     // the same panel macOS reaches from the application menu.
-    {id: 'about', words: {zh: '关于 DSH Project Desktop', en: 'About DSH Project Desktop'}, action: SHELL_TITLEBAR_ACTIONS.about},
+    {id: 'about', label: 'about', action: SHELL_TITLEBAR_ACTIONS.about},
   ],
 };
 
@@ -134,19 +175,15 @@ body:not([data-dsh-desktop-material="off"]) .dshDesktopWindowsCaptionRow { backg
 
 type RecentEntry = {title: string; path: string; available?: boolean};
 
-function detectLocale(): 'zh' | 'en' {
-  const declared = document.documentElement.lang || navigator.language || 'en';
-  return declared.toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
-
 function bridgeInvoke(payload: unknown): Promise<unknown> {
   const bridge = (window as unknown as Record<string, {invoke: (value: unknown) => Promise<unknown>} | undefined>)[DESKTOP_RENDERER_ACTIONS_BRIDGE];
   if (!bridge) throw new Error('Shell titlebar: the Desktop renderer bridge is unavailable');
   return bridge.invoke(payload);
 }
 
-function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: boolean; height: number; rightInset: number; toggleSidebar: () => void}) {
-  const [locale] = useState(detectLocale);
+function ShellTitlebar({enabled, height, rightInset, toggleSidebar, t}: {
+  enabled: boolean; height: number; rightInset: number; toggleSidebar: () => void; t: (key: string) => string;
+}) {
   const [openMenu, setOpenMenu] = useState<string>();
   const [anchor, setAnchor] = useState<{left: number; top: number}>();
   const [recent, setRecent] = useState<RecentEntry[]>();
@@ -154,7 +191,7 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
   const [sidebarWidth, setSidebarWidth] = useState<number>();
   const root = useRef<HTMLDivElement>(null);
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
-  const word = (value: Words) => value[locale];
+  const word = (item: Item | Menu) => t(item.label ?? '');
   // The project name may never outgrow the sidebar column (which the operator can drag),
   // so the cap follows the live column width of the official frame instead of a fixed value.
   const projectMaxWidth = sidebarWidth === undefined ? 320 : Math.max(84, Math.round(sidebarWidth - 46));
@@ -242,12 +279,12 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
 
   if (!enabled) return null;
   const active = MENUS.find(menu => menu.id === openMenu);
-  return h('div', {className: 'dshShellTitlebar', ref: root, role: 'menubar', 'aria-label': locale === 'zh' ? '应用菜单' : 'Application menu'},
+  return h('div', {className: 'dshShellTitlebar', ref: root, role: 'menubar', 'aria-label': t('applicationMenu')},
     h('button', {
       type: 'button',
       className: 'dshShellTitlebarButton dshShellTitlebarToggle',
-      title: locale === 'zh' ? '收起/展开侧栏' : 'Collapse/expand sidebar',
-      'aria-label': locale === 'zh' ? '收起或展开侧栏' : 'Collapse or expand the sidebar',
+      title: t('collapseSidebar'),
+      'aria-label': t('collapseSidebarLabel'),
       onClick: () => {toggleSidebar()},
     }, h('svg', {width: 18, height: 18, viewBox: '0 0 16 16', 'aria-hidden': 'true'},
       h('rect', {x: 1.5, y: 2.5, width: 13, height: 11, rx: 2, fill: 'none', stroke: 'currentColor', strokeWidth: 1.3}),
@@ -269,7 +306,7 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
         setOpenMenu(next);
         if (next === 'file') void loadRecent();
       },
-    }, word(menu.words))),
+    }, word(menu))),
     active && h('div', {className: 'dshShellTitlebarMenu', role: 'menu', style: {top: anchor?.top ?? height, left: anchor?.left ?? 8}},
       active.items.map(item => item.separator
         ? h('div', {key: item.id, className: 'dshShellMenuSeparator', role: 'separator'})
@@ -280,15 +317,15 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
           className: 'dshShellMenuItem',
           onClick: () => {void run(item)},
         },
-        h('span', {className: 'dshShellMenuItemLabel'}, word(item.words)),
+        h('span', {className: 'dshShellMenuItemLabel'}, word(item)),
         item.shortcut && h('span', {className: 'dshShellMenuItemShortcut'}, item.shortcut))),
       active.id === 'file' && h('div', null,
         h('div', {className: 'dshShellMenuSeparator', role: 'separator'}),
-        h('div', {className: 'dshShellMenuGroup'}, locale === 'zh' ? '最近项目' : 'Recent Projects'),
+        h('div', {className: 'dshShellMenuGroup'}, t('recentProjects')),
         recent === undefined
-          ? h('div', {className: 'dshShellMenuGroup'}, locale === 'zh' ? '读取中…' : 'Loading…')
+          ? h('div', {className: 'dshShellMenuGroup'}, t('loading'))
           : recent.length === 0
-            ? h('div', {className: 'dshShellMenuGroup'}, locale === 'zh' ? '暂无记录' : 'No recent projects')
+            ? h('div', {className: 'dshShellMenuGroup'}, t('noRecentProjects'))
             : recent.slice(0, 8).map(entry => h('button', {
               key: entry.path,
               type: 'button',
@@ -306,6 +343,8 @@ function ShellTitlebar({enabled, height, rightInset, toggleSidebar}: {enabled: b
  */
 export function applyShellTitlebar(ctx: any, environment: {platform: string}): void {
   if (environment.platform === 'darwin') return;
+  ctx.effect(() => ctx.locale.register(SHELL_TITLEBAR_LOCALE, SHELL_TITLEBAR_COPY), 'project-desktop: titlebar copy');
+  const t = ctx.locale.bind(SHELL_TITLEBAR_LOCALE);
   const dragRegion = ctx.desktopWindow?.dragRegion;
   const height = Number.isFinite(dragRegion?.height) ? dragRegion.height : 40;
   const rightInset = Number.isFinite(dragRegion?.rightInset) ? dragRegion.rightInset : 138;
@@ -313,10 +352,12 @@ export function applyShellTitlebar(ctx: any, environment: {platform: string}): v
     name: 'shell.overlay',
     id: 'project-desktop-titlebar',
     order: 0,
+    locale: SHELL_TITLEBAR_LOCALE,
     inject: () => ({
       enabled: true,
       height,
       rightInset,
+      t,
       toggleSidebar: () => {ctx.layout?.toggleSidebar?.()},
     }),
   }, ShellTitlebar));

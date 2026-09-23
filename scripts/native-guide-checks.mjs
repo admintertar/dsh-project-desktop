@@ -34,9 +34,13 @@ export async function checkProjectCreateEntryPoints({electron, guide}) {
   try {
     await waitFor(window, "document.querySelector('.templateItem') && document.querySelector('.setting')");
     await window.webContents.executeJavaScript(`(() => {const input = document.querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input, 'Draft'); input.dispatchEvent(new Event('input', {bubbles:true}))})()`);
-    const newProject = electron.Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items ?? [])
-      .find(item => item.accelerator === 'CmdOrCtrl+Shift+N');
-    assert.ok(newProject);
+    const menuItems = electron.Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items ?? []);
+    // Windows windows can never show a native menu bar, so the File entries deliberately register
+    // no accelerator there and window-accelerators.mjs owns those chords instead. Match the label
+    // and treat the accelerator only as an extra identifier on platforms that do register it.
+    const newProject = menuItems.find(item => item.accelerator === 'CmdOrCtrl+Shift+N')
+      ?? menuItems.find(item => /^(新建项目…|New Project…)$/.test(item.label));
+    assert.ok(newProject, `application menu: ${JSON.stringify(menuItems.map(item => ({label: item.label, accelerator: item.accelerator})))}`);
     newProject.click();
     await guide.webContents.executeJavaScript(`window.projectGuide.invoke('new')`);
     assert.equal(createWindows().length, 1);

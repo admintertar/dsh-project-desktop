@@ -1,5 +1,5 @@
 import {EventEmitter} from 'node:events';
-import {dirname, join, basename} from 'node:path';
+import {join, basename} from 'node:path';
 import {statSync} from 'node:fs';
 import {startProjectHost} from './index.mjs';
 import {loadDesktop, desktopRequire} from './stable/modules.mjs';
@@ -12,6 +12,7 @@ import {createWindowMaterialRefresher} from '../windows/window-material-refresh.
 import {createShellTitlebarActionRunner, shellTitlebarRequest} from './stable/shell-titlebar-actions.mjs';
 import {productVersion, productName} from '../app/product.mjs';
 import {LastDirectories, pickRememberedDirectory} from '../app/last-directories.mjs';
+import {createDesktopTerminalOpener, desktopTerminalPaths} from './terminal-launch.mjs';
 
 function spawnUtility(electron, entry, args, options) {
   const child = electron.utilityProcess.fork(entry, args, {cwd: options.cwd, env: options.env, stdio: 'pipe', serviceName: 'DSH Project Host'});
@@ -32,6 +33,7 @@ export async function openNativeProject(electron, options) {
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
   const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
+  const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
   // The official Electron runtime exposes windowsBuild on its own runtime object.
   // Our hand-written replacement must carry the same value, or every capability
   // gate that reads it (Mica support, window material resolution) silently
@@ -79,6 +81,22 @@ export async function openNativeProject(electron, options) {
   const requestRestart = createProjectRestartRequest({getWindow: () => window, getLocale: () => locale,
     confirmationCopy: desktopRestartConfirmationCopy, showMessageBox: (owner, options) => showDesktopMessageBox(options, owner),
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
+  // The official runtime reports a failed terminal launch through its own native dialog
+  // (electron-runtime.ts `reportTerminalLaunchError`). The Shell's runtime must keep that
+  // feedback: the official renderer dispatcher does not await `openTerminal`, so a missing
+  // option or an unresolvable runtime turns into a menu entry that silently does nothing.
+  const reportTerminalFailure = cause => {
+    const error = cause instanceof Error ? cause : new Error(String(cause));
+    console.error(`Project terminal: ${error.message}`);
+    const copy = desktopNativeCopy(locale === 'zh' ? 'zh' : 'en');
+    const owner = window && !window.isDestroyed() ? window : undefined;
+    void showDesktopMessageBox({type: 'error', title: copy.terminalErrorTitle, message: copy.terminalErrorMessage,
+      detail: error.message, buttons: [copy.ok], defaultId: 0, cancelId: 0}, owner).catch(dialogCause => {
+      console.error(`Project terminal: failed to show the error dialog: ${dialogCause?.message ?? dialogCause}`);
+    });
+  };
+  const openProjectTerminal = createDesktopTerminalOpener({openDesktopTerminal,
+    paths: desktopTerminalPaths({runtimePackage, desktopRequire}), reportFailure: reportTerminalFailure});
   const runtime = {
     platform: process.platform, windowsBuild: process.platform === 'win32' ? windowsBuildNumber() : undefined, locale,
     // Chromium already knows this machine's proxy (WinINET or PAC) and answers DIRECT for
@@ -100,9 +118,8 @@ export async function openNativeProject(electron, options) {
     }},
     openTerminal() {
       if (options.safeMode) return disabled();
-      if (!host) throw new Error('Project is still starting');
-      openDesktopTerminal({platform: process.platform, appExecutable: process.execPath,
-        dshBootstrapPath: join(runtimePackage, 'lib/desktop-cli.js'), pnpmBinPath: join(dirname(desktopRequire.resolve('pnpm')), 'bin/pnpm.mjs'),
+      if (!host) return reportTerminalFailure(new Error('Project is still starting'));
+      return openProjectTerminal({platform: process.platform, appExecutable: process.execPath,
         electronVersion: process.versions.electron, profileName: host.result.profileName, productVersion: lock.desktop.version,
         profileDir: host.result.profile, homeDir: host.result.homeDir, stateDir: join(options.stateDirectory, 'terminal')});
     },

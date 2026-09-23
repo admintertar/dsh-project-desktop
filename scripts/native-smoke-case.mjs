@@ -52,6 +52,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
     writeFileSync(join(userData, `${project.window.getTitle()}.png`), (await project.window.webContents.capturePage()).toPNG());
     assert.equal(new URL(project.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
   }
+  await (await import('./native-titlebar-checks.mjs')).checkTitlebarMenus({project: alpha});
   await alpha.host.selectTheme('dark');
   const deadline = Date.now() + 5000;
   while (await bravo.host.getTheme() !== 'dark' && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
@@ -79,6 +80,17 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
     projects: [...workspace.projects.values()].map(item => ({id: item.window.id, locale: item.locale})),
     menus: electron.Menu.getApplicationMenu().items.map(item => item.label),
   }));
+  // The titlebar draws the same commands as this menu, so it has to follow the same language
+  // switch. It used to read `<html lang>`, which stays at the old language after this switch.
+  const titlebar = await import('./native-titlebar-checks.mjs');
+  const titlebarDeadline = Date.now() + 5000;
+  let titlebarAfterLocale = await titlebar.readTitlebarLocale(bravo);
+  while (!titlebarAfterLocale.menus.some(label => /Project Tools/.test(label)) && Date.now() < titlebarDeadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    titlebarAfterLocale = await titlebar.readTitlebarLocale(bravo);
+  }
+  assert.ok(titlebarAfterLocale.menus.some(label => /Project Tools/.test(label)),
+    `the self-drawn titlebar must follow the app language: ${JSON.stringify(titlebarAfterLocale)}`);
   await bravo.window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
     const check = () => {
@@ -110,7 +122,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
     checks: ['own-guide', 'independent-project-create-window', 'guide-create-and-retry', 'guide-english-chinese-light-dark', 'guide-narrow-scroll-and-keyboard',
       'guide-remote-modal-validation-and-layout', 'guide-private-https-authentication-and-branch', 'guide-reuses-completed-clone',
       'guide-add-resource-local-inspection-and-git-import', 'guide-add-resource-cancel-validation-and-responsive-layout',
-      'two-native-project-windows', 'separate-chromium-sessions', 'sandboxed-preload', 'native-menu-locale', 'official-model-settings-without-onboarding',
+      'two-native-project-windows', 'separate-chromium-sessions', 'sandboxed-preload', 'native-menu-locale', 'titlebar-menu-entries-and-edit-accelerators', 'official-model-settings-without-onboarding',
       'healthy-official-advanced-and-project-client', 'shell-product-version', 'shared-native-theme', 'native-close-reopen-isolation', 'last-project-restart',
       'welcome-search-stable-layout', 'native-desktop-settings', 'native-settings-header-actions', 'native-project-market-settings', 'renderer-crash-isolation', 'host-crash-isolation', 'checkpoint-restore-ui', 'diagnostic-zip',
       'all-native-menu-roles-zh-en', 'native-restart-confirmation', 'safe-mode-with-broken-normal-settings', 'safe-mode-no-project-plugin', 'safe-mode-session-and-cleanup', 'safe-mode-normal-reopen'],

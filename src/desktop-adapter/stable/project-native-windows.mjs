@@ -1,8 +1,9 @@
 import {randomUUID} from 'node:crypto';
-import {basename, dirname, join} from 'node:path';
+import {basename, join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {loadDesktop, desktopRequire} from './modules.mjs';
 import {lock, runtimePackage} from '../paths.mjs';
+import {createDesktopTerminalOpener, desktopTerminalPaths} from '../terminal-launch.mjs';
 import {projectProfiles} from './project-profiles.mjs';
 
 /** Embed the unchanged stable native windows, with capabilities confined to one project. */
@@ -46,16 +47,31 @@ export async function createProjectNativeWindow({stateDirectory, manifestPath, l
     const {DesktopStartupRecoveryWindow} = await loadDesktop('startup-recovery-window');
     const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
     const {openDesktopTerminal} = await loadDesktop('desktop-terminal');
+    const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
+    const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
     const profileName = recovery.profileName;
     const profileDir = join(profiles.homeDir, 'profiles', profileName);
+    // Same contract and same visible-failure path as the project runtime: this window offers its
+    // own "open terminal" entry, and a launch failure must never look like a dead button.
+    const launchTerminal = createDesktopTerminalOpener({openDesktopTerminal,
+      paths: desktopTerminalPaths({runtimePackage, desktopRequire}),
+      reportFailure: cause => {
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        console.error(`Project terminal: ${error.message}`);
+        const copy = desktopNativeCopy(locale === 'zh' ? 'zh' : 'en');
+        const owner = ui?.window && !ui.window.isDestroyed() ? ui.window : undefined;
+        void showDesktopMessageBox({type: 'error', title: copy.terminalErrorTitle, message: copy.terminalErrorMessage,
+          detail: error.message, buttons: [copy.ok], defaultId: 0, cancelId: 0}, owner).catch(dialogCause => {
+          console.error(`Project terminal: failed to show the error dialog: ${dialogCause?.message ?? dialogCause}`);
+        });
+      }});
     ui = new DesktopStartupRecoveryWindow({controller: recovery.controller, locale, requested, failureStage,
       failureDetail: failureDetail || recovery.error || '',
       ...(!readOnly ? {profileActions: actions, configurationPaths: {settingsDocument: join(profiles.homeDir, 'settings.yaml'),
         profilePatch: join(profileDir, 'cordis.patch.yml'), profileManifest: join(profileDir, 'package.json'), profileDirectory: profileDir}} : {}),
       exportDiagnostics: signal => exportDiagnosticsZip(join(stateDirectory, 'logs'), stateDirectory,
         {appVersion: `DSH Project Desktop / Desktop ${lock.desktop.version}`, signal}),
-      ...(!readOnly ? {openTerminal: () => openDesktopTerminal({platform: process.platform, appExecutable: process.execPath,
-        dshBootstrapPath: join(runtimePackage, 'lib/desktop-cli.js'), pnpmBinPath: join(dirname(desktopRequire.resolve('pnpm')), 'bin/pnpm.mjs'),
+      ...(!readOnly ? {openTerminal: () => launchTerminal({platform: process.platform, appExecutable: process.execPath,
         electronVersion: process.versions.electron, profileName, productVersion: lock.desktop.version,
         profileDir, homeDir: profiles.homeDir, stateDir: join(stateDirectory, 'terminal')}), enterSafeMode} : {}),
       // The shell owns project Homes. Global Home relocation/reset is deliberately not delegated.
