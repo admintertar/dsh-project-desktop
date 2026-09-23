@@ -454,16 +454,26 @@ export async function checkResourceStates({electron, userData}) {
     const hoverSyncTag = async (label, message, shot) => {
       await wait(window, `document.querySelector('${syncTag}')?.textContent === ${JSON.stringify(label)}`);
       window.show(); window.focus(); await frame(window);
-      const box = await evaluate(window, `(() => {const r=document.querySelector('${syncTag}').getBoundingClientRect();
-        return {x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2)};})()`);
-      window.webContents.sendInputEvent({type: 'mouseMove', x: box.x, y: box.y});
       // The abbreviation matches the Host's, so a missing or wrong commit fails here instead of matching a count.
       const expected = `${label}\n${git(['rev-parse', '--short=7', 'HEAD'])} ${message}`;
-      await wait(window, `document.querySelector('[role=tooltip]')?.textContent === ${JSON.stringify(expected)}`);
-      // A count-only tag renders one line; naming a commit has to add a second 20px line inside the
-      // window, which is what makes the hover readable instead of a clipped single line.
-      const bubble = await evaluate(window, `(() => {const el=document.querySelector('[role=tooltip]'); const r=el.getBoundingClientRect();
-        return {lines: Math.round(r.height / 20), left: r.left, right: r.right, viewport: innerWidth};})()`);
+      const deadline = Date.now() + 15000;
+      let bubble = null;
+      while (bubble === null) {
+        if (Date.now() > deadline) throw new Error(`The hover text never showed ${JSON.stringify(expected)}\n${await evaluate(window, 'document.body.innerText')}`);
+        // Showing the window can rebuild the list under the pointer, so measure the anchor on every try;
+        // each try leaves the tag first, because only a fresh mouseenter opens the bubble.
+        const box = await evaluate(window, `(() => {const el=document.querySelector('${syncTag}'); if (el === null) return null;
+          const r=el.getBoundingClientRect(); return {x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2)};})()`);
+        if (box !== null) window.webContents.sendInputEvent({type: 'mouseMove', x: box.x, y: box.y});
+        await new Promise(resolve => setTimeout(resolve, 150));
+        // A count-only tag renders one line; naming a commit has to add a second 20px line inside the
+        // window, which is what makes the hover readable instead of a clipped single line.
+        bubble = await evaluate(window, `(() => {const el=document.querySelector('[role=tooltip]');
+          if (el === null || el.textContent !== ${JSON.stringify(expected)}) return null;
+          const r=el.getBoundingClientRect(); return {lines: Math.round(r.height / 20), left: r.left, right: r.right, viewport: innerWidth};})()`);
+        if (bubble !== null) break;
+        window.webContents.sendInputEvent({type: 'mouseMove', x: 4, y: 4});
+      }
       assert.equal(bubble.lines >= 2, true, `the hover text must render the commit on its own line: ${JSON.stringify(bubble)}`);
       assert.equal(bubble.left >= 0 && bubble.right <= bubble.viewport, true, `the hover text must stay inside the window: ${JSON.stringify(bubble)}`);
       writeFileSync(join(userData, shot), (await window.webContents.capturePage()).toPNG());
