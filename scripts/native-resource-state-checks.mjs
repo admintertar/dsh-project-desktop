@@ -97,12 +97,14 @@ export async function checkResourceStates({electron, userData}) {
   const picked = join(root, 'picked-resource');
   // Each chooser request answers with the directory the running case is about to pick.
   let nextPick = picked;
+  // Every chooser call, so the remembered starting directory can be asserted.
+  const chooserOptions = [];
   let chooser = electron;
   if (process.platform === 'win32') {
     mkdirSync(picked, {recursive: true});
     writeFileSync(join(picked, 'README.md'), '# picked resource\n');
     chooser = Object.create(electron, {dialog: {value: {...electron.dialog,
-      showOpenDialog: async () => ({canceled: false, filePaths: [nextPick]})}}});
+      showOpenDialog: async (_window, options) => {chooserOptions.push(options); return {canceled: false, filePaths: [nextPick]}}}}});
   }
   const project = await openNativeProject(chooser, {...projectStatePath(userData, manifest), projectRoot: root,
     title: 'Resource states', locale: 'en', hidden: true, onError: console.error,
@@ -701,6 +703,15 @@ export async function checkResourceStates({electron, userData}) {
       await evaluate(window, `${choose}.click()`);
       await wait(window, `document.querySelector('[role=dialog] .project-resource-directory code')?.textContent.endsWith('picked-resource')`);
       assert.equal(await evaluate(window, `document.querySelector('[role=dialog] input[id$="-name"]')?.value`), 'picked-resource');
+      // Nothing was picked yet in this profile, so the first chooser has no starting point.
+      assert.equal(chooserOptions.length, 1);
+      assert.equal(chooserOptions[0]?.defaultPath, undefined);
+      // Picking is remembered immediately: the next chooser opens in the picked directory.
+      await evaluate(window, `${choose}.click()`);
+      for (let attempt = 0; attempt < 100 && chooserOptions.length < 2; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.equal(chooserOptions[1]?.defaultPath, picked);
       writeFileSync(join(userData, 'resource-add-local.png'), (await window.webContents.capturePage()).toPNG());
       await evaluate(window, `document.querySelector('[role=dialog] button[type=submit]').click()`);
       await wait(window, `!document.querySelector('[role=dialog]')`);
