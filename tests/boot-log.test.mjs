@@ -211,6 +211,7 @@ test('the exported report carries the trace, the sources and every recovery reas
     assert.match(report, /"source":"startup-restore"/u);
     assert.match(report, /app\.whenReady {2}\[SLOW >1000ms\]/u);
     assert.match(report, /\[SLOW >1000ms\] are where the time went/u);
+    assert.match(report, /export is one export/u);
     assert.match(report, /dsh-diagnostics-\*\.zip/u);
     assert.ok(report.endsWith('\n'), 'the report must end with a newline');
   });

@@ -82,15 +82,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
   }));
   // The titlebar draws the same commands as this menu, so it has to follow the same language
   // switch. It used to read `<html lang>`, which stays at the old language after this switch.
-  const titlebar = await import('./native-titlebar-checks.mjs');
-  const titlebarDeadline = Date.now() + 5000;
-  let titlebarAfterLocale = await titlebar.readTitlebarLocale(bravo);
-  while (!titlebarAfterLocale.menus.some(label => /Project Tools/.test(label)) && Date.now() < titlebarDeadline) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    titlebarAfterLocale = await titlebar.readTitlebarLocale(bravo);
-  }
-  assert.ok(titlebarAfterLocale.menus.some(label => /Project Tools/.test(label)),
-    `the self-drawn titlebar must follow the app language: ${JSON.stringify(titlebarAfterLocale)}`);
+  await (await import('./native-titlebar-checks.mjs')).checkTitlebarLocale({project: bravo});
   await bravo.window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
     const check = () => {

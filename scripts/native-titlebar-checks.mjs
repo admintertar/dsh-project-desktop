@@ -93,6 +93,27 @@ export async function readTitlebarLocale(project) {
 }
 
 /**
+ * Assert that the self-drawn titlebar follows a live application-language switch.
+ *
+ * macOS draws the official application menu instead of the Shell titlebar, so there is no
+ * titlebar language to read there and this check only applies where the menus are self-drawn.
+ * The locale switch happens in the running app on purpose: the titlebar reads its language when
+ * it mounts, which is exactly when stale text would go unnoticed by a fresh-window check.
+ * @param {{project: any}} options - one open project resource, after the app locale changed.
+ */
+export async function checkTitlebarLocale({project}) {
+  if (DARWIN_SKIP) return;
+  const deadline = Date.now() + 5000;
+  let state = await readTitlebarLocale(project);
+  while (!state.menus.some(label => /Project Tools/u.test(label)) && Date.now() < deadline) {
+    await delay(100);
+    state = await readTitlebarLocale(project);
+  }
+  assert.ok(state.menus.some(label => /Project Tools/u.test(label)),
+    `the self-drawn titlebar must follow the app language: ${JSON.stringify(state)}`);
+}
+
+/**
  * Assert that the self-drawn titlebar opens its menus and shows the expected entries.
  * @param {{project: any}} options - one open project resource.
  */

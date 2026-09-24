@@ -83,6 +83,10 @@ async function run() {
    * official diagnostics archive, copied beside the report. One destination, send it on.
    */
   const exportStartupLog = async (destination, diagnostics) => {
+    // The launch trace has already ended by the time anyone exports, so the export opens its own
+    // section instead of appending to `boot`: an export that leaves no record cannot be told
+    // apart from one that never happened, and a failed export is worth seeing too.
+    const exportTrace = startTrace('export', `userData=${userData}`);
     const boot = bootLogFile();
     let bootText;
     try {bootText = boot && existsSync(boot) ? readFileSync(boot, 'utf8') : undefined}
@@ -110,8 +114,9 @@ async function run() {
         diagnosticsCopy = copy;
       } catch (error) {console.error('Startup log export: the diagnostics archive could not be added:', error)}
     }
-    trace.event('logs exported', `${destination} bytes=${String(Buffer.byteLength(text))}`
+    exportTrace.event('logs exported', `bytes=${String(Buffer.byteLength(text))} destination=${destination}`
       + `${diagnosticsCopy ? ` diagnostics=${diagnosticsCopy}` : ' diagnostics=unavailable'}`);
+    exportTrace.end(written ? 'written' : 'failed');
     return written;
   };
   const surfaces = new Map();
