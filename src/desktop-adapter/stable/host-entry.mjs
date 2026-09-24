@@ -6,6 +6,7 @@ import {prepareProjectProfile} from './profile.mjs';
 import {runtimePackage} from '../paths.mjs';
 import {verifyRuntimeDependencies} from './verify.mjs';
 import {bootProjectHost} from './project-bootstrap.mjs';
+import {reportPluginLoads} from './plugin-load-trace.mjs';
 import {hostTrace} from '../../app/boot-log.mjs';
 
 // The parent sets DSH_HOME/cwd before any DSH import. No process-wide switching between projects.
@@ -59,7 +60,7 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   pnpm = installDesktopPnpmRuntime({platform: process.platform, appExecutable: process.execPath,
     pnpmBinPath, electronVersion, stateDir: join(request.stateDirectory, 'commands'), environment: process.env});
   trace?.stage('official host boot requested');
-  await bootProjectHost({prepared,
+  const {pluginReport} = await bootProjectHost({prepared, trace,
     desktopLaunchEnvironment: withDesktopDshHome(loadLayeredEnv('dsh-project-desktop'), homeDir),
     desktopPnpmBootstrap: {activeProfileName: prepared.profile.name, activeProfileDir: prepared.profile.dir,
       homeDir, appExecutable: process.execPath, pnpmBinPath, electronVersion,
@@ -68,6 +69,8 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
     logDirectory: join(request.stateDirectory, 'logs'),
   }, runtime, browser, lan, value => {host = value}, code => {void rpc.call('quit', [code])});
   trace?.stage('official host booted', 'plugin tree and loopback renderer server in place');
+  // Beside the stage above, not inside it: this names which entry of that tree was slow.
+  reportPluginLoads(trace, pluginReport);
   if (stopping) {await host.fiber.dispose(); throw new Error('Host stopped during startup')}
   let applyingSharedTheme = false;
   const validateTheme = preference => {

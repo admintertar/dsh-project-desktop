@@ -117,7 +117,9 @@ use a separate checkout/cache and rerun acceptance before adopting the lock.
 Host 进程内部的阶段（首次 Profile 准备的 pnpm 依赖实体化、官方插件树、渲染进程注册）也追加在
 同一段里。每行是 `+该段开始以来的偏移` + `该阶段自己的耗时`，单阶段 ≥ 1 秒会带 `[SLOW >1000ms]`，
 段落结束时给出 `total` 与最慢阶段；文件超过 `DSH_PROJECT_BOOT_LOG_BYTES`（默认 256 KiB）时按半量
-截断，只保留最新记录。
+截断，只保留最新记录。官方 `boot()` 内部另拆成模块解析、日志 sink、Loader 装载与三处装配阶段
+（`official host modules resolved` … `official cmdline provided`），并在 `official host booted` 之后
+补一行 `official plugin tree settled`，给出已装载入口数与最慢的插件入口。
 
 Every launch writes `<userData>/boot.log`, with no switch to remember first: `boot` covers the
 launch, `project/open:<name>` one project open, and the Host process appends its own stages
@@ -125,7 +127,10 @@ launch, `project/open:<name>` one project open, and the Host process appends its
 trace. Each line carries the offset since that trace began and the stage's own cost, a stage of
 1000 ms or more is marked `[SLOW >1000ms]`, and the trace ends with `total` and its slowest
 stage. The file is truncated to its newest half once it passes `DSH_PROJECT_BOOT_LOG_BYTES`
-(256 KiB by default).
+(256 KiB by default). Inside the official `boot()` the trace is split further — module resolution,
+the log sink, Loader installation and the assembly between `official host modules resolved` and
+`official cmdline provided` — and `official plugin tree settled`, written after
+`official host booted`, names the entry that took the longest to load.
 
 Follow it live while reproducing a slow launch:
 
@@ -145,8 +150,8 @@ yarn probe:startup-trace <label>
 ```
 
 runs one real native smoke launch with the trace on and fails unless the launch trace, a
-project-open trace, the Host-process stages and a `[SLOW >1000ms]` line are all present; its
-evidence lands in `.runtime/startup-trace-<stamp>-<label>-*/boot.log`.
+project-open trace, the Host-process stages, the host boot sub-stages and a `[SLOW >1000ms]` line
+are all present; its evidence lands in `.runtime/startup-trace-<stamp>-<label>-*/boot.log`.
 
 ## Checks and limits / 验证范围
 
@@ -156,7 +161,7 @@ evidence lands in `.runtime/startup-trace-<stamp>-<label>-*/boot.log`.
 | `yarn run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
 | `yarn run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
 | `yarn run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
-| `yarn run probe:startup-trace` | Real launch writes a usable startup/open trace (`boot`, `project/open:*`, Host stages, a marked slow stage) |
+| `yarn run probe:startup-trace` | Real launch writes a usable startup/open trace (`boot`, `project/open:*`, Host stages, host boot sub-stages, a marked slow stage) |
 | `yarn run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
 | `yarn run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
 | `yarn run smoke:resources` | Native resource status and remote-association checks |

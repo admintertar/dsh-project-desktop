@@ -45,6 +45,7 @@ child.on('exit', (code, signal) => {
     ['electron-ready stage', /app\.whenReady$/mu.test(text)],
     ['project file resolved stage', /project file resolved/u.test(text)],
     ['host boot rpc stage', /host boot rpc requested/u.test(text)],
+    ['host boot sub-stages', /official loader mounted/u.test(text) && /official plugin tree settled/u.test(text)],
     ['slow stage marked', /\[SLOW >\d+ms\]/u.test(text)],
   ];
   for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
