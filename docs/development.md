@@ -136,6 +136,9 @@ DSH_PROJECT_BOOT_TRACE=1 DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn s
 `DSH_PROJECT_BOOT_LOG` points the trace at another file, and setting it to the empty string turns
 the trace off. In the app, 项目工具 → 导出日志与诊断… writes the whole trace plus each project's
 recovery reasons and the project's official diagnostics archive into one folder and reveals it.
+That entry implements the official `DesktopRuntime.exportDiagnostics` contract, so the method keeps
+its official name, and the official duplicate "导出诊断信息…" contribution is dropped from the menu
+(see `stable/official-tray.mjs`); `tests/desktop-runtime-contract.test.mjs` fails if either drifts.
 
 ```powershell
 yarn probe:startup-trace <label>

@@ -10,6 +10,7 @@ import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
 import {createWindowMaterialRefresher} from '../windows/window-material-refresh.mjs';
 import {createShellTitlebarActionRunner, shellTitlebarRequest} from './stable/shell-titlebar-actions.mjs';
+import {isOfficialDiagnosticsTrayItem} from './stable/official-tray.mjs';
 import {productVersion, productName} from '../app/product.mjs';
 import {LastDirectories, pickRememberedDirectory} from '../app/last-directories.mjs';
 import {createDesktopTerminalOpener, desktopTerminalPaths} from './terminal-launch.mjs';
@@ -35,7 +36,7 @@ export async function openNativeProject(electron, options) {
   const {createDesktopRendererActionDispatcher} = await loadDesktop('renderer-actions-dispatch');
   const {openDesktopTerminal} = await loadDesktop('desktop-terminal');
   const {exportDiagnosticsZip} = await loadDesktop('diagnostic-export');
-  const {desktopRestartConfirmationCopy} = await loadDesktop('tray-locale');
+  const {desktopRestartConfirmationCopy, desktopTrayLabel} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
   trace?.stage('official modules loaded');
@@ -102,6 +103,10 @@ export async function openNativeProject(electron, options) {
   };
   const openProjectTerminal = createDesktopTerminalOpener({openDesktopTerminal,
     paths: desktopTerminalPaths({runtimePackage, desktopRequire}), reportFailure: reportTerminalFailure});
+  // The merged export replaces the official diagnostics command. Recognise that one contribution
+  // by every signal the pinned Host sends with it; see stable/official-tray.mjs for why all three
+  // must agree before anything is dropped.
+  const officialDiagnosticsLabels = new Set([desktopTrayLabel('en', 'exportDiagnostics'), desktopTrayLabel('zh', 'exportDiagnostics')]);
   const runtime = {
     platform: process.platform, windowsBuild: process.platform === 'win32' ? windowsBuildNumber() : undefined, locale,
     // Chromium already knows this machine's proxy (WinINET or PAC) and answers DIRECT for
@@ -115,8 +120,15 @@ export async function openNativeProject(electron, options) {
       specification = spec;
       return async () => {removeHeaders?.(); if (window && !window.isDestroyed()) window.destroy()};
     },
-    registerTrayItem(item) {const id = Symbol(); contributions.set(id, item); options.onMenuChanged?.();
-      return {refresh: () => options.onMenuChanged?.(), dispose() {contributions.delete(id); options.onMenuChanged?.()}}},
+    registerTrayItem(item) {
+      // One export writes the report and copies the official archive beside it, so the official
+      // duplicate is dropped rather than leaving two Project Tools entries that send the same
+      // evidence to two destinations. The official `native:exportDiagnostics` RPC stays
+      // implemented below, so this removes the duplicate menu entry, not the contract.
+      if (isOfficialDiagnosticsTrayItem(item, officialDiagnosticsLabels)) return {refresh() {}, dispose() {}};
+      const id = Symbol(); contributions.set(id, item); options.onMenuChanged?.();
+      return {refresh: () => options.onMenuChanged?.(), dispose() {contributions.delete(id); options.onMenuChanged?.()}};
+    },
     show: focus,
     notifyAttention(value) {if (!options.safeMode && !window?.isFocused() && Notification.isSupported()) {
       const notification = new Notification(value); notification.on('click', focus); notification.show();
@@ -131,11 +143,17 @@ export async function openNativeProject(electron, options) {
     reloadRenderer() {window?.webContents.reload()},
     toggleDeveloperTools() {window?.webContents.toggleDevTools()},
     /**
-     * One export for everything needed to diagnose "it is slow": the launch trace, every
-     * project-open trace, the Recovery Mode reasons and this project's official diagnostics
-     * archive, gathered under one destination the operator picks and then sends on.
+     * The official `DesktopRuntime.exportDiagnostics` contract, widened: one export for
+     * everything needed to diagnose "it is slow" — the launch trace, every project-open trace,
+     * the Recovery Mode reasons and this project's official diagnostics archive, gathered under
+     * one destination the operator picks and then sends on.
+     *
+     * The official method name is part of the contract with the pinned Host, which dispatches
+     * `native:exportDiagnostics` by name through `bindNativeRuntime`. Renaming this method (0.1.9
+     * called it `exportLogs`) makes that dispatch call `undefined.apply`, so the official export
+     * command fails with "Cannot read properties of undefined (reading 'apply')".
      */
-    async exportLogs() {
+    async exportDiagnostics() {
       const zh = locale === 'zh';
       const picked = await dialog.showSaveDialog(window, {title: zh ? '导出日志与诊断' : 'Export Logs and Diagnostics',
         defaultPath: join(electron.app.getPath('documents'), `dsh-startup-log-${new Date().toISOString().replace(/[:.]/gu, '-')}.log`)});
@@ -228,7 +246,7 @@ export async function openNativeProject(electron, options) {
     const dispatch = createDesktopRendererActionDispatcher({
       openTerminal: runtime.openTerminal, restart: runtime.requestRestart, restartToRecovery: runtime.requestRecoveryRestart,
       reload: runtime.reloadRenderer, developerTools: runtime.toggleDeveloperTools,
-      checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportLogs,
+      checkForUpdates: () => options.checkForUpdates(window), exportDiagnostics: runtime.exportDiagnostics,
     }, message => options.onError(new Error(message)));
     // The official dispatcher only knows the pinned official action whitelist; the Shell
     // titlebar actions are ours, so they are matched first and everything else still
@@ -288,7 +306,7 @@ export async function openNativeProject(electron, options) {
     trace?.stage('window focused and shown');
     return {host, window, focus, close, get locale() {return locale}, contributions: () => [...contributions.values()],
       restart: runtime.requestRestart, recover: runtime.requestRecoveryRestart,
-      terminal: runtime.openTerminal, diagnostics: runtime.exportLogs};
+      terminal: runtime.openTerminal, diagnostics: runtime.exportDiagnostics};
   } catch (error) {
     trace?.stage('project window failed', `stage=${failureStage} ${error?.message ?? String(error)}`);
     error.failureStage ??= failureStage;

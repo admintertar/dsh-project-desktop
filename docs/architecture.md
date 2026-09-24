@@ -67,7 +67,7 @@ Shell 的 `GuideClones` 仅负责临时目录及创建事务衔接：每个资�
 
 Host 是独立 `utilityProcess`，而打开项目最贵的一段就在它内部：首次 Profile 准备会跑受 120 秒预算约束的 pnpm 依赖实体化，之后还有官方插件树与 loopback 渲染服务器。因此监督进程把日志路径与会话标签经子进程环境传下去（`DSH_PROJECT_BOOT_LOG_FILE`／`DSH_PROJECT_BOOT_SESSION`），Host 用 `hostTrace()` 追加进同一段追踪（`profile prepare: pnpm dependencies`、官方 Host 启动、渲染进程注册），否则壳只能说“boot RPC 花了 25 秒”。恢复原因除了写入 `recovery-events.jsonl`，也一并记进该次追踪，方便一次性带走。
 
-项目工具菜单里的“导出日志与诊断…”是这些证据的唯一出口：它沿用官方 `diagnostics` 动作，写入一份报告（环境与数据来源、启动与打开项目追踪全文、各项目恢复原因清单），并把项目自己的官方诊断 zip（`dsh-diagnostics-*.zip`）复制到同一目录，随后在文件管理器中定位。报告与 zip 并排放置而不是互相替换：日志要能直接用编辑器打开，压缩包则满足官方诊断格式。导出失败复用官方 `diagnosticsErrorTitle`／`diagnosticsErrorMessage` 文案。
+项目工具菜单里的“导出日志与诊断…”是这些证据的唯一出口：它实现官方 `DesktopRuntime.exportDiagnostics` 契约——**方法名必须保持官方名**，因为固定 Host 的 `bindNativeRuntime` 按名分发 `native:exportDiagnostics`（0.1.9 曾把它改名为 `exportLogs`，官方入口随即以 `Cannot read properties of undefined (reading 'apply')` 失败）——写入一份报告（环境与数据来源、启动与打开项目追踪全文、各项目恢复原因清单），并把项目自己的官方诊断 zip（`dsh-diagnostics-*.zip`）复制到同一目录，随后在文件管理器中定位。固定 Host 的 `desktop-diagnostics` 插件还会注册自己的“导出诊断信息…”条目（`group: 'tools'`、`order: 20`），它与本入口写同一份证据，因此壳在 `registerTrayItem` 里按组、序号与官方文案三者同时匹配后丢弃该重复项（`stable/official-tray.mjs`）；三者任一不符即保留，避免误删未知命令。报告与 zip 并排放置而不是互相替换：日志要能直接用编辑器打开，压缩包则满足官方诊断格式。导出失败复用官方 `diagnosticsErrorTitle`／`diagnosticsErrorMessage` 文案。
 
 `project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.11 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
 
