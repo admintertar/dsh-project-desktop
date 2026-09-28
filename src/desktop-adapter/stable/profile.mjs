@@ -113,16 +113,27 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
     writeFileSync(patch + '.project-desktop-owner', manifestPath + '\n', {flag: 'wx'});
   }
   const settingsPath = join(homeDir, 'settings.yaml');
-  if (!existsSync(settingsPath)) writeFileSync(settingsPath, stringify({
-    'dsh-desktop': {mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback', ...(safeMode ? {macosMaterial: 'off', windowsMaterial: 'off'} : {})},
-    ...(safeMode ? {'dsh-desktop-notifications': {enabled: false}, locale: {preference: 'system'}} : {}),
+  // New normal Profiles store settings in cordis.patch.yml. Creating a legacy
+  // settings.yaml here makes Harness import it just after startup, briefly
+  // remounting the Project API and closing an already open Settings panel.
+  if (safeMode && !existsSync(settingsPath)) writeFileSync(settingsPath, stringify({
+    'dsh-desktop': {mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback', macosMaterial: 'off', windowsMaterial: 'off'},
+    'dsh-desktop-notifications': {enabled: false}, locale: {preference: 'system'},
   }), {flag: 'wx', mode: 0o600});
   // The product shell must be owned by the Profile document. SettingsForms
   // validates an edit by composing that document before it writes; an insert
   // supplied as a final runtime overlay would override every user edit.
   const profilePatches = parse(readFileSync(patch, 'utf8')) ?? [];
+  let profileChanged = false;
+  if (!profilePatches.some(row => row.id === 'desktop-shell' && row.config?.mode)) {
+    // projectProfiles.startup() creates the owned Profile before this function
+    // runs. Persist Desktop's startup mode here so it never needs a synthetic
+    // settings.yaml import after the Loader has mounted the Project API.
+    profilePatches.push({id: 'desktop-shell', config: {mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback'}});
+    profileChanged = true;
+  }
   if (!profilePatches.some(row => row.insert?.some(entry => entry.id === 'project-desktop-shell'))) {
-    const legacySettings = safeMode ? {} : parse(readFileSync(settingsPath, 'utf8')) ?? {};
+    const legacySettings = safeMode || !existsSync(settingsPath) ? {} : parse(readFileSync(settingsPath, 'utf8')) ?? {};
     const desktopSettings = legacySettings['dsh-desktop'] ?? {};
     const oldShell = profilePatches.findLast(row => row.id === 'desktop-shell' && row.config)?.config ?? {};
     const config = {...oldShell, mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback',
@@ -130,8 +141,9 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
         .filter(key => desktopSettings[key] !== undefined).map(key => [key, desktopSettings[key]])),
       marketProvider: safeMode ? 'disabled' : readProjectMarketPreference(settingsPath)};
     profilePatches.push({insert: [{id: 'project-desktop-shell', name: 'dsh-project-shell', config}]});
-    writeFileSync(patch, stringify(profilePatches));
+    profileChanged = true;
   }
+  if (profileChanged) writeFileSync(patch, stringify(profilePatches));
   const requestedMarket = safeMode ? 'disabled' : readProjectMarketPreference(settingsPath, patch);
   const materialize = materializeWithTrace(trace, 'profile prepare: pnpm dependencies');
   if ((projectWasRuntimeDependency || projectLockWasRuntimeDependency) && existsSync(lockPath)) {

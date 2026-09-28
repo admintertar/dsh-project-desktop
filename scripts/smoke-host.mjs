@@ -29,6 +29,8 @@ try {
   assert.notEqual(new URL(alpha.url).port, new URL(beta.url).port);
   for (const [id, host] of [['alpha', alpha], ['beta-project', beta]]) {
     assert.equal(host.result.harnessVersion, '0.1.7-rc.2');
+    assert.equal(existsSync(join(host.result.homeDir, 'settings.yaml.imported')), false,
+      'new Projects must not trigger a legacy settings import after the Host starts');
     assert.equal(host.result.projectSessionVersion, host.result.harnessVersion, 'Project peers resolve the same stable runtime');
     const snapshot = await host.request('/api/project/snapshot'); assert.equal(snapshot.status, 200);
     const project = await snapshot.json();
