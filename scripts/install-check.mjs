@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {existsSync, mkdirSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {createProjectInDirectory} from '../src/app/project-files.mjs';
 import {productVersion} from '../src/app/product.mjs';
 
@@ -26,11 +27,19 @@ export async function verifyInstallation({electron, open, close, workspace, show
       const html = await (await project.host.request('/')).text();
       const boot = html.match(/(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u);
       const entries = boot ? JSON.parse(boot[1]).entries.map(entry => entry.id) : [];
+      const pluginPath = join(project.host.result.profile, '.project-plugin', 'lib', 'index.js');
+      let pluginImport = 'ok';
+      try {await import(pathToFileURL(pluginPath).href)} catch (error) {pluginImport = String(error)}
+      const logDirectory = join(project.host.stateDirectory, 'logs');
+      const hostErrors = existsSync(logDirectory) ? readdirSync(logDirectory).filter(file => file.endsWith('.error.log'))
+        .flatMap(file => readFileSync(join(logDirectory, file), 'utf8').split(/\r?\n/u))
+        .filter(line => /\[E\]|Error|Cannot find|ERR_MODULE/u.test(line)).slice(-12) : [];
       throw new Error(`Packaged ${name} Project API returned ${response.status}: ${JSON.stringify({
         projectTools: project.host.result.tools.filter(tool => tool.startsWith('project_')),
         projectEntry: entries.includes('dsh-plugin-project'),
         projectClientEntry: entries.includes('dsh-plugin-project/client'),
         profileName: project.host.result.profileName,
+        pluginImport, hostErrors,
       })}`);
     }
     await response.body?.cancel();
