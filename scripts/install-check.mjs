@@ -19,8 +19,22 @@ export async function verifyInstallation({electron, open, close, workspace, show
   assert.notEqual(first.host.result.pid, second.host.result.pid);
   assert.equal(new URL(first.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
   assert.equal(first.host.result.harnessVersion, '0.1.7-rc.2');
-  assert.equal((await first.host.request('/api/project/snapshot')).status, 200);
-  assert.equal((await second.host.request('/api/project/snapshot')).status, 200);
+  for (const [name, project] of [['first', first], ['second', second]]) {
+    const response = await project.host.request('/api/project/snapshot');
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      const html = await (await project.host.request('/')).text();
+      const boot = html.match(/(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u);
+      const entries = boot ? JSON.parse(boot[1]).entries.map(entry => entry.id) : [];
+      throw new Error(`Packaged ${name} Project API returned ${response.status}: ${JSON.stringify({
+        projectTools: project.host.result.tools.filter(tool => tool.startsWith('project_')),
+        projectEntry: entries.includes('dsh-plugin-project'),
+        projectClientEntry: entries.includes('dsh-plugin-project/client'),
+        profileName: project.host.result.profileName,
+      })}`);
+    }
+    await response.body?.cancel();
+  }
   await first.host.updateShellSettings('locale', {preference: 'zh'}); first.focus();
   await first.window.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 500))');
   const fileMenu = electron.Menu.getApplicationMenu().items.find(item => item.label === '文件');
