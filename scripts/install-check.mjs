@@ -18,7 +18,7 @@ export async function verifyInstallation({electron, open, close, workspace, show
   for (const project of [first, second]) assert.ok(['zh', 'en'].includes(project.locale), 'Native locale must be resolved before menu refresh');
   assert.notEqual(first.host.result.pid, second.host.result.pid);
   assert.equal(new URL(first.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
-  assert.equal(first.host.result.harnessVersion, '0.1.5-rc.2');
+  assert.equal(first.host.result.harnessVersion, '0.1.7-rc.2');
   assert.equal((await first.host.request('/api/project/snapshot')).status, 200);
   assert.equal((await second.host.request('/api/project/snapshot')).status, 200);
   await first.host.updateShellSettings('locale', {preference: 'zh'}); first.focus();

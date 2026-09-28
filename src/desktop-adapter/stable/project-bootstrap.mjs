@@ -29,6 +29,7 @@ export async function bootProjectHost(options, runtime, browser, lan, bindHost, 
   const {provideCmdline} = await loadDependency('@deepseek-ai/dsh-cmdline');
   const {DSH_LAUNCH_ENVIRONMENT_KEY} = await loadDependency('@deepseek-ai/dsh-launch-environment');
   const {installProfilePackageResolver} = await loadDesktop('module-resolution');
+  const {createDesktopProfileBoot} = await loadDesktop('profile-context');
   const {DesktopActionsService} = await loadDesktop('desktop-actions');
   const {LogFileSink} = await loadDesktop('log-files');
   const {FileExporter} = await loadDesktop('file-exporter');
@@ -36,12 +37,29 @@ export async function bootProjectHost(options, runtime, browser, lan, bindHost, 
   // on Windows it is the half of the wait that no stage previously named.
   trace?.stage('official host modules resolved', 'app-boot, cmdline, launch-environment, log and actions modules');
   const release = installProfilePackageResolver(options.prepared.bareModuleBaseUrl);
+  const profileBoot = createDesktopProfileBoot(options.prepared, options.desktopPnpmBootstrap);
   const sink = new LogFileSink(options.logDirectory, {maxFileBytes: 10 * 1024 * 1024, maxDirectoryBytes: 200 * 1024 * 1024});
   const fileExporter = new FileExporter(sink);
   trace?.stage('official host log sink ready');
   let loads;
   try {
     const host = await boot('dsh-project-desktop', options.prepared.rootConfig, options.prepared.patches, async ctx => {
+      profileBoot.prepare(ctx);
+      // The official 0.1.7 Profile context rebuilds patches during HMR and
+      // settings imports. Reapply the Project shell overlay there as well, or
+      // a reload silently restores the official Desktop UI beside our shell.
+      const profileContext = ctx.get('profileContext');
+      if (profileContext?.readPatches) {
+        const readOfficialPatches = profileContext.readPatches;
+        profileContext.readPatches = profilePatches => [
+          ...readOfficialPatches(profilePatches).map(patch => patch.insert ? {
+            ...patch, insert: patch.insert.map(entry => entry.id === 'desktop-shell' ? {...entry, disabled: true} : entry),
+          } : patch),
+          {id: 'desktop-shell', disabled: true},
+          {id: 'desktop-updates', disabled: true},
+          {id: 'desktop-profiles', disabled: true},
+        ];
+      }
       // Reached after the Loader is installed and before any config-tree entry mounts, so the
       // next stage is the plugin tree plus the renderer server it starts.
       trace?.stage('official loader mounted', 'plugin tree not mounted yet');
@@ -66,10 +84,11 @@ export async function bootProjectHost(options, runtime, browser, lan, bindHost, 
       trace?.stage('official cmdline provided');
     }, options.prepared.bareModuleBaseUrl);
     bindHost(host);
-    fileExporter.setThreshold(host.settings.get('dsh-desktop')?.logLevel ?? 'info');
-    host.on('settings/updated', (namespace, next) => {
-      if (namespace === 'dsh-desktop') fileExporter.setThreshold(next.logLevel);
+    const desktopSettings = () => host.settings.describe().find(item => String(item.ns) === 'project-desktop-shell')?.value;
+    fileExporter.setThreshold(desktopSettings()?.logLevel ?? 'info');
+    host.on('settings/document-updated', namespace => {
+      if (String(namespace) === 'project-desktop-shell') fileExporter.setThreshold(desktopSettings()?.logLevel ?? 'info');
     });
-    return {pluginReport: loads.report()};
+    return {pluginReport: loads.report(), profileBoot};
   } catch (error) {release(); sink.close(); throw error}
 }

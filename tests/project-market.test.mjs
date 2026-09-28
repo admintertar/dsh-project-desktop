@@ -16,6 +16,10 @@ test('project market inherits dsh-market and accepts only stable project overrid
   assert.equal(readProjectMarketPreference(settings), 'disabled');
   writeFileSync(settings, 'dsh-project-market:\n  provider: community-market\n');
   assert.throws(() => readProjectMarketPreference(settings), /must be disabled or dsh-market/);
+  const patch = join(directory, 'cordis.patch.yml');
+  writeFileSync(settings, 'dsh-project-market:\n  provider: dsh-market\n');
+  writeFileSync(patch, '- insert:\n    - id: project-desktop-shell\n      config: {marketProvider: dsh-market}\n- id: project-desktop-shell\n  config: {marketProvider: disabled}\n');
+  assert.equal(readProjectMarketPreference(settings, patch), 'disabled', 'Profile edit overrides the imported legacy choice');
 });
 
 test('project market receives immutable current Profile identity without management methods', () => {

@@ -27,10 +27,15 @@ function materializeWithTrace(trace, label) {
  * Read the market selected for one isolated project before its Host exists.
  * Existing projects inherit the product default until they persist an override.
  */
-export function readProjectMarketPreference(settingsPath) {
-  if (!existsSync(settingsPath)) return DEFAULT_PROJECT_MARKET;
-  const settings = parse(readFileSync(settingsPath, 'utf8')) ?? {};
-  const value = settings?.['dsh-project-market']?.provider;
+export function readProjectMarketPreference(settingsPath, profilePatchPath) {
+  // A Profile patch is the 0.1.7 settings document. Once migrated, the old
+  // settings.yaml is renamed by Harness and must no longer select the market.
+  const profilePatches = profilePatchPath && existsSync(profilePatchPath) ? parse(readFileSync(profilePatchPath, 'utf8')) ?? [] : [];
+  if (!Array.isArray(profilePatches)) throw new Error('Unexpected Profile patch document');
+  const profileValue = profilePatches.findLast(row => row.id === 'project-desktop-shell' && row.config?.marketProvider)?.config.marketProvider
+    ?? profilePatches.flatMap(row => row.insert ?? []).findLast(row => row.id === 'project-desktop-shell')?.config?.marketProvider;
+  const settings = existsSync(settingsPath) ? parse(readFileSync(settingsPath, 'utf8')) ?? {} : {};
+  const value = profileValue ?? settings?.['dsh-project-market']?.provider;
   if (value === undefined) return DEFAULT_PROJECT_MARKET;
   if (value === 'disabled' || value === 'dsh-market') return value;
   throw new Error('Project plugin market must be disabled or dsh-market');
@@ -74,11 +79,21 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
     for (const name of ['package.json', 'lib', 'cordis.patch.yml', 'THIRD_PARTY_NOTICES.md']) {
       cpSync(join(projectPackage, name), join(staged, name), {recursive: true});
     }
-    const pluginManifest = JSON.parse(readFileSync(join(staged, 'package.json'), 'utf8'));
-    for (const dependency of Object.keys(pluginManifest.dependencies)) {
-      const target = join(staged, 'node_modules', dependency);
+    const projectDependencies = join(repository, '.cache/project-dependencies');
+    const projectManifest = JSON.parse(readFileSync(join(projectPackage, 'package.json'), 'utf8'));
+    // Direct packages resolve from the audited Project cache. Their own
+    // transitive dependencies resolve alongside their real paths in that cache.
+    for (const name of Object.keys(projectManifest.dependencies ?? {})) {
+      const source = join(projectDependencies, name);
+      const target = join(staged, 'node_modules', name);
       mkdirSync(dirname(target), {recursive: true});
-      runtimeLink(join(repository, '.cache/project-dependencies', dependency), target);
+      runtimeLink(source, target);
+    }
+    // Project's declared peers must share the Host's Cordis and Session.
+    for (const name of Object.keys(projectManifest.peerDependencies ?? {})) {
+      const target = join(staged, 'node_modules', name);
+      mkdirSync(dirname(target), {recursive: true});
+      runtimeLink(join(runtimePackage, 'node_modules', name), target);
     }
     mkdirSync(join(profileDir, 'node_modules'), {recursive: true});
     runtimeLink(staged, projectLink);
@@ -100,10 +115,24 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
   const settingsPath = join(homeDir, 'settings.yaml');
   if (!existsSync(settingsPath)) writeFileSync(settingsPath, stringify({
     'dsh-desktop': {mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback', ...(safeMode ? {macosMaterial: 'off', windowsMaterial: 'off'} : {})},
-    ...(!safeMode ? {'dsh-project-market': {provider: DEFAULT_PROJECT_MARKET}} : {}),
     ...(safeMode ? {'dsh-desktop-notifications': {enabled: false}, locale: {preference: 'system'}} : {}),
   }), {flag: 'wx', mode: 0o600});
-  const requestedMarket = safeMode ? 'disabled' : readProjectMarketPreference(settingsPath);
+  // The product shell must be owned by the Profile document. SettingsForms
+  // validates an edit by composing that document before it writes; an insert
+  // supplied as a final runtime overlay would override every user edit.
+  const profilePatches = parse(readFileSync(patch, 'utf8')) ?? [];
+  if (!profilePatches.some(row => row.insert?.some(entry => entry.id === 'project-desktop-shell'))) {
+    const legacySettings = safeMode ? {} : parse(readFileSync(settingsPath, 'utf8')) ?? {};
+    const desktopSettings = legacySettings['dsh-desktop'] ?? {};
+    const oldShell = profilePatches.findLast(row => row.id === 'desktop-shell' && row.config)?.config ?? {};
+    const config = {...oldShell, mode: 'advanced', port: 0, openBrowser: false, networkExposure: 'loopback',
+      ...Object.fromEntries(['logLevel', 'macosMaterial', 'windowsMaterial', 'linuxMaterial', 'width', 'height', 'minWidth', 'minHeight']
+        .filter(key => desktopSettings[key] !== undefined).map(key => [key, desktopSettings[key]])),
+      marketProvider: safeMode ? 'disabled' : readProjectMarketPreference(settingsPath)};
+    profilePatches.push({insert: [{id: 'project-desktop-shell', name: 'dsh-project-shell', config}]});
+    writeFileSync(patch, stringify(profilePatches));
+  }
+  const requestedMarket = safeMode ? 'disabled' : readProjectMarketPreference(settingsPath, patch);
   const materialize = materializeWithTrace(trace, 'profile prepare: pnpm dependencies');
   if ((projectWasRuntimeDependency || projectLockWasRuntimeDependency) && existsSync(lockPath)) {
     // One-time owned migration: keep the lock aligned before any Market package operation can run.
@@ -129,11 +158,15 @@ export async function prepareProjectProfile(manifestPath, stateDirectory, {homeD
   if (!safeMode) prepared.patches.push({id: 'project', disabled: false, config: {manifestPath, enabled: true}});
   if (safeMode) prepared.patches.push({id: 'desktop-pnpm', disabled: true}, {id: 'desktop-terminal', disabled: true},
     {id: 'desktop-notifications', disabled: true}, {id: 'session-telemetry-otel', disabled: true});
-  const shellConfig = prepared.patches.findLast(patch => patch.id === 'desktop-shell' && patch.config)?.config;
-  if (!shellConfig) throw new Error('Official Profile did not prepare its shell configuration');
+  // 0.1.7 applies duplicate patch ids by retaining the first row's enabled
+  // state. Mutate the composed row before adding our replacement so the
+  // official Desktop client is not emitted into the Project renderer graph.
+  for (const patch of prepared.patches) {
+    for (const entry of patch.insert ?? []) if (entry.id === 'desktop-shell') entry.disabled = true;
+  }
   prepared.patches.push({id: 'desktop-shell', disabled: true},
-    {id: 'ui-settings-models', disabled: true},
-    {insert: [{id: 'project-desktop-shell', name: 'dsh-project-shell', config: shellConfig}]});
+    {id: 'settings', disabled: false},
+    {id: 'ui-settings-models', disabled: true});
   if (prepared.mode !== 'advanced' || prepared.openBrowser || prepared.networkExposure !== 'loopback') {
     throw new Error('This prototype requires advanced mode and local-only access');
   }

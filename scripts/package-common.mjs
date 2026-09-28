@@ -73,6 +73,9 @@ export async function preparePackage(platform, arch) {
   const desktopManifest = JSON.parse(readFileSync(join(runtimePackage, 'package.json'), 'utf8'));
   const projectManifest = JSON.parse(readFileSync(join(runtime, 'dsh-plugin-project/package.json'), 'utf8'));
   const desktopDependencies = {...desktopManifest.dependencies};
+  // The Profile resolver anchors MCP SDK's converter at Desktop's module URL.
+  // Include the audited Project cache copy in the production dependency walk.
+  desktopDependencies['zod-to-json-schema'] = JSON.parse(readFileSync(join(projectModules, 'zod-to-json-schema/package.json'), 'utf8')).version;
   // This workspace-only market is intentionally absent from Shell setup. The
   // supported dshmarket runtime stays in the production graph.
   delete desktopDependencies['dsh-community-market'];

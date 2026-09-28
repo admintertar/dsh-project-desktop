@@ -1,5 +1,5 @@
 import {useEffect, useId, useRef, useState} from 'react';
-import {Button, IconLoadingOutline16, Input} from '@deepseek-ai/dsh-client-ui-primitives';
+import {Button, IconLoadingOutlineRegular, Input} from '@deepseek-ai/dsh-client-ui-primitives';
 import {ProjectScrollableModal, ProjectSettingRow} from '../desktop-adapter/stable/guide-resources-client';
 import {repositoryFolderName, validRepositoryName, validResourceBranch, validResourceUrl} from '../shared/remote-resource.mjs';
 import {projectPathPreview} from '../shared/project-path.mjs';
@@ -113,7 +113,7 @@ export function CloneRepositoryModal({t, rt, clones, invoke, errorText, defaultD
         </ProjectSettingRow>
         <p className="projectPathPreview">{projectPathPreview(directory, name, platform)}</p>
         {clone && !['failed', 'cancelled', 'interrupted'].includes(clone.status) && <p className="cloneProgress" role="status">
-          <IconLoadingOutline16 className="guideLoadingIcon"/><span>{phase === 'installing' ? t.cloneInstalling
+          <IconLoadingOutlineRegular className="guideLoadingIcon"/><span>{phase === 'installing' ? t.cloneInstalling
             : `${phaseLabel}${typeof clone.percent === 'number' ? ` ${clone.percent}%` : ''}`}</span></p>}
       </fieldset>
       {error && <p className="project-error" role="alert">{error}</p>}

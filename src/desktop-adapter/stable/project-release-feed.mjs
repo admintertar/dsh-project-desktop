@@ -36,10 +36,9 @@ export function parseProjectRelease(value, platform) {
 }
 
 /** Adapt official request injection points; no traffic or installation identifiers go to upstream services.
- * `onProgress` is a Shell addition: the official downloader exposes no progress callback, so the only
- * reliable source is this verified stream (declared size plus per-chunk SHA-256).
+ * Progress is reported by the manifest-verified stream (declared size plus per-chunk SHA-256).
  */
-export function createProjectReleaseFeed({request, platform, onProgress}) {
+export function createProjectReleaseFeed({request, artifactRequest, platform, onProgress}) {
   let latest, etag, lastFailure;
   async function readRelease(url, signal, conditional = false) {
     let response;
@@ -77,7 +76,7 @@ export function createProjectReleaseFeed({request, platform, onProgress}) {
       // Resolve the exact tag again: the asset identity/hash belongs to this confirmed version.
       const release = await readRelease(versionUpdateManifestUrl(version), init.signal);
       if (release.version !== version) throw new Error('The requested release changed');
-      const response = await request(release.installer.url, {signal: init.signal, redirect: 'follow', cache: 'no-store'});
+      const {response, finalUrl} = await artifactRequest(release.installer.url, {signal: init.signal, redirect: 'follow', cache: 'no-store'});
       if (!response.ok || !response.body) throw new Error('Installer download failed');
       const hash = createHash('sha256'); let size = 0;
       const total = release.installer.size;
@@ -94,7 +93,7 @@ export function createProjectReleaseFeed({request, platform, onProgress}) {
           if (size !== total || hash.digest('hex') !== release.installer.sha256) throw new Error('Installer SHA-256 mismatch');
         },
       }));
-      return new Response(body, {status: 200, headers: {'Content-Length': String(total)}});
+      return {response: new Response(body, {status: 200, headers: {'Content-Length': String(total)}}), finalUrl};
     },
   };
 }

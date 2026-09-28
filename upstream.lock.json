@@ -3,25 +3,26 @@
   "channel": "stable",
   "desktop": {
     "repository": "https://github.com/anywhere-labs/dsh-desktop.git",
-    "commit": "01fa59e6688d82fa34b59fc507e3a6f5d695fa17",
-    "version": "2.0.11",
+    "commit": "08f179499c155f6653eb9ca25bab3d4453bd89d5",
+    "version": "2.0.15",
     "package": "dsh-plugin-desktop",
-    "tree": "2840b04334609734e21adeed431f4274c23c87a0"
+    "tree": "47d236012452eafa032346f7d0eedacd2a671819"
   },
   "harness": {
     "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
-    "commit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
-    "version": "0.1.5-rc.2",
-    "inventoryTree": "6207c3c18f2100e42d3131efe71ae3436ee81697",
+    "commit": "477b4f420553e8a52c2fbccc464d7561b239c443",
+    "version": "0.1.7-rc.2",
+    "guideLicenseBlob": "c1f7a78e89e4e4dc7b86664c3b3c76eb5eee1785",
+    "inventoryTree": "c3cbfc7b5e9f7235716f06de07c05a372573ca3d",
     "guideSources": {
-      "packages/client/ui-theme/src/styles": "60a3d05361a8d2f73a964507d40be36b7deb5a18",
-      "packages/client/locale/src": "ca80e93357a5fff99567bf72566d12751c6ec7d8",
-      "packages/client/ui-settings-models/src": "821438b0f39727f1a27ad5656975fe4db6e55d39"
+      "packages/client/ui-theme/src/styles": "e693df35d122ae1989628687b578dbcc07545068",
+      "packages/client/locale/src": "5a914588cff30afe1dda16252f9a57eabf9fdb54",
+      "packages/client/ui-settings-models/src": "6a030bcffac6d7ee990ac3f1e2791dd1fdf54bde"
     }
   },
   "project": {
     "repository": "https://github.com/admintertar/dsh-plugin-project.git",
-    "commit": "4633866e9bec79038dd09be84876b0718d56ba4f",
-    "tree": "f6c0d58af7ea1dce822ada721a880ab2ae638b50"
+    "commit": "404376c9f5ebc2b21463b76f66ad1203d61c6847",
+    "tree": "92043670087a2b8e95e60a336ed3747a4bce691d"
   }
 }

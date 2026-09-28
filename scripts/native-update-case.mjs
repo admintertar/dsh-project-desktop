@@ -3,6 +3,7 @@ import {mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createProjectInDirectory} from '../src/app/project-files.mjs';
 import {productVersion} from '../src/app/product.mjs';
+import {openNativeSettings} from './native-settings-navigation.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label) {
@@ -86,8 +87,7 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   for (const project of [alpha, bravo]) assert.ok(['zh', 'en'].includes(project.locale), `Invalid native locale: ${project.locale}`);
   const pids = [alpha.host.result.pid, bravo.host.result.pid];
   electron.app.focus({steal: true}); alpha.focus();
-  await until(() => alpha.window.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())))`), 'official settings entrance');
-  await alpha.window.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())).click()`);
+  await openNativeSettings(alpha);
   await checkSettings();
   if (process.platform === 'darwin') {
     const item = checkApplicationMenu();

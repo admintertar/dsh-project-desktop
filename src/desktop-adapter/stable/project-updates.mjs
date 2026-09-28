@@ -20,8 +20,8 @@ function updateFailureDetail(failure, locale, fallback) {
   return fallback;
 }
 
-/** Shell-owned download progress. The official downloader exposes no progress callback, so the release
- * feed reports verified byte counts and this owner turns them into a phase plus a throttled percentage.
+/** Shell-owned download progress. The release feed reports verified byte counts
+ * and this owner turns them into a phase plus a throttled percentage.
  * Refresh is throttled so a large download does not flood its consumers with updates.
  */
 export function createUpdateProgress({intervalMs = 500, changed = () => {}, now = Date.now} = {}) {
@@ -53,15 +53,16 @@ export function createUpdateProgress({intervalMs = 500, changed = () => {}, now 
  * private instance methods cannot own our multiple project windows or shutdown.
  */
 export async function createProjectUpdates(electron, {userData, locale, getWindow, changed = () => {}, progressChanged = changed, install,
-  request = (url, init) => electron.net.fetch(url, init), policy = {}, packaged = electron.app.isPackaged,
+  request = (url, init) => electron.net.fetch(url, init), artifactRequest, policy = {}, packaged = electron.app.isPackaged,
   openPath = path => electron.shell.openPath(path), notify} = {}) {
   const {startDesktopUpdateLifecycle} = await loadDesktop('update-lifecycle');
-  const {downloadDesktopUpdate, recordDesktopUpdateArtifact, pendingDesktopUpdateArtifact, resolveDesktopUpdateArtifact} = await loadDesktop('update-download');
+  const {downloadDesktopUpdate, recordDesktopUpdateArtifact, pendingDesktopUpdateArtifact, resolveDesktopUpdateArtifact} = await loadDesktop('project-update-download');
+  artifactRequest ??= (await loadDesktop('electron-runtime')).requestDesktopArtifact;
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
   const platform = process.platform;
   const progressState = createUpdateProgress({intervalMs: policy.progressIntervalMs ?? 500, changed: progressChanged});
-  const feed = createProjectReleaseFeed({request, platform, onProgress: update => progressState.report(update)});
+  const feed = createProjectReleaseFeed({request, artifactRequest, platform, onProgress: update => progressState.report(update)});
   let registration, manual, requester, requestLocale, disposed = false, closing = false, cleanup, downloadController;
   const language = () => requestLocale ?? locale();
   const owner = () => requester && !requester.isDestroyed() ? requester : getWindow?.();

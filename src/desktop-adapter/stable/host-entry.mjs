@@ -60,7 +60,7 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   pnpm = installDesktopPnpmRuntime({platform: process.platform, appExecutable: process.execPath,
     pnpmBinPath, electronVersion, stateDir: join(request.stateDirectory, 'commands'), environment: process.env});
   trace?.stage('official host boot requested');
-  const {pluginReport} = await bootProjectHost({prepared, trace,
+  const {pluginReport, profileBoot} = await bootProjectHost({prepared, trace,
     desktopLaunchEnvironment: withDesktopDshHome(loadLayeredEnv('dsh-project-desktop'), homeDir),
     desktopPnpmBootstrap: {activeProfileName: prepared.profile.name, activeProfileDir: prepared.profile.dir,
       homeDir, appExecutable: process.execPath, pnpmBinPath, electronVersion,
@@ -76,12 +76,13 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   const validateTheme = preference => {
     if (!['system', 'light', 'dark'].includes(preference)) throw new Error('Invalid theme');
   };
-  host.on('settings/updated', (namespace, next, previous) => {
-    if (namespace === 'ui-theme' && !applyingSharedTheme && next.preference !== previous.preference) {
-      void rpc.call('project:theme:changed', [next.preference]).catch(error => host.logger.error(error));
+  const setting = namespace => host.settings.describe().find(item => String(item.ns) === namespace)?.value;
+  host.on('settings/document-updated', namespace => {
+    if (String(namespace) === 'ui-theme' && !applyingSharedTheme) {
+      void rpc.call('project:theme:changed', [setting('ui-theme')?.preference]).catch(error => host.logger.error(error));
     }
   });
-  rpc.handle('project:theme:get', () => host.settings.get('ui-theme').preference);
+  rpc.handle('project:theme:get', () => setting('ui-theme')?.preference);
   rpc.handle('project:theme:set', async ([preference]) => {
     validateTheme(preference);
     applyingSharedTheme = true;
@@ -93,10 +94,11 @@ rpc.handle('boot', async ([request, snapshot, rendererToken]) => {
   });
   // A narrow Shell-facing API; the settings service enforces the product schema.
   rpc.handle('project:settings:update', async ([namespace, patch]) => {
-    if (!['dsh-desktop', 'dsh-project-market', 'locale', 'dsh-desktop-notifications'].includes(namespace)) throw new Error('Unsupported Shell setting');
+    if (!['project-desktop-shell', 'locale', 'desktop-notifications'].includes(namespace)) throw new Error('Unsupported Shell setting');
     await host.settings.update(namespace, patch);
   });
   await runtime.mountScheduled();
+  profileBoot.markReady();
   const pluginRequire = request.safeMode ? undefined : createRequire(join(prepared.profile.dir, '.project-plugin/package.json'));
   const projectSessionVersion = pluginRequire ? JSON.parse(readFileSync(pluginRequire.resolve('@deepseek-ai/dsh-session/package.json'), 'utf8')).version : null;
   const profileIdentity = host.get('desktopProfiles');

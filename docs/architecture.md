@@ -25,13 +25,13 @@ Host 通过自有 `bootProjectHost()` 组合官方 Harness `boot()`、Profile �
 
 每个项目拥有独立 DSH Home，其中可包含多个 Profile，但同一时间只有一个正常 Host。`projects/<项目路径哈希>/profile-selection/state.json` 使用官方 `{version: 2, active}` 记录本机选择，不修改共享项目文件。默认 `desktop` 保留既有数据；新建 Profile 使用官方 Web 模板并加入项目所有权标记，每次启动统一接入自有 Shell、Project 插件及同一项目文件。Profile 选择保存后当前 Host 身份不变，重启当前项目才加载新选择。所选非默认 Profile 缺失时进入恢复助手，不静默换回其他环境。项目工具菜单提供官方 Profile 选择窗口；恢复助手内也可切换／新建。
 
-Profile 分隔插件依赖、补丁和检查点，不代表整个 Home 独立。普通设置默认仍位于项目 Home 的 `settings.yaml`，市场 provider 选择也是项目共享设置；市场包操作绑定实际运行的 Profile。官方检查点包含 Home 的 `settings.yaml`／`cordis.patch.yml`，回滚可能影响同项目其他 Profile 的共享配置，项目资料与会话不在配置检查点内。
+Profile 分隔插件依赖、补丁和检查点，不代表整个 Home 独立。Harness 0.1.7 把可编辑设置写入当前 Profile 的 `cordis.patch.yml`；旧 `settings.yaml` 会由官方设置服务导入并保留改名后的副本。市场选择也保存在当前 Profile 的自有 Shell 条目，重启该 Profile 后生效。市场包操作绑定实际运行的 Profile。项目资料与会话不在配置检查点内。
 
 原生能力桥使用官方 `HostRpc`、`createHostRuntime`、`bindNativeRuntime`。我们给自己提供的 runtime 增加项目窗口能力，官方桥和源码保持不变。每个窗口使用唯一 Chromium partition、官方 sandbox/contextIsolation preload，在该 Session 内换取官方认证 Cookie；专属访问头只注入所属 Renderer 的同源 HTTP/WebSocket，不随外链或 iframe 泄漏。窗口 Session **不安装任何 Web 权限处理器**，与官方 Desktop runtime 一致：官方客户端 UI 的消息、代码块、终端、表格和 JSON 树复制入口都走 `navigator.clipboard.writeText`，而 Electron 43 把该请求报成 `clipboard-read`，一旦按 deny-all 拦截就会让复制静默失效（UI 侧吞掉异常且不显示反馈）。Web 安全边界因此只由 webPreferences、导航／弹窗／webview 拦截和专属访问头承担，权限与下载都交回 Electron 默认行为（官方同样没有 `will-download` 策略）；`tests/renderer-security.test.mjs` 断言两个窗口模块不再出现权限处理器或 `will-download`，避免该缺陷回归。
 
-适配器常在自有文件里**自己实现**官方对象，而非包一层官方实例，此时官方对象对外提供的字段就是与固定官方代码之间的契约：官方的桥、URL 构造器、设置页和能力门都会按名读取它们，缺一个既不报类型错也不抛异常，只会让对应能力静默失效。改写这类实现时先照搬官方那份完整行为再叠加我们的裁剪，只删除我们确实要裁的能力，并保留官方能力位与探测入口。项目窗口材质即判例：官方 `ElectronDesktopRuntime` 在主进程构造时自行解析 `windowsBuild`，而项目的 native runtime 是 `src/desktop-adapter/native.mjs` 里的自有对象；该字段缺失使官方 `runtimeSnapshot` 送出的 `windowsBuild` 为 `undefined`，能力位随即在**两处**同时失守——`desktopRendererUrl` 按官方门槛写出 `dsh-desktop-mica=0`，自有设置页因 `micaSupported` 为假只列出「纯色背景」；`effectiveDesktopWindowMaterial` 也把已持久化的 `mica` 当作系统不支持，回落为 `off`，于是选项既不显示、也不会生效。修法是从官方 `window-material` 读 `windowsBuildNumber` 并原样放进自有 runtime（`tests/windows-build-capability.test.mjs` 固定快照契约与静默降级，并按文本断言该字段仍来自官方探测）。桥接方补齐的其余字段同样按此处理；不要因为某字段暂时没有自有消费者就省掉它。
+适配器常在自有文件里实现官方对象，此时字段和副作用都属于与固定官方代码之间的契约。升级需对照官方 `runtimeSnapshot`、窗口创建、设置和 Renderer 消费者逐项检查。Desktop 2.0.15 移除了 Windows Mica/Acrylic 和平台策略的材质刷新方法；项目和引导窗口在 Windows 使用实体背景。macOS 的透明玻璃由官方 `advancedWindowOptions` 在创建窗口时配置，主题变化由应用级 `SharedTheme` 更新 `nativeTheme`，不再额外刷新材质。
 
-同一条规则也管**副作用**，不只是字段：官方实现在状态变化时会顺带修正系统层的陈旧状态，只搬字段而把方法留成空实现，症状会在下一次实时变化时才出现。第二个判例是材质重涂——官方 `ElectronDesktopRuntime.setThemeSource` 在换主题时除了设置 `nativeTheme.themeSource`，还要经平台策略重涂一次窗口材质，注释写明 Windows 会保留上一次的 DWM Mica 调色板直到窗口重组；自有 `setThemeSource` 曾写成空实现（因为应用级 `SharedTheme` 已是 `nativeTheme` 的唯一所有者），于是实时换主题只改了页面配色，窗口材质从不重涂，DWM 继续用旧调色板。高级侧栏在材质生效时本就是透明的（`--dsw-specific-sidebar-fill: transparent`），因此从深色切到浅色后右区随主题变浅、左栏却停在旧调色板，表现为"浅色主题下左栏是黑的"。修法是保留壳的职责分工（仍不设 `nativeTheme`，因为 `SharedTheme` 独占），但恢复官方那一步：经 `electronPlatformStrategy().refreshThemeMaterial` 重涂，并在首次上屏时（`window.once('show')`）也重涂一次，因为 Windows 缓存的正是首次合成那次调色板。`src/windows/window-material-refresh.mjs` 承载这段决策，`tests/window-material-refresh.test.mjs` 固定三种缺失场景下的静默行为，并守卫该钩子不会被改回空实现。
+应用共享的 `SharedTheme` 负责设置 `nativeTheme`；项目窗口的 runtime 负责把主题变化传播给当前 Renderer。材质切换依赖官方平台策略，且只对当前项目窗口提示重启。
 
 `dsh-project-shell` 是我们自己的双面插件。Host 面只注册固定 advanced/loopback 的设置 schema、窗口规格及官方健康上报端点；原官方 desktop-shell 条目被配置禁用。Client 面调用官方 advanced、窗口几何、主题呈现与健康报告，接入 Project 客户端，不调用官方应用设置的全量注册函数。
 
@@ -71,9 +71,9 @@ Host 是独立 `utilityProcess`，而打开项目最贵的一段就在它内部�
 
 项目工具菜单里的“导出日志与诊断…”是这些证据的唯一出口：它实现官方 `DesktopRuntime.exportDiagnostics` 契约——**方法名必须保持官方名**，因为固定 Host 的 `bindNativeRuntime` 按名分发 `native:exportDiagnostics`（0.1.9 曾把它改名为 `exportLogs`，官方入口随即以 `Cannot read properties of undefined (reading 'apply')` 失败）——写入一份报告（环境与数据来源、启动与打开项目追踪全文、各项目恢复原因清单），并把项目自己的官方诊断 zip（`dsh-diagnostics-*.zip`）复制到同一目录，随后在文件管理器中定位。固定 Host 的 `desktop-diagnostics` 插件还会注册自己的“导出诊断信息…”条目（`group: 'tools'`、`order: 20`），它与本入口写同一份证据，因此壳在 `registerTrayItem` 里按组、序号与官方文案三者同时匹配后丢弃该重复项（`stable/official-tray.mjs`）；三者任一不符即保留，避免误删未知命令。报告与 zip 并排放置而不是互相替换：日志要能直接用编辑器打开，压缩包则满足官方诊断格式。导出失败复用官方 `diagnosticsErrorTitle`／`diagnosticsErrorMessage` 文案。
 
-`project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.11 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
+`project-native-windows.mjs` 集中持有官方窗口实例。stable 2.0.15 没有 ready/dispose 公共接口，因此适配器只读取其 `window` 引用，增加项目标题并在后台操作结束后销毁该 BrowserWindow；结果结算仍走官方 `closed` 处理，不修改内部字段。升级时检查此处并优先替换为官方公开接口。官方本地窗口继续使用原有 sandbox、无 preload／Node 的内存 Session；操作 token 与回调按项目窗口隔离。
 
-桌面设置通过原始 settingsScope / settings.section 注册，复用官方 Button/Menu/Switch。仅组合通知、材质、日志和当前项目原生操作，不注册原来的模式/Profile/应用更新页面。设置页头通过框架正式的 `settings.action` 插槽复用固定 Desktop 的原生操作组件，提供导出诊断、打开 DSH 终端及重新加载/重启/恢复模式菜单；通用设置框架继续提供打开配置文件。所有重启操作由项目窗口自己的 runtime 处理，不影响其他项目。Switch 尺寸按未导出的 DesktopSettingsSection.ToggleRow 最小适配；日志直接接入官方 FileExporter 的阈值。模型、主题、语言等其他页面仍由已有官方服务提供。
+桌面设置使用 Harness 0.1.7 的 `configForms` 和官方 `settings.section` 插槽，复用官方 Button/Menu/Switch。自有 Shell 设置由当前 Profile 的 `cordis.patch.yml` 持有；仅组合通知、macOS 材质、日志和当前项目原生操作，不注册原来的模式/Profile/应用更新页面。设置页头通过 `settings.action` 插槽提供导出诊断、打开 DSH 终端及重新加载/重启/恢复模式菜单。所有重启操作由项目窗口自己的 runtime 处理，不影响其他项目。模型、主题、语言等其他页面仍由已有官方服务提供。
 
 材质保存后沿用官方设置监听流程，异步请求所属项目的重启确认。设置页菜单、原生菜单和 Host 发起的重启／恢复请求共用该确认入口：直接调用 `desktop-dialog-window.showDesktopMessageBox` 和原始 `DesktopDialogWindow`，使用官方 `desktop-dialog` 页面、组件、图标、字体与主题样式，不调用系统 `dialog.showMessageBox`。构建在临时目录通过官方 Vite/React/Tailwind 配置编译原封不动的 native-ui 源文件，产物放在官方模块预期的 `lib/native-ui/`，随运行时一同打包。文案复用 `tray-locale.desktopRestartConfirmationCopy`，仅将应用级描述适配为当前项目，默认聚焦取消。取消保留已保存设置和当前窗口；确认后才停止该项目 Host 并重建窗口或进入恢复界面。同一项目的并发请求合并为一次确认，关闭期间不再执行重启；日志、通知与主题的即时更新不触发该弹窗。
 
@@ -83,7 +83,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 `SharedTheme` 拥有应用级 preference，只同步 `system/light/dark`。各 Host 的官方 `settings/updated` 事件触发协调，原子保存应用 theme.json 后统一更新 Electron nativeTheme 及所有 Host 的 ui-theme；广播写入不再广播。不共享字体、语言、模型；菜单语言随当前项目窗口改变。
 
-欢迎窗口默认 900×640，新建窗口默认 980×720。二者通过 `guide-window-options` 直接调用官方 `advancedWindowOptions`，复用主窗口的 native traffic lights、32px 拖动区域及 macOS sidebar vibrancy；Windows 使用官方能力校验后的 Mica，不支持时使用实体背景。入口窗口材质不依赖项目 Profile，明暗由应用共享 `nativeTheme` 驱动。项目窗口走同一条官方 Mica 门槛，构建号由自有 runtime 的 `windowsBuild` 提供（见上文字段契约）。
+欢迎窗口默认 900×640，新建窗口默认 980×720。二者通过 `guide-window-options` 直接调用官方 `advancedWindowOptions`，复用主窗口的原生标题栏与 macOS sidebar vibrancy。Desktop 2.0.15 在 Windows 使用实体背景；入口窗口材质不依赖项目 Profile，明暗由应用共享 `nativeTheme` 驱动。
 
 `GuideFrame` 是官方 `AdvancedFrame.tsx` 的双栏最小适配：直接复用 `installDesktopOwnedStyles`、原始 pointer-capture／RAF 拖拽和原生标题栏布局，补充键盘调整与取消清理。固定 stable 的 1024px 自动折叠阈值、`DesktopLayoutState` 与列宽计算的侧栏上下限不可配置，私有 ResizeHandle 也未导出，因此适配器仅保留左右面板，并将侧栏上下限按官方值的三分之二独立管理：范围 176–280px，欢迎页默认 187px、新建页默认 190px；双击分隔线恢复各自默认值。保护右侧至少 400px；小于 576px 时转为顶部导航，新建页保留官方下拉选择项目组合。分隔线沿用官方透明悬停，仅键盘聚焦时提供焦点提示。扩宽恢复偏好宽度，拖拽结束／键盘调整分别保存 welcome、create 的本机宽度到 `guide-window-state.json`；v2 将旧 v1 宽度按三分之二一次性迁移。欢迎页品牌采用左侧 42×42px 图标、右侧标题与版本上下两行的排列，图文间距 4px，在侧栏和顶部导航中保持一致；底部说明下边距为 0。组合名称按需换行，适应更窄的导航。正文与导航各自使用稳定滚动槽，正文独立滚动，底部操作固定；不启动 Host、不修改官方源码。
 
@@ -101,7 +101,7 @@ stable 默认启用随固定 Desktop 依赖提供的 `dsh-market`，也可在当
 
 安全模式复用官方 `safe-mode` 的路径/标记/reset/cleanup，并接入恢复助手的原始入口与确认窗口，不调用 compatibility 或首次向导入口。每项目停止确认后创建临时 dsh-home、desktop-state 和空白工作目录，仅加载官方基础 Profile 与自有 advanced Shell。Host 环境采用允许列表，阻止继承 API key、代理、npm hook 和 DSH 路径覆盖。Renderer 使用随机非持久 Session。退出等待 Host 停止后清除 Session 和临时目录，再打开原项目恢复助手；下次启动在所有 Host 创建前清理遗留临时树。故障项目不自动启动正常 Host；安全模式不捕获正常检查点、不覆盖正常窗口布局，主题不传播到正常项目。
 
-原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。macOS 应用名称菜单直接调用官方 `macApplicationMenuTemplate` 的应用分组，将应用级检查更新作为 additions 放在“关于”之后、“服务”之前；File 与项目工具仍由 Shell 组合。欢迎页聚焦时沿用最近项目语言。托盘与欢迎页继续提供更新入口；不额外建立帮助菜单或设置页版本浮层。关于面板由主进程用 `app.setAboutPanelOptions` 统一配置：应用名与壳版本取自有 `product.mjs`，并把当前固定运行时的 Harness 版本一并显示出来（锁与实际安装版本不符时 Host 拒绝启动，因此该值即实际运行版本）。macOS 把它放进 `version` 字段，面板的版本行因此渲染成「版本 0.1.8（DSH 0.1.5-rc.2）」——DSH 版本与壳版本同处一行、同一字号；Win32/Linux 的面板没有构建号字段，改由 credits 行输出 `DSH (DeepSeek Harness) <lock.harness.version>`。macOS 的「关于 DSH Project Desktop」走官方菜单的 `role: 'about'`；Windows/Linux 看不到原生应用菜单，因此自绘顶栏「项目工具」末尾追加同一面板的入口，经 Shell titlebar action `about` 调用 `app.showAboutPanel()`，两处显示内容一致。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
+原生菜单显式指定 app/edit/view/window 每个 role 的文案，保留原生行为和快捷键，避免默认子项继续跟随操作系统语言。macOS 应用名称菜单直接调用官方 `macApplicationMenuTemplate` 的应用分组，将应用级检查更新作为 additions 放在“关于”之后、“服务”之前；File 与项目工具仍由 Shell 组合。欢迎页聚焦时沿用最近项目语言。托盘与欢迎页继续提供更新入口；不额外建立帮助菜单或设置页版本浮层。关于面板由主进程用 `app.setAboutPanelOptions` 统一配置：应用名与壳版本取自有 `product.mjs`，并把当前固定运行时的 Harness 版本一并显示出来（锁与实际安装版本不符时 Host 拒绝启动，因此该值即实际运行版本）。macOS 把它放进 `version` 字段，面板的版本行因此渲染成「版本 0.1.8（DSH 0.1.7-rc.2）」——DSH 版本与壳版本同处一行、同一字号；Win32/Linux 的面板没有构建号字段，改由 credits 行输出 `DSH (DeepSeek Harness) <lock.harness.version>`。macOS 的「关于 DSH Project Desktop」走官方菜单的 `role: 'about'`；Windows/Linux 看不到原生应用菜单，因此自绘顶栏「项目工具」末尾追加同一面板的入口，经 Shell titlebar action `about` 调用 `app.showAboutPanel()`，两处显示内容一致。应用 bundle 身份由打包配置负责，不修改开发用 Electron.app。
 
 这些是编译自固定官方源码的库，不是上游承诺的稳定 API。只允许适配器导入。
 

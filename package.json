@@ -57,6 +57,7 @@
     "micromark-util-sanitize-uri": "2.0.1",
     "micromark-util-symbol": "2.0.1",
     "shiki": "4.3.1",
+    "simple-icons": "16.31.0",
     "zustand": "4.4.7"
   },
   "dependenciesMeta": {

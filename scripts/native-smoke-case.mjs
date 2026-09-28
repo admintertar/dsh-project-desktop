@@ -6,6 +6,7 @@ import {checkGuide, checkProjectCreateEntryPoints} from './native-guide-checks.m
 import {checkGuideRemote} from './native-guide-remote-checks.mjs';
 import {checkGuideAdd} from './native-guide-add-checks.mjs';
 import {productVersion} from '../src/app/product.mjs';
+import {openNativeSettings} from './native-settings-navigation.mjs';
 
 export async function runNativeSmoke({electron, open, close, showGuide, theme, userData, repository, workspace, session}) {
   const guide = await showGuide();
@@ -83,14 +84,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
   // The titlebar draws the same commands as this menu, so it has to follow the same language
   // switch. It used to read `<html lang>`, which stays at the old language after this switch.
   await (await import('./native-titlebar-checks.mjs')).checkTitlebarLocale({project: bravo});
-  await bravo.window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
-    const deadline = Date.now() + 5000;
-    const check = () => {
-      const settings = [...document.querySelectorAll('button')].find(button => ['Settings', '设置'].includes(button.innerText.trim()) || ['Settings', '设置'].includes(button.getAttribute('aria-label')));
-      if (settings) {settings.click(); return resolve(true)}
-      if (Date.now() > deadline) return reject(new Error(document.body.innerText)); setTimeout(check, 50);
-    }; check();
-  })`);
+  await openNativeSettings(bravo);
   await bravo.window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const deadline = Date.now() + 5000;
     const check = () => {const models = [...document.querySelectorAll('button')].find(button => ['Models', '模型'].includes(button.innerText.trim()));
@@ -98,7 +92,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
   })`);
   await bravo.window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const deadline = Date.now() + 8000;
-    const check = () => {if (/Add provider|添加提供方/i.test(document.body.innerText)) return requestAnimationFrame(resolve);
+    const check = () => {if (/Add (model )?provider|添加提供方/i.test(document.body.innerText)) return requestAnimationFrame(resolve);
       if (Date.now() > deadline) return reject(new Error(document.body.innerText)); setTimeout(check, 50)}; check();
   })`);
   writeFileSync(join(userData, 'Bravo-models-en-light.png'), (await bravo.window.webContents.capturePage()).toPNG());
@@ -110,7 +104,7 @@ export async function runNativeSmoke({electron, open, close, showGuide, theme, u
   const restarted = await workspace.restart(manifests[1]);
   assert.notEqual(restarted.host.result.pid, bravo.host.result.pid);
   assert.equal((await restarted.host.request('/api/project/snapshot')).status, 200);
-  const result = {ok: true, electron: process.versions.electron, desktop: '2.0.11',
+  const result = {ok: true, electron: process.versions.electron, desktop: '2.0.15',
     checks: ['own-guide', 'independent-project-create-window', 'guide-create-and-retry', 'guide-english-chinese-light-dark', 'guide-narrow-scroll-and-keyboard',
       'guide-remote-modal-validation-and-layout', 'guide-private-https-authentication-and-branch', 'guide-reuses-completed-clone',
       'guide-add-resource-local-inspection-and-git-import', 'guide-add-resource-cancel-validation-and-responsive-layout',

@@ -27,3 +27,10 @@ export function assertSourceTree(directory, expected) {
   if (actual !== expected) throw new Error(`Upstream source changed: ${directory}\nExpected ${expected}; found ${actual}`);
   return actual;
 }
+
+/** Verify a single exported source file against the pinned Git blob identity. */
+export function assertSourceBlob(file, expected) {
+  const actual = objectHash('blob', readFileSync(file)).toString('hex');
+  if (actual !== expected) throw new Error(`Upstream source changed: ${file}\nExpected ${expected}; found ${actual}`);
+  return actual;
+}
