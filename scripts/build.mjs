@@ -81,10 +81,16 @@ writeFileSync(join(shellPackage, 'package.json'), JSON.stringify({name: 'dsh-pro
   dsh: {client: officialManifest.dsh.client}}, null, 2));
 writeFileSync(join(shellPackage, 'index.mjs'), "export * from '../../../src/desktop-adapter/stable/shell-host.mjs';\n");
 const shellBuild = await build({...browser, ...envelope('dsh-project-shell'),
+  // Official Desktop CSS is handled by its Vite build; keep esbuild from
+  // traversing Tailwind imports here. The Shell's own settings CSS is appended
+  // explicitly below so it cannot be silently dropped by this empty loader.
   external: [...browser.external, '@deepseek-ai/dsh-client-store'], loader: {'.module.css': 'local-css', '.css': 'empty'}, jsx: 'automatic',
   entryPoints: [join(repository, 'src/desktop-adapter/stable/shell-client.ts')], outfile: join(shellPackage, 'client.js'), write: false});
 // Package the unchanged official Models page's CSS with our own client module.
-const shellCss = shellBuild.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
+const shellCss = [
+  shellBuild.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '',
+  readFileSync(join(repository, 'src/desktop-adapter/stable/settings.css'), 'utf8'),
+].join('\n');
 for (const file of shellBuild.outputFiles) writeFileSync(file.path, basename(file.path) === 'client.js' ? file.text +
   `\n{const style=document.createElement('style');style.dataset.plugin='dsh-project-shell';style.textContent=${JSON.stringify(shellCss)};document.head.appendChild(style);}\n` : file.contents);
 // Helpers are compiled from the locked plugin, not copied into our source tree.

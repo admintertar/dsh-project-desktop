@@ -195,6 +195,10 @@ export async function openNativeProject(electron, options) {
   const close = async () => {
     saveWindow?.(); disposed = true; clearTimeout(healthTimer); platformLogin.close();
     removeHeaders?.();
+    if (window && !window.isDestroyed()) {
+      window.webContents.ipc.removeHandler('dsh-desktop:renderer-action');
+      if (process.platform === 'darwin') window.webContents.ipc.removeHandler('dsh-desktop:native-directory-picker');
+    }
     if (window && !window.isDestroyed()) window.destroy();
     await host?.close();
     if (options.safeMode && chromiumSession) await chromiumSession.clearStorageData();
@@ -288,6 +292,10 @@ export async function openNativeProject(electron, options) {
       const request = shellTitlebarRequest(action);
       if (request) return runShellTitlebarAction(request.action, request.argument);
       return dispatch(action);
+    });
+    if (process.platform === 'darwin') contents.ipc.handle('dsh-desktop:native-directory-picker', event => {
+      if (disposed || !trustedSender(event, contents, specification.url)) throw new Error('Untrusted directory picker sender');
+      return runtime.pickDirectory();
     });
     await options.connectTheme(host);
     trace?.stage('theme connected');
