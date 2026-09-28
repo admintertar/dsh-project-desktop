@@ -164,7 +164,7 @@ export async function runProfileRecoveryCase({electron, open, close, showProfile
   await assertOther();
 
   // Startup failure routes to the same assistant. Restore uses the official confirmation UI.
-  const settings = join(alpha.host.result.homeDir, 'settings.yaml');
+  const settings = join(alpha.host.result.profile, 'cordis.patch.yml');
   await workspace.recover(manifests[0]);
   writeFileSync(settings, 'broken-for-recovery: [');
   await open(manifests[0]);
@@ -202,7 +202,10 @@ export async function runProfileRecoveryCase({electron, open, close, showProfile
   alpha = workspace.projects.get(manifests[0]);
   await recover(manifests[0]);
   recoveryWindow = await nativeWindow(electron, 'recovery');
-  await click(recoveryWindow, '进入安全模式'); await confirm(electron);
+  const safeModeState = JSON.parse(Buffer.from(new URL(recoveryWindow.webContents.getURL()).searchParams.get('state'), 'base64url').toString('utf8'));
+  assert.equal(safeModeState.safeModeAvailable, true, 'normal recovery must offer Safe Mode after switching Profiles');
+  await click(recoveryWindow, safeModeState.locale === 'zh' ? '快速恢复' : 'Quick recovery');
+  await click(recoveryWindow, safeModeState.locale === 'zh' ? '进入安全模式' : 'Enter Safe Mode'); await confirm(electron);
   await until(() => workspace.projects.get(manifests[0])?.safeMode, 'official Safe Mode action');
   const safe = workspace.projects.get(manifests[0]);
   const temporary = safe.host.stateDirectory;

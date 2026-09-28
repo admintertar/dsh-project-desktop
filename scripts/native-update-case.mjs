@@ -3,6 +3,7 @@ import {mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createProjectInDirectory} from '../src/app/project-files.mjs';
 import {productVersion} from '../src/app/product.mjs';
+import {openNativeSettings} from './native-settings-navigation.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label) {
@@ -35,7 +36,19 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
     return item;
   }
   async function checkSettings() {
-    await until(() => alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopNativeActions[data-placement=settings]"))'), 'official settings actions');
+    // The pinned SettingsRoot closes an open panel when an asynchronous model
+    // onboarding step appears. An update dialog can also dismiss that panel.
+    // Re-enter through the visible Settings control before inspecting its actions.
+    let lastOpen = 0;
+    await until(async () => {
+      const state = await alpha.window.webContents.executeJavaScript('({open:Boolean(document.querySelector("[data-shortcut-modal=settings]")), actions:Boolean(document.querySelector(".dshDesktopNativeActions[data-placement=settings]"))})');
+      if (state.open && state.actions) return true;
+      if (!state.open && Date.now() - lastOpen >= 500) {
+        lastOpen = Date.now();
+        await openNativeSettings(alpha);
+      }
+      return false;
+    }, 'official settings actions');
     assert.equal(await alpha.window.webContents.executeJavaScript('Boolean(document.querySelector(".dshDesktopFrameVersion, .dshDesktopVersionCheckButton"))'), false,
       'Settings must not add a version/update popover');
   }
@@ -86,8 +99,7 @@ export async function runUpdateCase({electron, open, close, showGuide, updates, 
   for (const project of [alpha, bravo]) assert.ok(['zh', 'en'].includes(project.locale), `Invalid native locale: ${project.locale}`);
   const pids = [alpha.host.result.pid, bravo.host.result.pid];
   electron.app.focus({steal: true}); alpha.focus();
-  await until(() => alpha.window.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())))`), 'official settings entrance');
-  await alpha.window.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find(button => ['Settings','设置'].includes(button.innerText.trim())).click()`);
+  await openNativeSettings(alpha);
   await checkSettings();
   if (process.platform === 'darwin') {
     const item = checkApplicationMenu();

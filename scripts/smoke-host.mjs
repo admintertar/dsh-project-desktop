@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {parse, stringify} from 'yaml';
 import {startProjectHost} from '../src/desktop-adapter/index.mjs';
 import {ProjectRegistry} from '../src/windows/project-registry.mjs';
 import {SharedTheme} from '../src/app/shared-theme.mjs';
@@ -27,9 +28,10 @@ try {
   assert.notEqual(alpha.result.homeDir, beta.result.homeDir);
   assert.notEqual(new URL(alpha.url).port, new URL(beta.url).port);
   for (const [id, host] of [['alpha', alpha], ['beta-project', beta]]) {
-    assert.equal(host.result.harnessVersion, '0.1.5-rc.2');
+    assert.equal(host.result.harnessVersion, '0.1.7-rc.2');
+    assert.equal(existsSync(join(host.result.homeDir, 'settings.yaml.imported')), false,
+      'new Projects must not trigger a legacy settings import after the Host starts');
     assert.equal(host.result.projectSessionVersion, host.result.harnessVersion, 'Project peers resolve the same stable runtime');
-    assert.ok(host.result.tools.includes('project_task_create'));
     const snapshot = await host.request('/api/project/snapshot'); assert.equal(snapshot.status, 200);
     const project = await snapshot.json();
     assert.equal(project.root, join(root, id));
@@ -49,10 +51,14 @@ try {
     const match = html.match(/(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u);
     assert.ok(match, 'official boot graph exists');
     const boot = JSON.parse(match[1]);
-    for (const packageName of ['dsh-project-shell', 'dsh-plugin-project', 'dshmarket']) {
+    for (const id of ['@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general', 'dsh-project-shell']) {
+      assert.ok(boot.entries.some(entry => entry.id === id), `renderer boot includes ${id}`);
+    }
+    for (const packageName of ['dsh-plugin-project', 'dshmarket']) {
       const entry = boot.entries.find(entry => entry.id === packageName); assert.ok(entry, packageName);
       const bundle = await host.request(entry.url); assert.equal(bundle.status, 200); await bundle.body.cancel();
     }
+    assert.ok(!boot.entries.some(entry => entry.id === 'dsh-plugin-desktop'), 'official app UI is not composed');
     const market = await host.request('/dsh-market/api/v1/capabilities');
     assert.equal(market.status, 200);
     const marketCapabilities = await market.json();
@@ -60,17 +66,16 @@ try {
     assert.equal(marketCapabilities.runtime, 'desktop');
     assert.equal(marketCapabilities.restart.supported, false);
     assert.equal(marketCapabilities.restart.managedBy, 'desktop-host');
-    assert.ok(!boot.entries.some(entry => entry.id === 'dsh-plugin-desktop'), 'official app UI is not composed');
     assert.equal(host.result.policy.settingsController, false);
     assert.equal(host.result.policy.profileManagement, false);
     assert.equal(host.result.policy.marketProfileIdentity, true);
     await assert.rejects(host.request('https://example.com'), /outside/);
     for (const patch of [{mode: 'compatibility'}, {openBrowser: true}, {networkExposure: 'lan'}, {port: 4567}]) {
-      await assert.rejects(host.updateShellSettings('dsh-desktop', patch));
+      await assert.rejects(host.updateShellSettings('project-desktop-shell', patch));
     }
     assert.ok(!host.menuLabels().some(label => /update/i.test(label)), 'official update contribution is disabled');
   }
-  await alpha.updateShellSettings('dsh-project-market', {provider: 'disabled'});
+  await alpha.updateShellSettings('project-desktop-shell', {marketProvider: 'disabled'});
   const detachAlpha = await theme.connect('alpha', await alpha.getTheme(), value => alpha.setTheme(value));
   await theme.connect('beta', await beta.getTheme(), value => beta.setTheme(value));
   const propagated = Promise.withResolvers();
@@ -105,10 +110,22 @@ try {
   assert.equal((await (await switched.request('/api/project/snapshot')).json()).memory[0].content, 'alpha updated knowledge');
   assert.ok(switched.result.tools.includes('project_task_create'));
   assert.equal((await beta.request('/api/project/snapshot')).status, 200);
+  await registry.close('beta-project');
+  const legacyHome = join(root, 'state/beta-project/dsh');
+  const legacyPatch = join(legacyHome, 'profiles/desktop/cordis.patch.yml');
+  const priorRows = parse(readFileSync(legacyPatch, 'utf8'));
+  writeFileSync(legacyPatch, stringify(priorRows.filter(row => !row.insert?.some(entry => entry.id === 'project-desktop-shell'))));
+  writeFileSync(join(legacyHome, 'settings.yaml'), 'dsh-project-market:\n  provider: disabled\n');
+  const migrated = await open('beta-project');
+  const migratedHtml = await (await migrated.request('/')).text();
+  const migratedBoot = JSON.parse(migratedHtml.match(/(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u)[1]);
+  assert.ok(!migratedBoot.entries.some(entry => entry.id === 'dshmarket'), 'legacy market preference is retained');
+  assert.equal(parse(readFileSync(legacyPatch, 'utf8')).flatMap(row => row.insert ?? [])
+    .find(row => row.id === 'project-desktop-shell')?.config.marketProvider, 'disabled');
   verifyUpstream();
-  console.log(JSON.stringify({ok: true, desktop: '2.0.11', harness: '0.1.5-rc.2',
+  console.log(JSON.stringify({ok: true, desktop: '2.0.15', harness: '0.1.7-rc.2',
     checks: ['official-source-integrity', 'two-isolated-hosts', 'renderer-authentication', 'project-api',
       'project-task-tools', 'root-memory-read-edit-reopen', 'client-bundles', 'project-market-desktop-pnpm-bridge', 'project-market-profile-binding', 'project-market-disable-on-restart',
-      'disabled-official-updates', 'shared-theme', 'close-and-reopen-isolation', 'selected-profile-project-binding'],
+      'disabled-official-updates', 'shared-theme', 'close-and-reopen-isolation', 'selected-profile-project-binding', 'legacy-market-preference-migration'],
     nativeWindowsTested: false, evidence: root}, null, 2));
 } finally {await registry.closeAll()}

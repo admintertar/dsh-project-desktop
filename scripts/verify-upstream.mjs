@@ -1,7 +1,7 @@
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assertSourceTree} from './source-integrity.mjs';
+import {assertSourceTree, assertSourceBlob} from './source-integrity.mjs';
 import {repository, lock, desktopSource, projectSource, localProjectSource} from '../src/desktop-adapter/paths.mjs';
 
 /** A local development checkout must at least be the companion plugin repository. */
@@ -24,6 +24,7 @@ export function verifyUpstream() {
   for (const [path, tree] of Object.entries(lock.harness.guideSources)) {
     assertSourceTree(join(repository, '.upstream/harness-guide', path), tree);
   }
+  assertSourceBlob(join(repository, '.upstream/harness-guide/LICENSE'), lock.harness.guideLicenseBlob);
   const inventory = join(repository, '.upstream/desktop/vendor/dsh-runtime', lock.harness.version);
   assertSourceTree(inventory, lock.harness.inventoryTree);
   const manifest = JSON.parse(readFileSync(join(desktopSource, 'package.json'), 'utf8'));

@@ -1,10 +1,12 @@
 import {build} from 'esbuild';
 import {cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {basename, join} from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {repository, desktopSource, projectSource, localProjectSource, runtimePackage, projectPackage, lock} from '../src/desktop-adapter/paths.mjs';
 import {verifyUpstream} from './verify-upstream.mjs';
 import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
 import {buildDesktopDialog} from './build-desktop-dialog.mjs';
+import {buildProjectUpdateDownload} from './build-project-update-download.mjs';
 import {productVersion} from '../src/app/product.mjs';
 
 verifyUpstream();
@@ -12,7 +14,20 @@ if (!existsSync(join(runtimePackage, 'node_modules/@deepseek-ai/dsh'))) throw ne
 verifyRuntimeDependencies();
 const nodePaths = [join(runtimePackage, 'node_modules')];
 mkdirSync(runtimePackage, {recursive: true});
+// The 0.1.7 Profile resolver anchors external Project imports at Desktop's
+// module URL. MCP SDK's converter must therefore exist at that anchor as a
+// declared compatibility dependency in the packaged production graph.
+const converterSource = join(repository, '.cache/project-dependencies/zod-to-json-schema');
+const converterTarget = join(runtimePackage, 'node_modules/zod-to-json-schema');
+if (!existsSync(join(converterSource, 'package.json'))) throw new Error('Project MCP converter is missing from the pinned dependency cache');
+if (!existsSync(join(converterTarget, 'package.json'))) cpSync(converterSource, converterTarget, {recursive: true});
 for (const name of ['package.json', 'cordis.patch.yml', 'build']) {
+  cpSync(join(desktopSource, name), join(runtimePackage, name), {recursive: true});
+}
+// Since Desktop 2.0.15, the client imports Tailwind 4 onboarding CSS. Build
+// that client with the official Vite pipeline so its style plugin scopes and
+// installs the generated CSS inside the Loader factory exactly as upstream.
+for (const name of ['src', 'vite.client.config.ts']) {
   cpSync(join(desktopSource, name), join(runtimePackage, name), {recursive: true});
 }
 cpSync(join(repository, '.upstream/desktop/LICENSE'), join(runtimePackage, 'LICENSE'));
@@ -30,14 +45,15 @@ for (const name of ['preload', 'compatibility-preload']) await build({
   bundle: true, platform: 'node', format: 'cjs', packages: 'external', target: 'node22', nodePaths,
 });
 await buildDesktopDialog();
+await buildProjectUpdateDownload();
 const browser = {bundle: true, platform: 'browser', format: 'cjs', target: 'es2022', sourcemap: true,
   define: {'process.env.NODE_ENV': '"production"'}, nodePaths,
   external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
     '@deepseek-ai/dsh-client-ui-slots', '@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-primitives']};
 const envelope = id => ({banner: {js: `window.__ModuleLoader__.load({id:${JSON.stringify(id)},factory:(require)=>{var module={exports:{}};var exports=module.exports;`},
   footer: {js: 'return module.exports;}});'}});
-await build({...browser, ...envelope('dsh-plugin-desktop'),
-  entryPoints: [join(desktopSource, 'src/client/index.ts')], outfile: join(runtimePackage, 'lib/client.js')});
+execFileSync(process.execPath, [join(runtimePackage, 'node_modules/vite/bin/vite.js'), 'build',
+  '--config', join(runtimePackage, 'vite.client.config.ts')], {cwd: runtimePackage, stdio: 'inherit'});
 
 mkdirSync(projectPackage, {recursive: true});
 for (const name of ['package.json', 'cordis.patch.yml', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
@@ -65,10 +81,16 @@ writeFileSync(join(shellPackage, 'package.json'), JSON.stringify({name: 'dsh-pro
   dsh: {client: officialManifest.dsh.client}}, null, 2));
 writeFileSync(join(shellPackage, 'index.mjs'), "export * from '../../../src/desktop-adapter/stable/shell-host.mjs';\n");
 const shellBuild = await build({...browser, ...envelope('dsh-project-shell'),
-  external: [...browser.external, '@deepseek-ai/dsh-client-store'], loader: {'.module.css': 'local-css'}, jsx: 'automatic',
+  // Official Desktop CSS is handled by its Vite build; keep esbuild from
+  // traversing Tailwind imports here. The Shell's own settings CSS is appended
+  // explicitly below so it cannot be silently dropped by this empty loader.
+  external: [...browser.external, '@deepseek-ai/dsh-client-store'], loader: {'.module.css': 'local-css', '.css': 'empty'}, jsx: 'automatic',
   entryPoints: [join(repository, 'src/desktop-adapter/stable/shell-client.ts')], outfile: join(shellPackage, 'client.js'), write: false});
 // Package the unchanged official Models page's CSS with our own client module.
-const shellCss = shellBuild.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
+const shellCss = [
+  shellBuild.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '',
+  readFileSync(join(repository, 'src/desktop-adapter/stable/settings.css'), 'utf8'),
+].join('\n');
 for (const file of shellBuild.outputFiles) writeFileSync(file.path, basename(file.path) === 'client.js' ? file.text +
   `\n{const style=document.createElement('style');style.dataset.plugin='dsh-project-shell';style.textContent=${JSON.stringify(shellCss)};document.head.appendChild(style);}\n` : file.contents);
 // Helpers are compiled from the locked plugin, not copied into our source tree.

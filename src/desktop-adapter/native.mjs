@@ -8,7 +8,6 @@ import {trustedSender, rendererHeaders, externalUrl} from '../windows/renderer-s
 import {visibleBounds, trackWindowState} from '../windows/window-state.mjs';
 import {captureProjectCheckpoint} from './stable/recovery.mjs';
 import {createProjectRestartRequest} from '../windows/project-restart.mjs';
-import {createWindowMaterialRefresher} from '../windows/window-material-refresh.mjs';
 import {createShellTitlebarActionRunner, shellTitlebarRequest} from './stable/shell-titlebar-actions.mjs';
 import {isOfficialDiagnosticsTrayItem} from './stable/official-tray.mjs';
 import {productVersion, productName} from '../app/product.mjs';
@@ -39,13 +38,9 @@ export async function openNativeProject(electron, options) {
   const {desktopRestartConfirmationCopy, desktopTrayLabel} = await loadDesktop('tray-locale');
   const {showDesktopMessageBox} = await loadDesktop('desktop-dialog-window');
   const {desktopNativeCopy} = await loadDesktop('native-dialog-copy');
+  const {isPlatformLoginDestination} = await loadDesktop('platform-login');
+  const {PlatformLoginWindow, PLATFORM_LOGIN_TITLE, platformLoginUrl} = await loadDesktop('platform-login-window');
   trace?.stage('official modules loaded');
-  // The official Electron runtime exposes windowsBuild on its own runtime object.
-  // Our hand-written replacement must carry the same value, or every capability
-  // gate that reads it (Mica support, window material resolution) silently
-  // disables itself for project windows.
-  const {windowsBuildNumber} = await loadDesktop('window-material');
-  const {electronPlatformStrategy} = await loadDesktop('electron-platform');
   // Where each in-project chooser went last time. The pinned Desktop profile serves Windows
   // through the browse directory-picker backend, so the companion plugin asks this runtime for
   // a directory there; keeping the last one makes the resource, relocation and skill pickers
@@ -72,18 +67,21 @@ export async function openNativeProject(electron, options) {
     if (window.isMinimized()) window.restore(); window.show(); window.focus();
     options.onFocus?.(); options.onMenuChanged?.();
   }};
-  const disabled = async () => {throw new Error('This operation is unavailable in Project Desktop')};
-  // Windows keeps the previous DWM backdrop palette until the window recomposes,
-  // so a transparent themed surface (our sidebar stays transparent while a
-  // material is active) keeps the old palette until the material is re-applied.
-  // This mirrors the pinned official ElectronDesktopRuntime.setThemeSource, which
-  // re-applies the active material after a live theme change for the same reason.
-  const platformStrategy = electronPlatformStrategy(process.platform);
-  const refreshWindowMaterial = createWindowMaterialRefresher({
-    strategy: platformStrategy,
-    getWindow: () => window,
-    getMaterial: () => specification?.material,
+  // Reuse the complete official login window and authenticated callback. Its
+  // otherwise global in-memory partition must belong to this project window.
+  const platformLogin = new PlatformLoginWindow({BrowserWindow,
+    session: partition => electron.session.fromPartition(`${partition}-${basename(options.stateDirectory)}`),
+    hostOrigin: () => window && !window.isDestroyed() ? new URL(specification.url).origin : undefined,
+    host: async () => {
+      if (!window || window.isDestroyed()) return undefined;
+      const origin = new URL(specification.url).origin;
+      const cookies = await window.webContents.session.cookies.get({url: origin});
+      return {origin, cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; '), header: specification.rendererAccessHeader};
+    },
+    parent: () => window, title: () => PLATFORM_LOGIN_TITLE[locale === 'zh' ? 'zh' : 'en'],
+    dark: () => electron.nativeTheme.shouldUseDarkColors, warn: message => console.error(message),
   });
+  const disabled = async () => {throw new Error('This operation is unavailable in Project Desktop')};
   const requestRestart = createProjectRestartRequest({getWindow: () => window, getLocale: () => locale,
     confirmationCopy: desktopRestartConfirmationCopy, showMessageBox: (owner, options) => showDesktopMessageBox(options, owner),
     isClosing: () => disposed || quitting, restart: () => options.restart(), recover: () => options.recover()});
@@ -108,7 +106,7 @@ export async function openNativeProject(electron, options) {
   // must agree before anything is dropped.
   const officialDiagnosticsLabels = new Set([desktopTrayLabel('en', 'exportDiagnostics'), desktopTrayLabel('zh', 'exportDiagnostics')]);
   const runtime = {
-    platform: process.platform, windowsBuild: process.platform === 'win32' ? windowsBuildNumber() : undefined, locale,
+    platform: process.platform, get locale() {return locale},
     // Chromium already knows this machine's proxy (WinINET or PAC) and answers DIRECT for
     // loopback targets. The Host supervisor asks for it and hands Git the resulting environment;
     // Git for Windows reads neither the registry nor the Electron session.
@@ -178,20 +176,29 @@ export async function openNativeProject(electron, options) {
       });
     },
     async validateDirectory(path) {try {return typeof path === 'string' && statSync(path).isDirectory()} catch {return false}},
+    platformLogin(request) {
+      if (disposed || quitting) return;
+      if (request.action === 'close') {platformLogin.close(); if (request.focus) focus(); return}
+      if (!isPlatformLoginDestination(request.url)) {console.error('Project sign-in: refused authorization URL'); return}
+      const url = platformLoginUrl(request.url, electron.nativeTheme.shouldUseDarkColors);
+      if (request.external) {void shell.openExternal(url).catch(options.onError); return}
+      platformLogin.open(url);
+    },
     reportRendererBoot(report) {clearTimeout(healthTimer); report.status === 'healthy' ? health.resolve(report) : failed(new Error(JSON.stringify(report)))},
     setLocalePreference(value) {locale = value === 'zh' || value === 'en' ? value : options.locale; options.onMenuChanged?.()},
-    // SharedTheme owns nativeTheme.themeSource for the whole application, so this
-    // hook does not set the theme. It still has to re-apply the window material:
-    // the official runtime does exactly that on a live theme change, and without
-    // it Windows keeps the previous DWM palette and the transparent sidebar stays
-    // dark after switching to a light theme.
-    setThemeSource() {refreshWindowMaterial()},
+    // SharedTheme owns nativeTheme.themeSource for every project window. Desktop
+    // 2.0.15 has no material-refresh hook; its own runtime only sets nativeTheme.
+    setThemeSource() {},
     requestRestart: () => requestRestart(), requestRecoveryRestart: () => requestRestart('recovery'),
-    prepareToQuit() {quitting = true}, openProfileCreateWindow: disabled,
+    prepareToQuit() {quitting = true; platformLogin.close()}, openProfileCreateWindow: disabled,
   };
   const close = async () => {
-    saveWindow?.(); disposed = true; clearTimeout(healthTimer);
+    saveWindow?.(); disposed = true; clearTimeout(healthTimer); platformLogin.close();
     removeHeaders?.();
+    if (window && !window.isDestroyed()) {
+      window.webContents.ipc.removeHandler('dsh-desktop:renderer-action');
+      if (process.platform === 'darwin') window.webContents.ipc.removeHandler('dsh-desktop:native-directory-picker');
+    }
     if (window && !window.isDestroyed()) window.destroy();
     await host?.close();
     if (options.safeMode && chromiumSession) await chromiumSession.clearStorageData();
@@ -209,9 +216,6 @@ export async function openNativeProject(electron, options) {
     if (options.windowState?.maximized) window.maximize();
     if (options.windowState?.fullScreen) window.setFullScreen(true);
     saveWindow = trackWindowState(window, state => options.saveWindowState?.(state), options.onError);
-    // Re-apply the material once the window is actually on screen: the first
-    // composition is what Windows caches as the DWM backdrop palette.
-    window.once('show', refreshWindowMaterial);
     window.on('page-title-updated', event => {event.preventDefault(); window.setTitle(options.title)});
     window.on('close', event => {if (!disposed) {event.preventDefault(); options.close()}});
     window.on('focus', () => {options.onFocus?.(); options.onMenuChanged?.()});
@@ -288,6 +292,10 @@ export async function openNativeProject(electron, options) {
       const request = shellTitlebarRequest(action);
       if (request) return runShellTitlebarAction(request.action, request.argument);
       return dispatch(action);
+    });
+    if (process.platform === 'darwin') contents.ipc.handle('dsh-desktop:native-directory-picker', event => {
+      if (disposed || !trustedSender(event, contents, specification.url)) throw new Error('Untrusted directory picker sender');
+      return runtime.pickDirectory();
     });
     await options.connectTheme(host);
     trace?.stage('theme connected');

@@ -67,7 +67,7 @@ export async function createProjectNativeWindow({stateDirectory, manifestPath, l
       }});
     ui = new DesktopStartupRecoveryWindow({controller: recovery.controller, locale, requested, failureStage,
       failureDetail: failureDetail || recovery.error || '',
-      ...(!readOnly ? {profileActions: actions, configurationPaths: {settingsDocument: join(profiles.homeDir, 'settings.yaml'),
+      ...(!readOnly ? {profileActions: actions, configurationPaths: {settingsDocument: join(profileDir, 'cordis.patch.yml'),
         profilePatch: join(profileDir, 'cordis.patch.yml'), profileManifest: join(profileDir, 'package.json'), profileDirectory: profileDir}} : {}),
       exportDiagnostics: signal => exportDiagnosticsZip(join(stateDirectory, 'logs'), stateDirectory,
         {appVersion: `DSH Project Desktop / Desktop ${lock.desktop.version}`, signal}),
@@ -86,7 +86,7 @@ export async function createProjectNativeWindow({stateDirectory, manifestPath, l
     if (closed) return recovery ? 'quit' : 'cancel';
     throw error;
   }).finally(() => {settled = true; creator?.close()});
-  // Stable 2.0.11 has no public close/dispose or ready hook. This narrow adapter uses its
+  // Stable 2.0.15 has no public close/dispose or ready hook. This narrow adapter uses its
   // existing window reference for project-owned shutdown; all rendering/actions stay official.
   const ready = (async () => {
     while (!ui.window && !settled) await delay(10);

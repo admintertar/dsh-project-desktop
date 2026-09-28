@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState, type ComponentProps} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Button, Input, Menu, Modal, IconEllipsisOutline16, IconFolderOpenOutline16, IconLinkOutline16, IconProjectAddOutline16, IconSearchOutline16, IconPlusOutline16,
-  IconChevronLeftOutline14, IconChevronDownOutline14, IconWarningOutline16, IconTrashOutline16, IconBranchOutline16, IconEditOutline16, IconCloseOutline16, IconLoadingOutline16, Tag, Tooltip} from '@deepseek-ai/dsh-client-ui-primitives';
+import {Button, Input, Menu, Modal, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconLinkOutlineRegular, IconProjectAddOutlineRegular, IconSearchOutlineRegular, IconPlusOutlineRegular,
+  IconChevronLeftOutlineRegular, IconChevronDownOutlineRegular, IconWarningOutlineRegular, IconTrashOutlineRegular, IconBranchOutlineRegular, IconEditOutlineRegular, IconCloseOutlineRegular, IconLoadingOutlineRegular, Tag, Tooltip} from '@deepseek-ai/dsh-client-ui-primitives';
 import './style.css';
 import {createGuideLocale} from '../desktop-adapter/stable/guide-locale';
 import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResourceCopy, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
@@ -99,7 +99,7 @@ function GuideActionButton({label, phase, allowCreate = false, t, ...props}: Omi
   return <Button {...props} aria-busy={Boolean(phase)} aria-label={phase ? t[phase] : label}>
     <span className="guideActionLabel">{labels.map(item => <span key={item.id} aria-hidden={item.id !== (phase ?? 'idle')}
       style={{visibility: item.id === (phase ?? 'idle') ? 'visible' : 'hidden'}}>
-      {item.id !== 'idle' && <IconLoadingOutline16 className="guideLoadingIcon"/>}{item.text}
+      {item.id !== 'idle' && <IconLoadingOutlineRegular className="guideLoadingIcon"/>}{item.text}
     </span>)}</span>
   </Button>;
 }
@@ -109,18 +109,18 @@ function RecentProjectRow({item, busy, opening, t, onOpen, onRemove}: any) {
   useEffect(() => {if (busy) setMenuOpen(false)}, [busy]);
   const unavailable = item.available === false;
   return <article className="recentProject" aria-busy={opening} data-menu-open={menuOpen ? 'true' : undefined} data-unavailable={unavailable ? 'true' : undefined}>
-    <Button className="recentItem" variant="toolbar" disabled={busy || unavailable} icon={<IconFolderOpenOutline16/>} onClick={() => {if (!unavailable) onOpen()}}>
+    <Button className="recentItem" variant="toolbar" disabled={busy || unavailable} icon={<IconFolderOpenOutlineRegular/>} onClick={() => {if (!unavailable) onOpen()}}>
       <span>{item.title}<small>{item.path}</small></span>
     </Button>
     <div className="recentTrailing" data-opening={opening || undefined}>
-    <span className="recentOpening" aria-hidden={!opening}><IconLoadingOutline16 className="guideLoadingIcon"/>{t.openingRecent}</span>
+    <span className="recentOpening" aria-hidden={!opening}><IconLoadingOutlineRegular className="guideLoadingIcon"/>{t.openingRecent}</span>
     <Menu open={menuOpen} onClose={() => setMenuOpen(false)} align="end" portal dense items={[
-      {id: 'open', label: t.openRecent, icon: <IconFolderOpenOutline16/>, disabled: unavailable},
+      {id: 'open', label: t.openRecent, icon: <IconFolderOpenOutlineRegular/>, disabled: unavailable},
       {type: 'separator', id: 'recent-project-separator'},
-      {id: 'remove', label: t.removeRecent, icon: <IconTrashOutline16/>, danger: true},
+      {id: 'remove', label: t.removeRecent, icon: <IconTrashOutlineRegular/>, danger: true},
     ]} onSelect={id => {setMenuOpen(false); if (id === 'open' && !unavailable) onOpen(); if (id === 'remove') onRemove();}}
       anchor={<button type="button" className="recentMore" aria-label={`${t.recentActions}: ${item.title}`} aria-expanded={menuOpen}
-        disabled={busy} onClick={() => setMenuOpen(value => !value)}><IconEllipsisOutline16/></button>}/>
+        disabled={busy} onClick={() => setMenuOpen(value => !value)}><IconEllipsisOutlineRegular/></button>}/>
     </div>
   </article>;
 }
@@ -162,10 +162,10 @@ function ResourceDraftCard({item, busy, t, rt, clone, onRename, onEditRemote, on
       <div className="resourceDraftSourceControl" ref={sourceControl}>
         {/* Same Menu/chevron composition as the official LanguageRow, using the compact ghost Button. */}
         <Menu open={sourceOpen} onClose={() => setSourceOpen(false)} portal dense autoFocus selectedId={item.mode} items={[
-          {id: 'remote', label: t.sourceRemote, icon: <IconLinkOutline16/>},
-          {id: 'link', label: t.sourceLocal, icon: <IconFolderOpenOutline16/>},
+          {id: 'remote', label: t.sourceRemote, icon: <IconLinkOutlineRegular/>},
+          {id: 'link', label: t.sourceLocal, icon: <IconFolderOpenOutlineRegular/>},
           ...(item.mode === 'empty' ? [] : [{type: 'separator' as const, id: 'source-separator'},
-            {id: 'unlink', label: t.unlinkResource, icon: <IconCloseOutline16/>}]),
+            {id: 'unlink', label: t.unlinkResource, icon: <IconCloseOutlineRegular/>}]),
         ]} onSelect={id => {
           setSourceOpen(false);
           const opener = sourceControl.current?.querySelector('button');
@@ -174,27 +174,27 @@ function ResourceDraftCard({item, busy, t, rt, clone, onRename, onEditRemote, on
           if (id === 'link') onPickLocal();
           if (id === 'unlink') onUnlink();
         }} anchor={<Button size="sm" className="resourceDraftSource" disabled={busy}
-          icon={item.mode === 'link' ? <IconFolderOpenOutline16/> : <IconLinkOutline16/>}
+          icon={item.mode === 'link' ? <IconFolderOpenOutlineRegular/> : <IconLinkOutlineRegular/>}
           aria-label={`${t.resourceSource}: ${sourceLabel} · ${item.name}`} aria-haspopup="menu" aria-expanded={sourceOpen}
           onClick={() => setSourceOpen(open => !open)} onKeyDown={event => {
             if (event.key === 'ArrowDown') {event.preventDefault(); setSourceOpen(true)}
-          }}>{sourceLabel}<IconChevronDownOutline14/></Button>}/>
+          }}>{sourceLabel}<IconChevronDownOutlineRegular size={14}/></Button>}/>
       </div>
-      {item.mode === 'remote' && <div className="resourceDraftRemote"><div><IconLinkOutline16/><span className="resourceDraftRemoteValue">{item.url}</span>
+      {item.mode === 'remote' && <div className="resourceDraftRemote"><div><IconLinkOutlineRegular/><span className="resourceDraftRemoteValue">{item.url}</span>
         <Tooltip label={t.editRemote} side="top"><span className="resourceDraftEdit"><Button size="sm" disabled={busy}
-          icon={<IconEditOutline16/>} aria-label={`${t.editRemote}: ${item.name}`} onClick={event => onEditRemote(event.currentTarget)}/></span></Tooltip></div>
-        <div><IconBranchOutline16/><span className="resourceDraftRemoteValue">{item.branch || t.defaultBranch}</span></div>
+          icon={<IconEditOutlineRegular/>} aria-label={`${t.editRemote}: ${item.name}`} onClick={event => onEditRemote(event.currentTarget)}/></span></Tooltip></div>
+        <div><IconBranchOutlineRegular/><span className="resourceDraftRemoteValue">{item.branch || t.defaultBranch}</span></div>
         {clone?.error && <p className="project-error" role="alert">{resourceErrorText(clone.error, rt)}</p>}</div>}
-      <div className="resourceDraftPath"><IconFolderOpenOutline16/><span>{item.path}</span>
+      <div className="resourceDraftPath"><IconFolderOpenOutlineRegular/><span>{item.path}</span>
         {item.mode === 'link' && <Tooltip label={t.editLocal} side="top"><span className="resourceDraftEdit"><Button size="sm" disabled={busy}
-          icon={<IconEditOutline16/>} aria-label={`${t.editLocal}: ${item.name}`} onClick={onPickLocal}/></span></Tooltip>}
+          icon={<IconEditOutlineRegular/>} aria-label={`${t.editLocal}: ${item.name}`} onClick={onPickLocal}/></span></Tooltip>}
       </div>
     </div>
     <footer className="resourceDraftFooter"><span className="resourceDraftStatus" role="status">{status}
       {cloning && clone.phase && ` · ${rt(clone.phase === 'receiving' ? 'resourceReceiving' : clone.phase === 'resolving' ? 'resourceResolving' : 'resourceCheckout')} ${clone.percent ?? 0}%`}</span>
       <div className="resourceDraftActions">
         {cloning && <Button size="sm" disabled={busy || clone.status === 'cancelling'} onClick={onCancelClone}>{t.cancel}</Button>}
-        <Tooltip label={t.removeResource} side="top"><span className="resourceDraftRemove"><Button size="sm" icon={<IconTrashOutline16/>}
+        <Tooltip label={t.removeResource} side="top"><span className="resourceDraftRemove"><Button size="sm" icon={<IconTrashOutlineRegular/>}
           aria-label={`${t.removeResource}: ${item.name}`} disabled={busy} onClick={onRemove}/></span></Tooltip>
       </div>
     </footer>
@@ -365,7 +365,7 @@ function Guide() {
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} autoFocus disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
         <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t} platform={frameState.chrome.platform}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
-        <section className="resourceEditor" aria-labelledby="create-resources-title"><div className="resourceEditorHeading"><div><h2 id="create-resources-title">{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
+        <section className="resourceEditor" aria-labelledby="create-resources-title"><div className="resourceEditorHeading"><div><h2 id="create-resources-title">{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutlineRegular />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}
         </section>
       </>}
@@ -380,21 +380,21 @@ function Guide() {
     </div>
   </GuideFrame>;
   return <GuideFrame {...frameProps} className="welcome" sidebar={
-    <div className="welcomeNav"><div className="brand"><IconProjectAddOutline16 size={42}/><div><strong>DSH Project</strong><small>Desktop · {version}</small></div></div>
-      <Button className="projectNav" variant="toolbar" icon={<IconFolderOpenOutline16/>} disabled={busy} onClick={reset} aria-current="page">{t.title}</Button>
+    <div className="welcomeNav"><div className="brand"><IconProjectAddOutlineRegular size={42}/><div><strong>DSH Project</strong><small>Desktop · {version}</small></div></div>
+      <Button className="projectNav" variant="toolbar" icon={<IconFolderOpenOutlineRegular/>} disabled={busy} onClick={reset} aria-current="page">{t.title}</Button>
       {selection && !selection.existing && <div className="templateList"><h2>{t.template}</h2>{templates.map(item => <Button key={item.id} className="templateItem" data-template-id={item.id} variant="toolbar" aria-pressed={templateId === item.id} disabled={busy} onClick={() => selectTemplate(item.id)}><span className="templateItemLabel">{t[item.key]}</span></Button>)}</div>}
       <p className="navCaption">{t.body}</p></div>}>
     <div className="welcomeContent">
-      <header className="toolbar">{selection ? <><Button icon={<IconChevronLeftOutline14/>} disabled={busy} onClick={reset}>{t.backProjects}</Button><h1>{t.new}</h1></>
-        : <><div className="search"><Input icon={<IconSearchOutline16/>} placeholder={t.search} aria-label={t.search} value={query}
+      <header className="toolbar">{selection ? <><Button icon={<IconChevronLeftOutlineRegular size={14}/>} disabled={busy} onClick={reset}>{t.backProjects}</Button><h1>{t.new}</h1></>
+        : <><div className="search"><Input icon={<IconSearchOutlineRegular/>} placeholder={t.search} aria-label={t.search} value={query}
           onChange={event => setQuery(event.target.value)}/></div><div className="actions">
-          <Button variant="outline" data-guide-action="clone" icon={<IconBranchOutline16/>} disabled={busy}
+          <Button variant="outline" data-guide-action="clone" icon={<IconBranchOutlineRegular/>} disabled={busy}
             onClick={event => {
               rememberModalOpener(event.currentTarget);
               // Read the remembered import directory before the dialog mounts its default.
               void refresh().catch(() => {}).then(() => setCloningRepository(true));
             }}>{t.clone}</Button>
-          <Button variant="outline" data-guide-action="new" icon={<IconPlusOutline16/>} disabled={busy} onClick={() => run('new')}>{t.new}</Button>
+          <Button variant="outline" data-guide-action="new" icon={<IconPlusOutlineRegular/>} disabled={busy} onClick={() => run('new')}>{t.new}</Button>
           <GuideActionButton variant="outline" data-guide-action="open" label={t.openShort} phase={actionPhase('open')} t={t} disabled={busy} onClick={() => run('open')}/></div></>}</header>
       <section className="guideBody" aria-busy={busy}>
       {warning && <p role="status">{warning === 'history-unreadable' ? t.historyUnreadable : t.unreadable}</p>}
@@ -404,11 +404,11 @@ function Guide() {
         <div className="setting"><div><h2>{t.projectName}</h2><Input aria-label={t.projectName} disabled={busy} value={projectName} onChange={event => updateProjectName(event.target.value)} /></div></div>
         <ProjectPathField directory={selection.directory} projectName={projectName} busy={busy} t={t} platform={frameState.chrome.platform}
           onChange={(directory: string) => setSelection((current: any) => current ? {...current, directory} : current)} onBrowse={() => run('browse-location')}/>
-        <section className="resourceEditor"><div className="resourceEditorHeading"><div><h2>{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutline16 />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
+        <section className="resourceEditor"><div className="resourceEditorHeading"><div><h2>{t.resources}</h2><p>{t.resourceHint}</p></div><Button variant="outline" icon={<IconPlusOutlineRegular />} disabled={busy} onClick={addResource}>{t.addResource}</Button></div>
           {draftResources.length > 0 && <div className="resourceGrid">{resourceCards}</div>}
         </section>
         </>}</>
-        : <>{failures.length > 0 && <section className="failures"><h2><IconWarningOutline16/> {t.recovery}</h2>{failures.map(item =>
+        : <>{failures.length > 0 && <section className="failures"><h2><IconWarningOutlineRegular/> {t.recovery}</h2>{failures.map(item =>
           <article className="failure" key={item.path}><h3>{item.title}</h3><p className="path">{item.path}</p>
             <p>{item.error === 'startup-interrupted' ? t.interrupted : t.pending}</p>
             <div className="actions"><GuideActionButton variant="outline" label={t.retryOpen} phase={actionPhase('retry', item.path)} t={t} disabled={busy} onClick={() => run('retry', {path: item.path})}/>
@@ -419,7 +419,7 @@ function Guide() {
           </article>)}</section>}
         <section className="recent"><h1>{t.recent}</h1>{filtered.map(item => <RecentProjectRow key={item.path} item={item} busy={busy} opening={actionPhase('recent', item.path) === 'opening'} t={t}
           onOpen={() => run('recent', item.path)} onRemove={() => run('remove-recent', item.path)}/>)}
-          {!filtered.length && <div className="empty"><IconFolderOpenOutline16 size={32}/><h2>{recent.length ? t.noMatches : t.empty}</h2><p>{recent.length ? query : t.body}</p></div>}</section></>}
+          {!filtered.length && <div className="empty"><IconFolderOpenOutlineRegular size={32}/><h2>{recent.length ? t.noMatches : t.empty}</h2><p>{recent.length ? query : t.body}</p></div>}</section></>}
       {error && <p className="error" role="alert">{error}</p>}
       </section>
       <footer>{selection ? <><Button disabled={busy} onClick={reset}>{t.cancel}</Button>

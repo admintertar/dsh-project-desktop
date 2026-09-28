@@ -20,6 +20,7 @@ const repository = fileURLToPath(new URL('..', import.meta.url));
 const desktopSource = join(repository, '.upstream/desktop/dsh-plugin-desktop');
 const bridgeSource = readFileSync(join(desktopSource, 'src/host-runtime-bridge.ts'), 'utf8');
 const shellSource = readFileSync(join(repository, 'src/desktop-adapter/native.mjs'), 'utf8');
+const buildSource = readFileSync(join(repository, 'scripts/build.mjs'), 'utf8');
 
 test('the Shell native runtime answers every method the pinned Host dispatches by name', () => {
   const list = /for \(const method of \[([\s\S]*?)\] as const\)/u.exec(bridgeSource);
@@ -37,6 +38,12 @@ test('the Shell native runtime answers every method the pinned Host dispatches b
 test('the merged export keeps the official method name instead of inventing a second one', () => {
   assert.match(shellSource, /async exportDiagnostics\(\)/u);
   assert.doesNotMatch(shellSource, /async exportLogs\(\)/u);
+});
+
+test('the Shell build retains its Desktop settings stylesheet', () => {
+  assert.match(buildSource, /src\/desktop-adapter\/stable\/settings\.css/u,
+    'the local settings stylesheet must be appended explicitly because generic CSS is intentionally empty-loaded');
+  assert.match(buildSource, /shellCss = \[/u);
 });
 
 test('the recognised contribution still matches the pinned official diagnostics plugin', () => {

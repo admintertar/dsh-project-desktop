@@ -17,7 +17,7 @@ Run from the parent workspace directory / 在这几个仓库的父目录执行�
 
 ```sh
 git clone https://github.com/anywhere-labs/dsh-desktop.git dsh-desktop-source
-git -C dsh-desktop-source checkout --detach 01fa59e6688d82fa34b59fc507e3a6f5d695fa17
+git -C dsh-desktop-source checkout --detach 08f179499c155f6653eb9ca25bab3d4453bd89d5
 git clone --filter=blob:none --no-checkout https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness-source
 cd dsh-desktop-source
 corepack yarn install --immutable

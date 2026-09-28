@@ -429,6 +429,7 @@ __metadata:
     micromark-util-sanitize-uri: "npm:2.0.1"
     micromark-util-symbol: "npm:2.0.1"
     shiki: "npm:4.3.1"
+    simple-icons: "npm:16.31.0"
     yaml: "npm:2.8.3"
     zustand: "npm:4.4.7"
   dependenciesMeta:
@@ -1191,6 +1192,13 @@ __metadata:
     "@shikijs/vscode-textmate": "npm:^10.0.2"
     "@types/hast": "npm:^3.0.4"
   checksum: 10c0/b25fbd2fd65a69a680c9be4b38712e3864402dfa08d0343ce1f10de73cb930295d8dd768f7d6857b877f8240f42f1c6771d9c20301007b1eb4dcdb5fb082f6b7
+  languageName: node
+  linkType: hard
+
+"simple-icons@npm:16.31.0":
+  version: 16.31.0
+  resolution: "simple-icons@npm:16.31.0"
+  checksum: 10c0/e0d7d2a6bf0534cf4003c1920a4954d385dd7206e8bdf97ff9df076cf7f863e108a9c0e3c409822fc5be3a608d2a4446ec4229f0e583c469b2060065256659c7
   languageName: node
   linkType: hard
 

@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 import {parse} from 'yaml';
 import {runtimePackage} from '../src/desktop-adapter/paths.mjs';
 import {nativeWindow, restartRecovery} from './native-profile-recovery-case.mjs';
+import {openNativeSettings} from './native-settings-navigation.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check, label) {
@@ -70,17 +71,17 @@ export async function checkNativeRestart({electron, workspace, manifests, userDa
   try {
     await project.host.updateShellSettings('locale', {preference: 'zh'});
     project.window.showInactive();
-    await click(project, '设置'); await click(project, '桌面');
+    await openNativeSettings(project); await click(project, '桌面');
     await until(() => evaluate(project, `Boolean(document.querySelector('button[aria-label="窗口材质"]:not(:disabled)'))`), 'material settings');
     const active = project.host.specification.material;
-    // macOS starts with glass; Windows starts with solid and exposes Mica only when supported.
+    // macOS offers glass and solid; Desktop 2.0.15 removed Windows materials.
     await click(project, '窗口材质');
     const items = await evaluate(project, `[...document.querySelectorAll('[role=menuitem]')].map(b=>b.innerText.trim())`);
     await click(project, '窗口材质');
     let count = 0, selected = active;
     if (items.length > 1) {
-      selected = active === 'off' ? (process.platform === 'darwin' ? 'transparent' : 'mica') : 'off';
-      const label = selected === 'off' ? '纯色背景' : selected === 'mica' ? 'Mica' : '玻璃背景';
+      selected = active === 'off' ? 'transparent' : 'off';
+      const label = selected === 'off' ? '纯色背景' : '玻璃背景';
       await click(project, '窗口材质');
       await evaluate(project, `[...document.querySelectorAll('[role=menuitem]')].find(b=>b.innerText.trim()===${JSON.stringify(label)}).click()`);
       const confirmation = await waitDialog(++count);
@@ -90,11 +91,12 @@ export async function checkNativeRestart({electron, workspace, manifests, userDa
       assert.equal(project.window.isDestroyed(), false);
       await confirmation.resolve({response: 1});
       await until(() => evaluate(project, `Boolean(document.querySelector('.projectDesktopRestartNotice'))`), 'saved restart notice');
-      const field = process.platform === 'darwin' ? 'macosMaterial' : 'windowsMaterial';
-      assert.equal(parse(readFileSync(join(project.host.result.homeDir, 'settings.yaml'), 'utf8'))['dsh-desktop'][field], selected);
+      const field = 'macosMaterial';
+      const patch = parse(readFileSync(join(project.host.result.profile, 'cordis.patch.yml'), 'utf8'));
+      assert.equal(patch.findLast(row => row.id === 'project-desktop-shell' && row.config?.[field])?.config[field], selected);
       assert.equal(await evaluate(project, 'document.body.dataset.dshDesktopMaterial'), active);
-      await project.host.updateShellSettings('dsh-desktop', {logLevel: 'warn'});
-      await project.host.updateShellSettings('dsh-desktop', {[field]: selected});
+      await project.host.updateShellSettings('project-desktop-shell', {logLevel: 'warn'});
+      await project.host.updateShellSettings('project-desktop-shell', {[field]: selected});
       await pause(150); assert.equal(dialogs.length, count, 'live/repeated settings must not prompt again');
     }
     electron.nativeTheme.themeSource = 'dark'; await project.host.setTheme('dark');

@@ -22,7 +22,16 @@ export const options = {packaged: true,
     if (state.offline) throw new Error('Fixture network is offline');
     const fixture = updateFixture(state.version, process.platform);
     if (url.endsWith('/update.json')) return state.status === 200 ? Response.json(fixture.release) : new Response('', {status: state.status});
-    return new Response(installerBody(fixture.body));
+    throw new Error(`Unexpected update metadata URL: ${url}`);
+  },
+  // Desktop 2.0.15 uses a separate settled-response transport for installers.
+  // Keep the native smoke's artifact on the fixture boundary, including its URL.
+  artifactRequest: async (url) => {
+    state.requests.push(url);
+    if (state.offline) throw new Error('Fixture network is offline');
+    const fixture = updateFixture(state.version, process.platform);
+    if (!fixture.release.assets.some(asset => asset.url === url)) throw new Error('Unexpected installer URL');
+    return {response: new Response(installerBody(fixture.body)), finalUrl: url};
   },
   openPath: async path => {state.opened.push(path); return ''},
   notify: message => state.notifications.push(message),

@@ -1,5 +1,5 @@
 import {useCallback, useState, useSyncExternalStore} from 'react';
-import {Button, Menu, Modal, Switch, IconChevronDownOutline14} from '@deepseek-ai/dsh-client-ui-primitives';
+import {Button, Menu, Modal, Switch, IconChevronDownOutlineRegular} from '@deepseek-ai/dsh-client-ui-primitives';
 import {createDesktopSettingsApi} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/desktop-settings-api.ts';
 import {DesktopTerminalSettingsAction} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/DesktopTerminalSettingsAction.tsx';
 import {en as desktopActionsEn, zh as desktopActionsZh} from '../../../.upstream/desktop/dsh-plugin-desktop/src/client/desktop-settings-locales.ts';
@@ -11,7 +11,7 @@ const copy = {
     safe: '安全模式', safeBody: '这是空白的临时诊断环境，未加载项目插件、配置和密钥。在这里的修改会在关闭后清理。使用“项目工具 → 退出安全模式”返回恢复界面。', continue: '继续诊断',
     notifyOnTurnCompletion: '会话回复完成', notifyOnTurnFailure: '会话回复失败', notifyOnJobCompletion: '后台任务完成', notifyOnJobFailure: '后台任务失败',
     material: desktopActionsZh.windowMaterial, materialBody: '设置窗口背景效果。更改后需重启当前项目窗口才能生效。',
-    off: desktopActionsZh.windowMaterialOff, transparent: desktopActionsZh.windowMaterialTransparent, mica: desktopActionsZh.windowMaterialMica,
+    off: desktopActionsZh.windowMaterialOff, transparent: desktopActionsZh.windowMaterialTransparent,
     log: '日志级别', logBody: '仅影响当前项目，保存后立即生效。', debug: '调试', info: '信息', warn: '警告', error: '错误',
     marketTitle: '插件市场', marketIntro: '为当前项目选择一个插件市场，一次只能启用一个。更改后重启当前项目生效。',
     marketDisabled: '关闭插件市场', marketDisabledBody: '不加载插件市场界面。',
@@ -23,7 +23,7 @@ const copy = {
     safe: 'Safe Mode', safeBody: 'This is a blank, temporary diagnostic environment. Project plugins, configuration and credentials are not loaded. Changes here are removed on close. Use Project Tools → Exit Safe Mode to return to recovery.', continue: 'Continue diagnosis',
     notifyOnTurnCompletion: 'Conversation completed', notifyOnTurnFailure: 'Conversation failed', notifyOnJobCompletion: 'Background job completed', notifyOnJobFailure: 'Background job failed',
     material: desktopActionsEn.windowMaterial, materialBody: 'Set the window background effect. Restart this project window to apply changes.',
-    off: desktopActionsEn.windowMaterialOff, transparent: desktopActionsEn.windowMaterialTransparent, mica: desktopActionsEn.windowMaterialMica,
+    off: desktopActionsEn.windowMaterialOff, transparent: desktopActionsEn.windowMaterialTransparent,
     log: 'Log level', logBody: 'Applies immediately to this project.', debug: 'Debug', info: 'Info', warn: 'Warning', error: 'Error',
     marketTitle: 'Plugin market', marketIntro: 'Choose one plugin market for this project. Restart the project to apply changes.',
     marketDisabled: 'Turn off plugin market', marketDisabledBody: 'Do not load a plugin market interface.',
@@ -43,7 +43,7 @@ function Select({value, options, disabled, onChange, label}: any) {
   const [open, setOpen] = useState(false);
   return <Menu open={open} onClose={() => setOpen(false)} items={options} selectedId={value} align="end" portal
     onSelect={id => {setOpen(false); onChange(id)}} anchor={<Button className="projectDesktopSelect" variant="outline" disabled={disabled} aria-label={label}
-      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{options.find((item: any) => item.id === value)?.label ?? value}<IconChevronDownOutline14/></Button>}/>;
+      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{options.find((item: any) => item.id === value)?.label ?? value}<IconChevronDownOutlineRegular size={14}/></Button>}/>;
 }
 // Minimal adaptation of the pinned DesktopSettingsSection Choice used by the official Market selector.
 function MarketChoice({title, body, badge, status, selected, disabled, onSelect}: any) {
@@ -58,26 +58,27 @@ function MarketChoice({title, body, badge, status, selected, disabled, onSelect}
       {badge && <span className="projectMarketBadge">{badge}</span>}{status && <span className="projectMarketBadge">{status}</span>}
     </span><span className="projectMarketBody">{body}</span></span></div>;
 }
-function Settings({t, shell, notifications, market, environment}: any) {
-  const desktop = useScope(shell), notices = useScope(notifications), marketState = useScope(market);
+function Settings({t, shell, notifications, environment}: any) {
+  const desktop = useScope(shell), notices = useScope(notifications);
+  const marketState = desktop;
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [restart, setRestart] = useState(false);
   async function run(action: () => Promise<any>) {setBusy(true); setError(''); try {await action()} catch (error) {setError(String((error as Error).message))} finally {setBusy(false)}}
   const change = (field: string, value: any) => run(async () => {await shell.set(field, value); if (field !== 'logLevel') setRestart(true)});
   const fields = ['enabled', 'notifyOnTurnCompletion', 'notifyOnTurnFailure', 'notifyOnJobCompletion', 'notifyOnJobFailure'];
   const writable = desktop.status === 'ready' && desktop.writable && !busy;
   const marketWritable = marketState.status === 'ready' && marketState.writable && !busy && !environment.safeMode;
-  const selectedMarket = marketState.value?.provider ?? 'dsh-market';
-  const selectMarket = (provider: string) => run(async () => {await market.set('provider', provider); setRestart(true)});
+  const selectedMarket = marketState.value?.marketProvider ?? 'dsh-market';
+  const selectMarket = (provider: string) => run(async () => {await shell.set('marketProvider', provider); setRestart(true)});
   return <section className="projectDesktopSettings">
     {environment.safeMode && <Row title={t('safe')} body={t('safeBody')}/>}
     {fields.map(field => <Row key={field} title={t(field === 'enabled' ? 'notifications' : field)} body={field === 'enabled' ? t('notificationsBody') : undefined}>
       <Switch className="projectDesktopSwitch" label={t(field === 'enabled' ? 'notifications' : field)} checked={Boolean(notices.value?.[field])}
         disabled={environment.safeMode || busy || notices.status !== 'ready' || !notices.writable || (field !== 'enabled' && !notices.value?.enabled)}
         onChange={value => {void run(() => notifications.set(field, value))}}/></Row>)}
-    {environment.platform !== 'linux' && <Row title={t('material')} body={t('materialBody')}><Select label={t('material')} disabled={!writable}
-      value={desktop.value?.[environment.platform === 'darwin' ? 'macosMaterial' : 'windowsMaterial'] ?? 'off'}
-      options={['off', ...(environment.platform === 'darwin' ? ['transparent'] : environment.micaSupported ? ['mica'] : [])].map(id => ({id, label: t(id)}))}
-      onChange={(value: string) => change(environment.platform === 'darwin' ? 'macosMaterial' : 'windowsMaterial', value)}/></Row>}
+    {environment.platform === 'darwin' && <Row title={t('material')} body={t('materialBody')}><Select label={t('material')} disabled={!writable}
+      value={desktop.value?.macosMaterial ?? 'off'}
+      options={['off', 'transparent'].map(id => ({id, label: t(id)}))}
+      onChange={(value: string) => change('macosMaterial', value)}/></Row>}
     <Row title={t('log')} body={t('logBody')}><Select label={t('log')} disabled={!writable} value={desktop.value?.logLevel ?? 'info'}
       options={['debug', 'info', 'warn', 'error'].map(id => ({id, label: t(id)}))} onChange={(value: string) => change('logLevel', value)}/></Row>
     <section className="projectMarketGroup" aria-labelledby="project-market-title">
@@ -100,9 +101,8 @@ export function applyProjectSettings(ctx: any, environment: any) {
   ctx.effect(() => ctx.locale.register('project.desktop', copy), 'project-desktop: settings copy');
   const t = ctx.locale.bind('project.desktop');
   if (environment.safeMode) ctx.effect(() => ctx.slots.register({name: 'shell.overlay', id: 'project-safe-mode', inject: () => ({t})}, SafeModeNotice), 'project-desktop: safe mode notice');
-  const shell = ctx.settingsScope.bind({namespace: 'dsh-desktop'});
-  const notifications = ctx.settingsScope.bind({namespace: 'dsh-desktop-notifications'});
-  const market = ctx.settingsScope.bind({namespace: 'dsh-project-market'});
+  const shell = ctx.configForms.get('project-desktop-shell');
+  const notifications = ctx.configForms.get('desktop-notifications');
   const api = createDesktopSettingsApi();
   // Reuse the pinned Desktop action component so busy/error states, menu
   // dismissal, keyboard handling and restart order stay aligned with upstream.
@@ -113,7 +113,7 @@ export function applyProjectSettings(ctx: any, environment: any) {
   // SettingsRoot in pinned ui-settings-general maps the official `desktop` id to its monitor icon.
   // Our shell replaces desktop-shell, so it owns this section without a competing registration.
   ctx.slots.inject('settings.section', () => ctx.slots.register({name: 'settings.section', id: 'desktop', order: 100,
-    locale: 'project.desktop', label: () => t('nav'), inject: () => ({shell, notifications, market, environment})}, Settings));
+    locale: 'project.desktop', label: () => t('nav'), inject: () => ({shell, notifications, environment})}, Settings));
 }
 
 function SafeModeNotice({t}: any) {

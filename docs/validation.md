@@ -1,5 +1,36 @@
 # Validation
 
+The results below are acceptance records for the versions and dates named in each section. Current pinned versions are in `upstream.lock.json`.
+
+## Desktop 2.0.15 upgrade on macOS arm64
+
+Accepted locally on 2026-09-28 with Node.js 22.19.0, Electron 44.0.0,
+Desktop 2.0.15, Harness 0.1.7-rc.2 and pinned Project commit
+`404376c9f5ebc2b21463b76f66ad1203d61c6847`.
+
+- `yarn check` passed after the final source changes: fixed-source integrity,
+  build, 153 application tests, seven recovery tests, one safe-mode test,
+  project-file checks and dual-Host smoke. `git diff --check` passed.
+- `yarn smoke:native` passed the full two-window graphical flow, including the
+  official Settings and Models views, theme changes, recovery, restart and safe
+  mode. Result: `.runtime/native-gqaM7X/result.json`.
+- `yarn smoke:profiles`, `yarn smoke:updates` and `yarn smoke:resources` passed
+  with real Electron windows. Their evidence is in
+  `.runtime/profile-recovery-mVW55q`, `.runtime/updates-ZJb1Ff` and
+  `.runtime/resource-states-nEOn86` respectively. The update fixture substitutes
+  only the save picker, installer launch and network responses.
+- Production packaging staging collected 592 Desktop and 97 Project packages.
+  The staged Desktop runtime includes `zod-to-json-schema`, Harness's pinned
+  `LICENSE`, and no non-relocatable links. Staging does not certify a signed
+  installer. Windows behavior and packaging were not run on this Mac.
+
+The initially reported uncaught exception on window show came from the Shell's
+obsolete `refreshThemeMaterial` call. Desktop 2.0.15 removed that strategy method
+along with Windows Mica/Acrylic. The Shell now leaves native theme changes to its
+application-level `SharedTheme`; the obsolete refresher and its old tests were
+removed. The first native run after this fix reached both project Renderers, and
+the completed graphical run did not reproduce the exception.
+
 Local acceptance baseline: macOS x64, Node.js 22.23.1, Electron 43.3.0,
 Desktop 2.0.11 and Harness 0.1.5-rc.2 (stable), 2026-09-19.
 The exact companion plugin commit/tree is recorded in upstream.lock.json.
@@ -468,6 +499,11 @@ Accepted on the macOS x64 baseline, 2026-09-20:
 
 ## Windows Mica material on project windows
 
+Historical acceptance for the pre-2.0.15 Desktop version. Desktop 2.0.15 removed
+Windows Mica/Acrylic and `refreshThemeMaterial`; the shell's old refresh hook was
+removed during the upgrade after it caused an uncaught exception on window show.
+The material and regression-test claims below describe only the earlier version.
+
 Accepted on Windows 11 Pro 25H2, build 26200.9457, 2026-09-21. This is the first
 acceptance in this document that is native Windows for the material path; the
 macOS x64 baseline above does not certify it and the reverse is now also true.
@@ -540,4 +576,3 @@ traps apply to any native-surface check done beside a running application.
 - Do not write source files with shell redirection on this platform: a PowerShell
   round-trip added a BOM and mangled the Chinese diagnostics copy in
   `native.mjs`. Use the file tools, and verify with `git diff` afterwards.
-

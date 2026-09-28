@@ -10,18 +10,20 @@ import {loadDesktop} from '../src/desktop-adapter/stable/modules.mjs';
 import {latestUpdateManifestUrl, versionUpdateManifestUrl} from '../src/app/update-manifest.mjs';
 
 const {DESKTOP_VERSION_ENDPOINT, checkForDesktopUpdate} = await loadDesktop('update-checker');
-const {downloadDesktopUpdate} = await loadDesktop('update-download');
+const {downloadDesktopUpdate} = await loadDesktop('project-update-download');
 const {startDesktopUpdateLifecycle} = await loadDesktop('update-lifecycle');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 function feedFor(fixture, {corrupt = false} = {}) {
   const requests = [];
-  const feed = createProjectReleaseFeed({platform: fixture.platform, request: async (url, init) => {
+  const request = async (url, init) => {
     requests.push({url, init});
     assert.equal(new URL(url).hostname, 'github.com', 'The app must not call the REST API');
     if ([latestUpdateManifestUrl, versionUpdateManifestUrl(fixture.release.version)].includes(url)) return Response.json(fixture.release, {headers: {ETag: '"fixture"'}});
     assert.equal(url, fixture.release.assets.find(asset => asset.name === fixture.name).url);
     return new Response(corrupt ? Buffer.alloc(512) : fixture.body);
-  }});
+  };
+  const feed = createProjectReleaseFeed({platform: fixture.platform, request,
+    artifactRequest: async (url, init) => ({response: await request(url, init), finalUrl: url})});
   return {feed, requests};
 }
 test('only a complete stable release with fixed repository assets is accepted', () => {
@@ -125,7 +127,8 @@ test('the verified download stream reports monotonic progress against the declar
   }});
   const feed = createProjectReleaseFeed({platform: 'darwin', onProgress: update => reported.push(update),
     request: async url => [latestUpdateManifestUrl, versionUpdateManifestUrl(fixture.release.version)].includes(url)
-      ? Response.json(fixture.release) : new Response(chunked(fixture.body))});
+      ? Response.json(fixture.release) : new Response(chunked(fixture.body)),
+    artifactRequest: async url => ({response: new Response(chunked(fixture.body)), finalUrl: url})});
   const root = mkdtempSync(join(tmpdir(), 'project-update-progress-'));
   await downloadDesktopUpdate({platform: 'darwin', version: fixture.release.version, destinationPath: join(root, fixture.name), request: feed.downloadRequest});
   assert.equal(reported[0].received, 0);

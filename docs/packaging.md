@@ -1,6 +1,6 @@
 # macOS、Windows 打包与签名
 
-打包目标为 macOS Universal（一个 DMG 原生支持 Intel / Apple Silicon）与 Windows x64，使用固定的 Electron 43.3.0、Desktop stable 2.0.11 / Harness 0.1.5-rc.2。Mac 融合包在 Apple Silicon 构建，再分别在 arm64 和 Intel 机器启动同一个 DMG；Windows 在原生 x64 runner 构建验证。配置了目标不等于该平台已验收，实际结果以对应 Actions job 和 `package-result.json` 为准。Linux 暂无打包任务。
+打包目标为 macOS Universal（一个 DMG 原生支持 Intel / Apple Silicon）与 Windows x64，使用固定的 Electron 44.0.0、Desktop stable 2.0.15 / Harness 0.1.7-rc.2。Mac 融合包在 Apple Silicon 构建，再分别在 arm64 和 Intel 机器启动同一个 DMG；Windows 在原生 x64 runner 构建验证。配置了目标不等于该平台已验收，实际结果以对应 Actions job 和 `package-result.json` 为准。Linux 暂无打包任务。
 
 ## GitHub Actions
 
@@ -34,7 +34,7 @@ gh workflow run package.yml --repo admintertar/dsh-project-desktop --ref master 
 
 运行成功后，在该次工作流页面底部 **Artifacts** 下载对应平台的压缩包，解压后取出安装文件。产物保留 14 天，内含构建提交、架构、签名类型与安装检查结果。启用发布时，Release 长期保留安装文件和校验和；不上传整个展开的运行时目录或本机日志，不发布 npm 包。
 
-流程参考固定官方 Desktop 的 [CI](https://github.com/anywhere-labs/dsh-desktop/blob/01fa59e6688d82fa34b59fc507e3a6f5d695fa17/.github/workflows/ci.yml)：原生 runner、固定 Node 22.23.2、官方 Yarn immutable 安装、官方 Electron 原生依赖准备和无证书构建。只导入 stable；官方根工作区安装会准备其锁文件包含的其他 workspace，但不构建或验收 beta 产品。
+流程参考固定官方 Desktop 的 [CI](https://github.com/anywhere-labs/dsh-desktop/blob/08f179499c155f6653eb9ca25bab3d4453bd89d5/.github/workflows/ci.yml)：原生 runner、固定 Node 22.23.2、官方 Yarn immutable 安装、官方 Electron 原生依赖准备和无证书构建。只导入 stable；官方根工作区安装会准备其锁文件包含的其他 workspace，但不构建或验收 beta 产品。
 
 三个来源均按完整 commit 检出，不读取个人缓存、私有仓库或未提交文件。官方源码及锁文件不改写，完整性检查仍重算 source tree。随后执行 `yarn run check`，覆盖构建、应用测试、恢复、安全模式和双 Host；最后打包并在开发目录外启动真实应用自检。安装检查失败时，该平台任务失败，不上传安装产物。构建任务仅有 `contents: read`；发布任务单独授予 `contents: write`，使用 GitHub 自动提供的 token，不需要另配 PAT 或签名 secrets。
 

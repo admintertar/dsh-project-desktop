@@ -26,7 +26,7 @@ export async function checkNativeSafeMode({electron, workspace, manifests, userD
   writeFileSync(join(userData, 'native-menu-zh.json'), JSON.stringify(menu.items.map(item => ({label: item.label,
     children: item.submenu?.items.map(child => ({label: child.label, role: child.role}))})), null, 2));
   await workspace.recover(manifests[0]);
-  const settingsPath = join(original.host.result.homeDir, 'settings.yaml');
+  const settingsPath = join(original.host.result.profile, 'cordis.patch.yml');
   const settings = readFileSync(settingsPath); writeFileSync(settingsPath, 'broken-for-safe-mode: [');
   const safe = await workspace.safeMode(manifests[0]);
   safe.window.showInactive();

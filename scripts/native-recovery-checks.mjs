@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {parse} from 'yaml';
 import {loadDesktop} from '../src/desktop-adapter/stable/modules.mjs';
 import {nativeWindow, click, confirm, restartRecovery} from './native-profile-recovery-case.mjs';
 
@@ -47,7 +48,8 @@ export async function checkNativeRecovery({electron, workspace, session, manifes
   await until(async () => bravo.window.webContents.executeJavaScript(`document.querySelector('[role=switch]')?.disabled === false`), 'notification settings ready');
   await bravo.window.webContents.executeJavaScript(`document.querySelector('[role=switch]').click()`);
   await until(async () => bravo.window.webContents.executeJavaScript(`document.querySelector('[role=switch]')?.getAttribute('aria-checked') === 'false'`), 'notification setting saved');
-  assert.match(readFileSync(join(bravo.host.result.homeDir, 'settings.yaml'), 'utf8'), /enabled: false/);
+  assert.equal(parse(readFileSync(join(bravo.host.result.profile, 'cordis.patch.yml'), 'utf8'))
+    .findLast(row => row.id === 'desktop-notifications' && row.config)?.config.enabled, false);
   assert.equal(await bravo.window.webContents.executeJavaScript(`document.querySelectorAll('[role=switch]:disabled').length`), 4);
   await bravo.window.webContents.executeJavaScript(`document.querySelector('[role=switch]').click()`);
   await until(async () => bravo.window.webContents.executeJavaScript(`document.querySelectorAll('[role=switch]:disabled').length === 0`), 'notifications re-enabled');
@@ -61,7 +63,7 @@ export async function checkNativeRecovery({electron, workspace, session, manifes
   assert.equal((await bravo.host.request('/api/project/snapshot')).status, 200);
   let recoveryWindow = await nativeWindow(electron, 'recovery');
   assert.equal(session.get(manifests[0]).phase, 'recovering');
-  const settings = join(alpha.host.result.homeDir, 'settings.yaml');
+  const settings = join(alpha.host.result.profile, 'cordis.patch.yml');
   writeFileSync(settings, 'invalid-settings: [');
   const chinese = (await recoveryWindow.webContents.executeJavaScript('document.body.innerText')).includes('快速恢复');
   await click(recoveryWindow, chinese ? '回滚' : 'Rollback');
