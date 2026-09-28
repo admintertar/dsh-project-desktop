@@ -37,10 +37,13 @@ test('production staging preserves nested and optional runtime dependencies and 
     mkdirSync(join(path, 'tests')); writeFileSync(join(path, 'tests/test.js'), 'test fixture');
   }
   try {
-    pkg(join(modules, 'runtime'), {name: 'runtime', dependencies: {nested: '1.0.0'}, optionalDependencies: {optional: '1.0.0', absent: '1.0.0'}});
+    pkg(join(modules, 'runtime'), {name: 'runtime', dependencies: {nested: '1.0.0'},
+      optionalDependencies: {optional: '1.0.0', absent: '1.0.0', 'native-x64': '1.0.0', 'native-arm64': '1.0.0'}});
     pkg(join(modules, 'runtime/node_modules/nested'), {name: 'nested'});
     pkg(join(modules, 'nested'), {name: 'nested', version: '2.0.0'});
     pkg(join(modules, 'optional'), {name: 'optional'});
+    pkg(join(modules, 'native-x64'), {name: 'native-x64', cpu: ['x64']});
+    pkg(join(modules, 'native-arm64'), {name: 'native-arm64', cpu: ['arm64']});
     pkg(join(modules, 'dev-tool'), {name: 'dev-tool'});
     pkg(join(modules, 'fs-ext'), {name: 'fs-ext'});
     for (const arch of ['arm64', 'x64']) {
@@ -63,6 +66,16 @@ test('production staging preserves nested and optional runtime dependencies and 
       assert.equal(existsSync(join(destination, 'fs-ext/build/Release/fs_ext.node')), false);
       for (const arch of ['arm64', 'x64']) assert.equal(existsSync(join(destination, 'fs-ext/prebuilds', 'darwin-' + arch, 'binding.node')), true);
     }
+    const windows = join(root, 'windows-x64');
+    await copyProductionDependencies({manifest, modules, scratch: join(root, 'collect-win-x64'),
+      destination: windows, platform: 'win32', arch: 'x64'});
+    assert.equal(existsSync(join(windows, 'native-x64/package.json')), true);
+    assert.equal(existsSync(join(windows, 'native-arm64/package.json')), false);
+    const universal = join(root, 'mac-universal');
+    await copyProductionDependencies({manifest, modules, scratch: join(root, 'collect-mac-universal'),
+      destination: universal, platform: 'darwin', arch: 'universal'});
+    assert.equal(existsSync(join(universal, 'native-x64/package.json')), true);
+    assert.equal(existsSync(join(universal, 'native-arm64/package.json')), true);
     await assert.rejects(copyProductionDependencies({manifest: {...manifest, dependencies: {missing: '1.0.0'}}, modules,
       scratch: join(root, 'missing'), destination: join(root, 'missing-output')}), /Production dependency missing/);
   } finally {rmSync(root, {recursive: true, force: true})}

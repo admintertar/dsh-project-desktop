@@ -53,6 +53,11 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-project-win-che
 const relocated = join(root, product);
 archive.extractAllTo(relocated, false);
 assert.equal(existsSync(join(relocated, 'resources/app/.cache/runtime/dsh-plugin-desktop/lib/index.js')), true);
+const packagedModules = join(relocated, 'resources/app/.cache/runtime/dsh-plugin-desktop/node_modules');
+for (const [scope, packageName] of [['@deepseek-ai', 'libreoffice-kit'], ['@dataiku', 'uv']]) {
+  assert.equal(existsSync(join(packagedModules, scope, `${packageName}-win32-x64/package.json`)), true);
+  assert.equal(existsSync(join(packagedModules, scope, `${packageName}-win32-arm64/package.json`)), false);
+}
 for (const asset of ['app-icon.ico', 'app-icon.png', 'tray/tray-icon-blue.png']) {
   assert.deepEqual(readFileSync(join(relocated, 'resources/app/assets', asset)), readFileSync(join(repository, 'assets', asset)));
 }

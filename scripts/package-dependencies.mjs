@@ -6,7 +6,8 @@ import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
  * The Shell keeps separate Desktop/Project roots because Profiles resolve them
  * independently; only collection inputs, never upstream manifests, are adapted.
  */
-export async function copyProductionDependencies({manifest, modules, scratch, destination, platform = process.platform, flatCache = false}) {
+export async function copyProductionDependencies({manifest, modules, scratch, destination,
+  platform = process.platform, arch = process.arch, flatCache = false}) {
   const {TraversalNodeModulesCollector} = desktopRequire('app-builder-lib/out/node-module-collector/traversalNodeModulesCollector.js');
   const {NodeModuleCopyHelper} = desktopRequire('app-builder-lib/out/util/NodeModuleCopyHelper.js');
   const {FileMatcher, excludedExts} = desktopRequire('app-builder-lib/out/fileMatcher.js');
@@ -24,6 +25,13 @@ export async function copyProductionDependencies({manifest, modules, scratch, de
     ...(platform === 'win32' ? [] : ['.dll', '.exe'])];
   const summary = {packages: 0, files: 0, bytes: 0};
   async function copy(dependency, target) {
+    // Windows x64 cannot load ARM64 optional packages. The pinned macOS
+    // Universal build still needs both CPU variants in its dependency tree.
+    if (platform === 'win32' && arch === 'x64') {
+      const {cpu} = JSON.parse(readFileSync(join(dependency.dir, 'package.json'), 'utf8'));
+      if (Array.isArray(cpu) && (cpu.includes(`!${arch}`)
+        || (cpu.some(value => !value.startsWith('!')) && !cpu.includes(arch)))) return;
+    }
     const patterns = ['**/*'];
     // Same native build exclusions as official package.json. The generated
     // host binding must never shadow the paired Electron ABI prebuilds.

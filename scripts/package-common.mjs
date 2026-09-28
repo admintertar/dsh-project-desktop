@@ -90,9 +90,9 @@ export async function preparePackage(platform, arch) {
   const dependencyInventory = {
     desktop: await copyProductionDependencies({manifest: {...desktopManifest, dependencies: desktopDependencies},
       modules: join(runtimePackage, 'node_modules'), scratch: join(staging, 'collect-desktop'),
-      destination: join(payload, 'runtime/dsh-plugin-desktop/node_modules'), platform}),
+      destination: join(payload, 'runtime/dsh-plugin-desktop/node_modules'), platform, arch}),
     project: await copyProductionDependencies({manifest: projectManifest, modules: projectModules,
-      scratch: join(staging, 'collect-project'), destination: join(payload, 'project-dependencies'), platform, flatCache: true}),
+      scratch: join(staging, 'collect-project'), destination: join(payload, 'project-dependencies'), platform, arch, flatCache: true}),
   };
   // Shell Profile materialization reads this version to choose Electron ABI
   // rebuild inputs. Electron itself comes from the outer application bundle.

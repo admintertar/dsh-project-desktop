@@ -46,7 +46,7 @@ macOS 使用 ad-hoc 签名且未公证；Windows 不做 Authenticode 签名。�
 
 流程包括固定源码/运行依赖验证、独立 staging、链接审计、electron-builder 生成融合应用、验证原生模块、由内到外签名 Mach-O 和嵌套 bundle、严格签名验证，再通过官方使用的 DMG target 生成 HFS+ 压缩镜像。挂载最终 DMG 后，将其中的应用复制到开发目录外进行真实安装自检，校验主程序、Electron Framework 和 Helper 均包含两种架构，最后记录 SHA-256。应用标识为 `local.dsh.project.desktop`，名称为 `DSH Project Desktop`，直接使用仓库 `assets/app-icon.icns` 作为安装图标，并携带完整 `assets/` 供 Dock、窗口和托盘使用。安装自检逐字节核对图标资源与 bundle 图标，避免开发环境存在而安装包遗漏。DMG 包含应用及 Applications 拖放入口。
 
-两平台使用官方锁定 builder 的生产依赖遍历与文件过滤，不整份复制开发依赖缓存。Desktop 与 Project 分别收集，保持各自依赖版本；插件的 DSH peers 从固定 Desktop 提供。保留运行时动态加载模块、可选原生模块和许可证，排除开发工具、测试样例与官方禁止的宿主 native build 输出。`package-result.json` 记录两组依赖的包数、文件数和字节数，供后续检查体积变化。
+两平台使用官方锁定 builder 的生产依赖遍历与文件过滤，不整份复制开发依赖缓存。Desktop 与 Project 分别收集，保持各自依赖版本；插件的 DSH peers 从固定 Desktop 提供。保留运行时动态加载模块、可选原生模块和许可证；Windows x64 额外剔除包清单标明仅支持其他 CPU 的可选依赖，macOS Universal 继续保留两个架构。排除开发工具、测试样例与官方禁止的宿主 native build 输出。`package-result.json` 记录两组依赖的包数、文件数和字节数，供后续检查体积变化。
 
 应用携带固定运行时、Project 构建、自有 Shell、引导资源和第三方许可，不链接开发仓库。使用者不需要安装 Node/npm 或保留 Desktop fork。Profile 中的自有运行时链接在确认 Host 停止后的下次打开时重新定位；运行中的项目不被准备流程改写。
 
