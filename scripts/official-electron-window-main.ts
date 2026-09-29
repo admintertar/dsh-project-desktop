@@ -2,8 +2,9 @@
 import electron from 'electron';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {serveWebDocument, forwardWebRequest} from '@official-web-document';
+import {configureOfficialProjectSession} from '../src/desktop-adapter/official/web-session.mjs';
 
-const {app, BrowserWindow, ipcMain, protocol, session} = electron;
+const {app, BrowserWindow, ipcMain, protocol} = electron;
 const config = JSON.parse(readFileSync(process.env.DSH_OFFICIAL_WINDOW_PROBE_CONFIG!, 'utf8'));
 app.setName('DSH Project Desktop Official Probe');
 app.setPath('userData', config.userData);
@@ -64,36 +65,18 @@ async function run() {
   const windows = [];
   const rendererErrors = [];
   for (const project of config.projects) {
-    const partition = session.fromPartition(project.partition);
-    const hostOrigin = new URL(project.hostUrl).origin;
-    // Official Desktop's Web-document implementation is bundled unchanged.
-    // The Shell owns the project Session and only forwards to its Host.
-    partition.protocol.handle('dsh-app', request => {
-      const url = new URL(request.url);
-      if (url.hostname !== 'app') return Promise.resolve(new Response(null, {status: 404}));
-      if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.startsWith('/assets/')
-        || ['/favicon.svg', '/manifest.webmanifest'].includes(url.pathname)) {
-        return serveWebDocument(request, config.webDist);
-      }
-      return forwardWebRequest(request, project.hostUrl, project.cookie);
-    });
+    const projectSession = configureOfficialProjectSession({electron, partitionName: project.partition,
+      hostUrl: project.hostUrl, cookie: project.cookie, webDist: config.webDist,
+      serveWebDocument, forwardWebRequest});
     const window = new BrowserWindow({width: 1120, height: 760, show: true,
       webPreferences: {preload: config.preload, partition: project.partition,
         nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true}});
     const webContentsId = window.webContents.id;
+    projectSession.bindWindow(window);
     owners.set(webContentsId, {window, project});
     window.on('closed', () => {
       owners.delete(webContentsId);
       if (owners.size === 0) quit();
-    });
-    partition.webRequest.onBeforeSendHeaders({urls: ['ws://127.0.0.1/*']}, (details, callback) => {
-      const requested = new URL(details.url);
-      if (details.webContentsId !== window.webContents.id || requested.host !== new URL(project.hostUrl).host) {
-        callback({cancel: true}); return;
-      }
-      const headers = Object.fromEntries(Object.entries(details.requestHeaders).map(([name, value]) => [name.toLowerCase(), value]));
-      if (headers.origin !== 'dsh-app://app') {callback({cancel: true}); return;}
-      callback({requestHeaders: {...headers, origin: hostOrigin, cookie: project.cookie, 'sec-fetch-site': 'same-origin'}});
     });
     window.webContents.on('console-message', event => {
       if (event.level === 'error') {
@@ -102,7 +85,7 @@ async function run() {
       }
     });
     await window.loadURL('dsh-app://app/');
-    windows.push({window, project, partition});
+    windows.push({window, project, partition: projectSession.partition});
   }
 
   const results = [];

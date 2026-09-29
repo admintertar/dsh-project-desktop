@@ -6,6 +6,12 @@
 
 官方 Desktop 与 DSH 都在快速变化，stable 仅指发行通道。目标是把升级影响限制在清晰的接入边界，避免长期维护 Desktop fork，并非保证每次升级零修改。
 
+## 官方 0.2.0-rc.2 迁移中的新边界
+
+`src/desktop-adapter/official/web-session.mjs` 已从临时双窗口实验提取为 Shell 自有的逐项目 Electron Session 适配器。它调用固定官方 `apps/desktop/src/web-document.ts` 的 `serveWebDocument` 和 `forwardWebRequest`，在 `dsh-app://app/` 提供官方静态资源，将动态请求连同所属 Host Cookie 转发到项目 Host；同一 Session 的 WebSocket 仅允许所属 WebContents、Host 地址及 `dsh-app://app` Origin，才改写 Origin 并附带 Cookie。官方 `dsh://open` 仍是操作系统唤起入口，与窗口页面协议分工不同。
+
+当前正式 `src/app/main.mjs` 仍调用下方的社区 stable adapter；上述新模块已接到官方临时双窗口探针并用真实 Electron/Project 插件验证，尚未接入正式窗口、恢复和打包链。旧架构说明记录已发布 0.1.11 的实现，不代表官方迁移已完成。
+
 ## 所有权
 
 | 内容 | 负责方 |
