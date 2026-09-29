@@ -19,8 +19,11 @@ const expect = (actual, expected, label) => {
   if (actual !== expected) throw new Error(`${label} differs from official-candidate.lock.json: ${actual}`);
 };
 
-// Read only committed objects: a dirty source checkout cannot alter the verified inputs.
+// The probes import live source files, so require the checked-out tree to match the pin.
 expect(git('rev-parse', '--verify', `${pin.commit}^{commit}`), pin.commit, 'Commit');
+expect(git('rev-parse', 'HEAD'), pin.commit, 'Checked-out HEAD');
+const changedPaths = git('status', '--porcelain=v1', '--untracked-files=normal');
+if (changedPaths) throw new Error(`Official source checkout must be clean:\n${changedPaths}`);
 expect(git('rev-parse', `${pin.commit}:apps/desktop`), pin.desktopTree, 'Desktop source tree');
 expect(git('rev-parse', `${pin.commit}:pnpm-lock.yaml`), pin.dependencyLockBlob, 'Dependency lock blob');
 expect(git('rev-parse', `refs/tags/${pin.tag}^{commit}`), pin.commit, 'Release tag');
