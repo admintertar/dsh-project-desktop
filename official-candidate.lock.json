@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
-  "tag": "dsh-v0.2.0-rc.1",
-  "commit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
-  "version": "0.2.0-rc.1",
-  "desktopTree": "7d069c01368b0df933e3c1d07b95a80d5dd80bd7",
-  "dependencyLockBlob": "14a4b5454671dd5e0807f24fe79b2cbd94d063fc"
+  "tag": "dsh-v0.2.0-rc.2",
+  "commit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "version": "0.2.0-rc.2",
+  "desktopTree": "12703a7e1aecef2fa5ba105058e96b5769329b4d",
+  "dependencyLockBlob": "6c7ce04c19349c2d5060f15a11eef5b642da0f50"
 }
