@@ -1,6 +1,7 @@
 import {strict as assert} from 'node:assert';
 import {test} from 'node:test';
 import {configureOfficialProjectSession} from '../src/desktop-adapter/official/web-session.mjs';
+import {createOfficialWindowOwners} from '../src/desktop-adapter/official/ipc-owners.mjs';
 
 test('official dsh-app requests and WebSockets stay in their owning project Session', async () => {
   const partitions = new Map();
@@ -53,4 +54,20 @@ test('official project Session rejects non-loopback Host and non-persistent part
   assert.throws(() => configureOfficialProjectSession(options), /loopback Host/);
   assert.throws(() => configureOfficialProjectSession({...options, partitionName: 'project',
     hostUrl: 'http://127.0.0.1:43101/'}), /persistent partition/);
+});
+
+test('official IPC owner requires the project main frame and dsh-app origin', () => {
+  const owners = createOfficialWindowOwners();
+  const webContents = {id: 7};
+  const window = {webContents, isDestroyed: () => false};
+  const mainFrame = {url: 'dsh-app://app/'};
+  owners.register(window, {project: {id: 'A'}});
+  const trusted = {sender: webContents, senderFrame: mainFrame};
+  // Electron exposes mainFrame on WebContents; the fixture mirrors it.
+  webContents.mainFrame = mainFrame;
+  assert.deepEqual(owners.trusted(trusted).project, {id: 'A'});
+  assert.throws(() => owners.trusted({...trusted, senderFrame: {url: 'dsh-app://app/iframe'}}), /Untrusted/);
+  assert.throws(() => owners.trusted({...trusted, senderFrame: {url: 'https://example.test/'}}), /Untrusted/);
+  owners.unregister(window);
+  assert.equal(owners.size, 0);
 });
