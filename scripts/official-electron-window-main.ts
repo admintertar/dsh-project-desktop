@@ -3,7 +3,6 @@ import electron from 'electron';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {serveWebDocument, forwardWebRequest} from '@official-web-document';
 import {configureOfficialProjectSession} from '../src/desktop-adapter/official/web-session.mjs';
-import {createOfficialWindowOwners} from '../src/desktop-adapter/official/ipc-owners.mjs';
 
 const {app, BrowserWindow, ipcMain, protocol} = electron;
 const config = JSON.parse(readFileSync(process.env.DSH_OFFICIAL_WINDOW_PROBE_CONFIG!, 'utf8'));
@@ -25,8 +24,13 @@ const quit = (error?: unknown) => {
 async function run() {
   // Electron's ready event cannot fire while this ESM entry is awaiting at top level.
   await app.whenReady();
-  const owners = createOfficialWindowOwners();
-  const trusted = event => owners.trusted(event);
+  const owners = new Map();
+  const trusted = event => {
+    const owner = owners.get(event.sender.id);
+    if (!owner || event.sender !== owner.window.webContents || event.senderFrame !== event.sender.mainFrame
+      || !event.senderFrame?.url.startsWith('dsh-app://app/')) throw new Error('Untrusted Desktop caller');
+    return owner;
+  };
   ipcMain.handle('dsh-desktop:boot', event => {
     const {project} = trusted(event);
     return {injections: project.injections, streamBaseUrl: new URL(project.hostUrl).origin};
@@ -69,9 +73,9 @@ async function run() {
         nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true}});
     const webContentsId = window.webContents.id;
     projectSession.bindWindow(window);
-    owners.register(window, {project});
+    owners.set(webContentsId, {window, project});
     window.on('closed', () => {
-      owners.unregister(window);
+      owners.delete(webContentsId);
       if (owners.size === 0) quit();
     });
     window.webContents.on('console-message', event => {
