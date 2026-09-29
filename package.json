@@ -23,7 +23,7 @@
     "smoke:lifecycle": "node scripts/smoke-lifecycle.mjs",
     "setup": "node scripts/setup.mjs",
     "verify:upstream": "node scripts/verify-upstream.mjs",
-    "verify:official-candidate": "node scripts/verify-official-candidate.mjs",
+    "verify:official-source": "node scripts/verify-official-source.mjs",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:recovery": "node --test scripts/check-recovery.mjs",

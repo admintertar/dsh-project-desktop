@@ -19,7 +19,7 @@ if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19) || nodeMajor === 23) 
   throw new Error(`Official Desktop probe requires Node 22.19+ or 24+; found ${process.versions.node}`);
 }
 const official = resolve(source);
-execFileSync(process.execPath, [fileURLToPath(new URL('./verify-official-candidate.mjs', import.meta.url)), official], {stdio: 'inherit'});
+execFileSync(process.execPath, [fileURLToPath(new URL('./verify-official-source.mjs', import.meta.url)), official], {stdio: 'inherit'});
 const load = name => import(pathToFileURL(join(official, name)).href);
 const [{prepareDevelopmentProject}, {DesktopProjectManager}, {resolveDesktopPaths}, {DesktopHostProcess}, {DESKTOP_HOST_PROTOCOL_VERSION}] = await Promise.all([
   load('apps/desktop/scripts/development-project.ts'), load('apps/desktop/src/project-manager.ts'),

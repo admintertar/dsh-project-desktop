@@ -4,19 +4,19 @@ import {join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
-const pin = JSON.parse(readFileSync(join(repository, 'official-candidate.lock.json'), 'utf8'));
+const pin = JSON.parse(readFileSync(join(repository, 'official-source.lock.json'), 'utf8'));
 const source = process.argv[2];
 if (!source || process.argv.length !== 3) {
-  throw new Error('Usage: node scripts/verify-official-candidate.mjs /path/to/deepseek-harness');
+  throw new Error('Usage: node scripts/verify-official-source.mjs /path/to/deepseek-harness');
 }
 if (!/^[a-f0-9]{40}$/.test(pin.commit) || !/^[a-f0-9]{40}$/.test(pin.desktopTree)
   || !/^[a-f0-9]{40}$/.test(pin.dependencyLockBlob)) {
-  throw new Error('Official candidate pin must contain full Git object IDs');
+  throw new Error('Official source pin must contain full Git object IDs');
 }
 
 const git = (...args) => execFileSync('git', ['-C', resolve(source), ...args], {encoding: 'utf8'}).trim();
 const expect = (actual, expected, label) => {
-  if (actual !== expected) throw new Error(`${label} differs from official-candidate.lock.json: ${actual}`);
+  if (actual !== expected) throw new Error(`${label} differs from official-source.lock.json: ${actual}`);
 };
 
 // The probes import live source files, so require the checked-out tree to match the pin.

@@ -7,7 +7,7 @@ import {execFileSync} from 'node:child_process';
 const source = process.argv[2];
 if (!source || process.argv.length !== 3) throw new Error('Usage: tsx scripts/probe-official-two-hosts.mjs /path/to/deepseek-harness');
 const official = resolve(source);
-execFileSync(process.execPath, [fileURLToPath(new URL('./verify-official-candidate.mjs', import.meta.url)), official], {stdio: 'inherit'});
+execFileSync(process.execPath, [fileURLToPath(new URL('./verify-official-source.mjs', import.meta.url)), official], {stdio: 'inherit'});
 const load = name => import(pathToFileURL(join(official, name)).href);
 const [{prepareDevelopmentProject}, {DesktopProjectManager}, {resolveDesktopPaths}, {DesktopHostProcess}, {DESKTOP_HOST_PROTOCOL_VERSION}] = await Promise.all([
   load('apps/desktop/scripts/development-project.ts'),
