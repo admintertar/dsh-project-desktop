@@ -20,7 +20,7 @@ function run(node, pnpm, cwd, args) {
 
 /** Validate the completed tarballs with the official package-set verifier. */
 function verifySet(source, set, version) {
-  const loader = join(source, 'node_modules/tsx/dist/loader.mjs');
+  const loader = pathToFileURL(join(source, 'node_modules/tsx/dist/loader.mjs')).href;
   const module = pathToFileURL(join(source, 'apps/desktop/src/core-package-set.ts')).href;
   const code = 'const {verifyDesktopCorePackageSet} = await import(process.argv[1]); verifyDesktopCorePackageSet(process.argv[2], process.argv[3]);';
   const result = spawnSync(process.execPath, ['--import', loader, '--input-type=module', '-e', code, module, set, version],

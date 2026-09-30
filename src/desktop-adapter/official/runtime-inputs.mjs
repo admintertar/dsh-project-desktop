@@ -13,10 +13,12 @@ export function officialRuntimeTarget(platform, arch) {
 /** Refuse dependency resolution drift before pnpm installs or runs native build scripts. */
 export function readOfficialRuntimeLock(directory, {pin, packageSetSha256, release, target}) {
   const metadata = JSON.parse(readFileSync(join(directory, 'inputs.json'), 'utf8'));
-  if (metadata.schemaVersion !== 1 || metadata.repository !== pin.repository || metadata.commit !== pin.commit
-    || metadata.version !== pin.version || metadata.target !== target || metadata.packageSetSha256 !== packageSetSha256
-    || metadata.nodeVersion !== release.nodeVersion || metadata.pnpmVersion !== release.pnpmVersion) {
-    throw new Error('Official production dependency lock does not match the source, tarballs or native target');
+  const expected = {schemaVersion: 1, repository: pin.repository, commit: pin.commit, version: pin.version,
+    target, packageSetSha256, nodeVersion: release.nodeVersion, pnpmVersion: release.pnpmVersion};
+  const mismatches = Object.entries(expected).filter(([key, value]) => metadata[key] !== value)
+    .map(([key, value]) => `${key}: lock=${JSON.stringify(metadata[key])}, build=${JSON.stringify(value)}`);
+  if (mismatches.length) {
+    throw new Error(`Official production dependency lock does not match the source, tarballs or native target: ${mismatches.join('; ')}`);
   }
   const body = readFileSync(join(directory, 'pnpm-lock.yaml'), 'utf8');
   if (createHash('sha256').update(body).digest('hex') !== metadata.lockfileSha256) {

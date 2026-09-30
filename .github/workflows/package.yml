@@ -131,7 +131,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: official-build-logs-${{ matrix.target }}-${{ github.sha }}
-          path: .cache/official-runtime-logs/*.log
+          path: |
+            .cache/official-runtime-logs/*.log
+            .cache/official-package-set/source.json
+            .cache/official-package-set/desktop-packages.json
           include-hidden-files: true
           if-no-files-found: ignore
   publish:

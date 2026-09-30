@@ -2,7 +2,7 @@
 import {spawn} from 'node:child_process';
 import {existsSync, mkdirSync, openSync, closeSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {verifyOfficialPackageSet} from './prepare-official-package-set.mjs';
 import {verifyOfficialSource} from './verify-official-source.mjs';
 import {officialRuntimeTarget} from '../src/desktop-adapter/official/runtime-inputs.mjs';
@@ -37,7 +37,7 @@ export async function prepareOfficialRuntime(source, {reuseResources = false} = 
   if (!reuseResources) await run(process.execPath, [pnpm, '--filter', '@deepseek-ai/dsh-desktop', 'run', 'prepare:runtime'],
     checked.source, join(logs, `resources-${target}.log`), {...process.env,
       DSH_DESKTOP_TARGET_PLATFORM: process.platform, DSH_DESKTOP_TARGET_ARCH: process.arch});
-  await run(process.execPath, ['--import', join(checked.source, 'node_modules/tsx/dist/loader.mjs'),
+  await run(process.execPath, ['--import', pathToFileURL(join(checked.source, 'node_modules/tsx/dist/loader.mjs')).href,
     join(repository, 'scripts/official-runtime-worker.mjs'), checked.source], repository, join(logs, `materialize-${target}.log`));
   verifyOfficialSource(checked.source);
   const destination = join(repository, '.cache/official-runtime', target);
