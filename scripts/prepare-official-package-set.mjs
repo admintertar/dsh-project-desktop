@@ -11,10 +11,10 @@ const repository = fileURLToPath(new URL('../', import.meta.url));
 
 /** Run the pinned official pnpm CLI without relying on a machine-global version. */
 function run(node, pnpm, cwd, args) {
-  const result = spawnSync(node, [pnpm, ...args], {cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
+  const result = spawnSync(node, [pnpm, ...args], {cwd, stdio: 'inherit'});
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`Official pnpm ${args.join(' ')} failed (${String(result.status)}):\n${(result.stderr || result.stdout).slice(-4000)}`);
+    throw new Error(`Official pnpm ${args.join(' ')} failed (${String(result.status ?? result.signal)})`);
   }
 }
 
