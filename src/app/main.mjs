@@ -20,6 +20,9 @@ import {repository, officialPin, runtimeDirectory} from '../desktop-adapter/offi
 import {openOfficialProjectWindow} from '../desktop-adapter/official/project-window.mjs';
 import {installOfficialProjectIpc} from '../desktop-adapter/official/project-ipc.mjs';
 import {createOfficialQuitGuard} from '../desktop-adapter/official/quit-guard.mjs';
+import {installOfficialDeepLinks} from '../desktop-adapter/official/deep-links.mjs';
+import {createOfficialHostEnvironment} from '../desktop-adapter/official/host-environment.mjs';
+import {installOfficialSessionEnd} from '../desktop-adapter/official/session-end.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, dialog, protocol} = electron;
 const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png');
@@ -47,7 +50,7 @@ async function run() {
   const trace = startTrace('boot', `shell=${productVersion} official=${officialPin.version} platform=${process.platform}`);
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
   const session = new SessionState(join(userData, 'workspace-session.json'));
-  let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services, quitGuard;
+  let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services, quitGuard, hostEnvironment, sessionEnd;
   let quitting = false, quitReady = false, startupComplete = false, lastLocale = 'en';
   const report = error => {
     console.error(error);
@@ -70,7 +73,7 @@ async function run() {
     }});
   if (storedTheme) electron.nativeTheme.themeSource = storedTheme;
   const workspace = new ProjectWorkspace({session, resolveProject: resolveProjectFile, create: createProject,
-    confirm: request => quitGuard?.confirm(request) ?? true,
+    confirm: request => sessionEnd?.ending ? true : quitGuard?.confirm(request) ?? true,
     focusConfirmation: () => quitGuard?.focus(),
     changed() {
       refreshMenus();
@@ -88,6 +91,8 @@ async function run() {
     const project = active() ?? projects.get(session.value.activePath) ?? liveProjects()[0];
     if (project && !project.window.isDestroyed()) project.focus(); else return showGuide();
   };
+  const deepLinks = installOfficialDeepLinks(app, {focusDefault: showApplication, onError: report});
+  for (const arg of process.argv) deepLinks.handle(arg);
   const guideOptions = () => ({repository, iconPath: appIcon, locale: language(), getLocale: language,
     recent, open, hidden: testing, defaultDirectory: app.getPath('documents'), recentChanged: refreshMenus});
   async function showGuide() {
@@ -179,7 +184,14 @@ async function run() {
     let project;
     try {
       project = await openOfficialProjectWindow(electron, {...state, signal, title, locale: language(),
-        hidden: testing, ipc: officialIpc, services, windowState: session.window(manifest),
+        hidden: testing, ipc: officialIpc, services, hostEnvironment, windowState: session.window(manifest),
+        rememberAccountReturn: focus => deepLinks.remember(focus),
+        sessionEnding: () => sessionEnd.ending, quitForSession: () => app.quit(),
+        applicationItems: () => [
+          {role: 'about', label: project?.locale === 'zh' ? `关于 ${productName}` : `About ${productName}`},
+          {type: 'separator'}, ...menuTemplate(project), {type: 'separator'},
+          {role: 'quit', label: project?.locale === 'zh' ? '退出' : 'Quit'},
+        ],
         saveWindowState: bounds => session.saveWindow(manifest, bounds),
         connectTheme: async settings => theme.connect(manifest, await settings.getTheme(), value => settings.setTheme(value)),
         onTheme: value => value === theme.value ? undefined : theme.select(value),
@@ -206,18 +218,15 @@ async function run() {
       throw error;
     }
   }
-  function refreshMenus() {
-    if (!app.isReady() || quitting) return;
-    const zh = language() === 'zh';
-    lastLocale = zh ? 'zh' : 'en';
-    const current = active();
+  function menuTemplate(current = active()) {
+    const zh = (current?.locale ?? language()) === 'zh';
     const command = (label, action, extra = {}) => ({label, click: () => perform(action), ...extra});
-    const roles = nativeRoleMenus(lastLocale, process.platform, app.name);
-    const currentPath = () => [...projects].find(([, project]) => project === active())?.[0];
+    const roles = nativeRoleMenus(zh ? 'zh' : 'en', process.platform, app.name);
+    const currentPath = () => [...projects].find(([, project]) => project === current)?.[0];
     const recents = recent.list().map(item => command(item.title, () => open(item.path), {enabled: item.available !== false}));
     const officialClose = current?.shortcuts.fileMenu({fileMenu: zh ? '文件' : 'File', closePage: zh ? '关闭页面' : 'Close Page'}).submenu ?? [];
     // Cmd+W 由官方快捷键管理关闭页面/窗口，Shell 关闭整个项目使用独立快捷键。
-    const template = [...roles.application, {label: zh ? '文件' : 'File', submenu: [
+    return [...roles.application, {label: zh ? '文件' : 'File', submenu: [
       command(zh ? '新建项目…' : 'New Project…', showProjectCreate, {id: 'project-new', accelerator: 'CmdOrCtrl+Shift+N'}),
       command(zh ? '打开项目…' : 'Open Project…', pickOpen, {id: 'project-open', accelerator: 'CmdOrCtrl+O'}),
       {label: zh ? '最近项目' : 'Recent Projects', submenu: recents, enabled: recents.length > 0},
@@ -225,12 +234,20 @@ async function run() {
       {type: 'separator'}, ...officialClose,
       command(zh ? '关闭项目' : 'Close Project', () => close(currentPath()),
         {id: 'project-close', accelerator: 'CmdOrCtrl+Shift+W', enabled: Boolean(current)}),
-    ]}, roles.edit, roles.view,
+    ]}, ...(process.platform === 'win32' ? [] : [roles.edit]), roles.view,
     {label: zh ? '项目' : 'Project', submenu: [
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '重启当前项目' : 'Restart Current Project', () => restart(currentPath()), {enabled: Boolean(current)}),
     ]}, roles.window];
-    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  }
+  function refreshMenus() {
+    if (!app.isReady() || quitting) return;
+    const zh = language() === 'zh';
+    lastLocale = zh ? 'zh' : 'en';
+    const command = (label, action) => ({label, click: () => perform(action)});
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate()));
+    // Windows 项目窗口的可见菜单由官方 preload caption 提供，保留原生 accelerator。
+    if (process.platform === 'win32') for (const project of liveProjects()) project.window.setMenuBarVisibility(false);
     tray?.setContextMenu(Menu.buildFromTemplate([
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '显示应用' : 'Show App', showApplication),
@@ -240,6 +257,7 @@ async function run() {
   const startupFiles = process.argv.filter(value => value.endsWith('.agent-project'));
   app.on('open-file', (event, path) => {event.preventDefault(); if (startupComplete) perform(() => open(path)); else startupFiles.push(path)});
   app.on('second-instance', (_event, args) => {
+    if (args.some(arg => deepLinks.handle(arg))) return;
     const paths = args.filter(value => value.endsWith('.agent-project'));
     if (!startupComplete) startupFiles.push(...paths);
     else if (paths.length) paths.forEach(path => perform(() => open(path)));
@@ -256,11 +274,17 @@ async function run() {
       if (!approved) {quitting = false; refreshMenus(); return}
       await officialIpc?.dispose();
       quitGuard?.dispose();
+      hostEnvironment?.dispose(); deepLinks.dispose(); sessionEnd?.dispose();
       quitReady = true; tray?.destroy(); trace.end('quit'); app.exit(process.exitCode ?? 0);
     }).catch(error => {quitting = false; report(error); perform(showGuide)});
   });
   await app.whenReady();
+  sessionEnd = installOfficialSessionEnd(electron);
   services = await import(pathToFileURL(join(runtimeDirectory(), 'official/native-services.mjs')).href);
+  hostEnvironment = createOfficialHostEnvironment(services);
+  // app.exit 不触发 will-quit，仍需终止尚在读取的 shell 进程组。
+  app.on('will-quit', () => hostEnvironment.dispose());
+  process.once('exit', () => hostEnvironment.dispose());
   quitGuard = createOfficialQuitGuard(electron, services, {locale: language, name: productName, icon: appIcon});
   officialIpc = installOfficialProjectIpc(electron, services);
   await cleanupGuideClones(userData);
@@ -276,10 +300,11 @@ async function run() {
   refreshMenus();
   if (testing) {
     startupComplete = true;
+    deepLinks.ready();
     let timeout;
     const smoke = closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
     try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({
-      electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc,
+      electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc, deepLinks,
     }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {console.error(error); process.exitCode = 1}
     finally {clearTimeout(timeout); app.quit()}
     return;
@@ -289,5 +314,6 @@ async function run() {
   startupComplete = true;
   if (!projects.size || workspace.failures().length) await showGuide();
   else showApplication();
+  deepLinks.ready();
   trace.end();
 }

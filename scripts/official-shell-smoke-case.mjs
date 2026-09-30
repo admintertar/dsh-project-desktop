@@ -7,6 +7,7 @@ import {createGuideWindow} from '../src/windows/guide-window.mjs';
 import {repository} from '../src/desktop-adapter/official/paths.mjs';
 import {checkProjectCreateEntryPoints} from './native-guide-checks.mjs';
 import {projectStatePath} from '../src/app/project-state.mjs';
+import {checkOfficialAccount, checkOfficialBrowser} from './official-account-smoke-case.mjs';
 
 async function until(read, check, label) {
   const deadline = Date.now() + 15000;
@@ -16,7 +17,7 @@ async function until(read, check, label) {
 }
 
 /** 经正式 main、ProjectWorkspace、窗口 IPC 验证；全部数据位于调用方临时目录。 */
-export async function runOfficialShellSmoke({electron, open, close, restart, showGuide, showProjectCreate, workspace, userData, officialIpc}) {
+export async function runOfficialShellSmoke({electron, open, close, restart, showGuide, showProjectCreate, workspace, userData, officialIpc, deepLinks}) {
   const errors = [];
   const collect = window => window.webContents.on('console-message', event => {if (event.level === 'error') errors.push(event.message)});
   const capture = async (window, name) => {
@@ -103,6 +104,9 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
     await capture(project.window, name);
   }
   writeFileSync(join(userData, 'page-state.json'), JSON.stringify(identities, null, 2));
+  const browser = await checkOfficialBrowser(electron, a, b);
+  const account = process.env.DSH_OFFICIAL_ACCOUNT_SMOKE === '1'
+    ? await checkOfficialAccount({electron, a, b, deepLinks, capture}) : undefined;
   await a.host.setTheme('dark');
   await until(() => b.host.getTheme(), value => value === 'dark', 'Shared dark theme');
   await until(() => electron.nativeTheme.themeSource, value => value === 'dark', 'Native dark material');
@@ -150,7 +154,7 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
   const result = {platform: process.platform, arch: process.arch, officialVersion: '0.2.0-rc.2',
     welcomeAndCreation: true, guideLocalesThemesNarrowKeyboardCancel: true, twoProjects: true, realApiKeyState: true, officialShortcuts: true,
     nativeClose: true, reopen: true, restart: true, sameSession: true, legacyDataPreserved: true,
-    allOwnersReleased: true, sharedTheme: true, nativeThemeLightDarkSystem: true, rendererErrors: errors};
+    allOwnersReleased: true, sharedTheme: true, nativeThemeLightDarkSystem: true, browser, account, rendererErrors: errors};
   writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2) + '\n');
   console.log(`Official Shell smoke passed: ${userData}`);
 }

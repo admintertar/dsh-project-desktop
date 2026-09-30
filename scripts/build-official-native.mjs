@@ -8,7 +8,7 @@ export async function buildOfficialNative(source, destination) {
   const version = JSON.parse(readFileSync(join(source, 'apps/desktop/package.json'), 'utf8')).version;
   const shim = fileURLToPath(new URL('../src/desktop-adapter/official/scoped-electron.mjs', import.meta.url));
   const modules = ['keyboard', 'directory-picker', 'device-info', 'locale', 'welcome-backend',
-    'browser-guests', 'platform-view', 'microphone-permissions', 'quit-confirmation'];
+    'browser-guests', 'platform-view', 'microphone-permissions', 'quit-confirmation', 'login-shell-environment', 'windows-layout'];
   await build({stdin: {contents: [
     ...modules.map(name => `export * from ${JSON.stringify(join(source, 'apps/desktop/src', name + '.ts'))};`),
     `export {createWindowIpcScope, withProjectSessionScope} from ${JSON.stringify(shim)};`,

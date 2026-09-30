@@ -9,6 +9,10 @@ not restrict the rights granted by those third-party licenses.
 The active Shell compiles unchanged modules from DeepSeek's
 `deepseek-harness/apps/desktop`, pinned by `official-source.lock.json`. The
 window, IPC, session, settings and quit-confirmation adaptations are listed in docs/architecture.md.
+Account watching, authorization-link theme handling, protocol activation, Windows
+caption/edit menus, context menus and system-session ending adapt the pinned
+Desktop main.ts. The login-shell-environment.ts and windows-layout.ts helpers
+are compiled unchanged with the other official native services.
 The runtime includes the official LICENSE and package-level notices. The guide
 uses official locale, primitives and theme components, with Shell-owned geometry.
 The companion plugin candidate is recorded in `project-source.lock.json`;

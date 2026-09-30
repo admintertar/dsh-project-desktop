@@ -1,7 +1,8 @@
 import {createOfficialWindowOwners} from './ipc-owners.mjs';
+import {installOfficialWindowsChrome} from './windows-chrome.mjs';
 
 /** 官方的单窗口 IPC 按 WebContents 安装；各项目独立持有键位状态与目录对话框。 */
-export function installOfficialProjectIpc(electron, services) {
+export function installOfficialProjectIpc(electron, services, platform = process.platform) {
   const owners = createOfficialWindowOwners();
   const platforms = new Set();
   const registrations = new Set();
@@ -21,7 +22,7 @@ export function installOfficialProjectIpc(electron, services) {
       const scope = services.createWindowIpcScope(ipc, event => owners.trusted(event));
       const handlers = [];
       const listeners = [];
-      let shortcuts;
+      let shortcuts, disposeChrome;
       const pending = new Set();
       const dispose = async () => {
         platforms.delete(context.platformView);
@@ -32,6 +33,9 @@ export function installOfficialProjectIpc(electron, services) {
         for (const [channel, listener] of listeners.splice(0)) ipc.removeListener(channel, listener);
         registrations.delete(dispose);
         // 先撤销新请求入口，等元数据请求及主题等单向通知完成，再允许 Host 停止。
+        // 先让已接收的同步菜单请求建好 popup，再主动关闭，防止退出等待用户点菜单。
+        await Promise.resolve();
+        disposeChrome?.();
         await Promise.allSettled([...pending]);
       };
       const track = callback => {
@@ -62,6 +66,7 @@ export function installOfficialProjectIpc(electron, services) {
           context.onMenuChanged, () => ({revision: 0, blocked: false})));
         scope.run(() => services.installDesktopDirectoryPicker(() => window));
         shortcuts.attach(window);
+        if (platform === 'win32') disposeChrome = installOfficialWindowsChrome({electron, services, window, shortcuts, handle, on, context});
         browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name));
         platforms.add(platformView);
         handle('dsh-desktop:boot', () => ({injections: context.injections, streamBaseUrl: new URL(context.hostUrl).origin}));

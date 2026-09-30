@@ -35,6 +35,24 @@
   Platform 账号分区名另加项目命名空间，避免相同账号跨项目共享 Cookie。
 - `project-ipc.mjs` 只接收所属 `dsh-app://app/` 主 Frame；API Key 和语言读取官方 Welcome Backend，
   不伪造 onboarding 完成。浏览器、平台页面和麦克风桥接继续复用上述官方 helper。
+- `account-session.mjs` 适配官方 `main.ts` 的账号订阅，直接调用 `welcome-backend.account.watch`。
+  每次授权只打开一次带当前 nativeTheme 的官方链接，失败/过期/成功聚焦所属项目；关闭先释放订阅。
+  官方 Host 负责 PKCE、state、loopback `/oauth/callback` 和凭据，Renderer 负责登录弹窗、账号状态与注销。
+  自有欢迎页不随单项目注销被全局替换。错误日志不携带授权 URL。
+- `deep-links.mjs` 接收 macOS `open-url` 与启动/第二实例参数中的精确 `dsh://open[/]`，准备完成前排队。
+  协议仅唤起，不能传 token/code；多项目优先最近发起登录且仍存活的窗口，取消/关闭撤销该目标。
+  成功状态先聚焦所属窗口，解决协议本身不携带项目 id 的限制。仅 packaged 或显式
+  `DSH_DESKTOP_DEV_APP=1` 注册系统协议，普通开发不抢占安装版关联；签名安装包的协议声明仍待发行接入。
+- `host-environment.mjs` 全应用共享一次官方 `login-shell-environment.ts` 读取，给 Finder/Dock 启动的 Host
+  补回用户 shell 环境。官方保留 DSH/ELECTRON 启动变量；Shell 最后覆盖项目 DSH_HOME、manifest 和遥测禁用。
+  退出取消官方 shell 探针。环境值不写日志，也不全局覆盖 Shell 的 `process.env`。
+- `windows-chrome.mjs` 适配官方 `main.ts` 中未导出的 Windows 菜单/外观处理；标题栏高度直接编译
+  `windows-layout.ts`。保留主 Frame 身份校验、颜色/坐标校验、缩放换算与 `shortcuts.sendEditingKey`。
+  Application 菜单组合 Shell 的创建/打开/切换/重启命令，销毁窗口主动关闭在途 popup。
+  官方右键菜单的分隔与 Windows 当前语言文案一并保留。Windows 原生验收仍待执行。
+- `session-end.mjs` 沿用官方系统关机/注销识别：Windows 只接受确定的 `session-end`，不把
+  `query-session-end` 当退出；macOS 接收 power shutdown，用户重新显示/聚焦窗口时清除取消的关机标记。
+  系统退出沿用整个应用收尾并保存恢复集合，跳过交互确认；普通项目关闭仍走官方运行任务确认。
 - `host-settings.mjs` 使用官方 `settings/describe`、`settings/update` RPC 同步共享主题，携带 namespace revision。
   官方 `ThemeRuntime.setTheme` 先更新 DOM，再异步保存 `ConfigForm`。`theme-sync.mjs` 在最多 10 秒内等候
   Host 保存值与通知一致，再同步 SharedTheme 和 nativeTheme；单次读取不一致不能丢弃通知。
@@ -52,6 +70,18 @@
 
 `tests/official-shell-imports.test.mjs` 校验实际主进程模块图和欢迎页构建输入中没有社区依赖。
 `tests/*.legacy.mjs` 与下方旧架构用于删除审计，不进入默认测试。
+
+### 原生接入的验证范围与发行门禁
+
+`yarn smoke:official-shell` 检查真实双窗口、官方 bridge、browser lease 分区、所属 Host 请求阻断及其他 Host 认证。
+`DSH_OFFICIAL_ACCOUNT_SMOKE=1` 额外在线调用官方登录初始化/取消，从真实官方菜单与弹窗操作，并在 OS
+`shell.openExternal` 边界截获 URL，验证原生监听、主题参数与项目唤回；不提交用户凭据，不代表账号授权成功。
+官方 browser helper 直接阻断当前 Host；其他项目 Host 由独立 Cookie 认证拒绝访问，不宣称 guest 禁止所有 loopback 网络。
+
+发行前仍须完成自有更新器/强制版本策略、全局 CLI 安装、签名安装包与协议关联、Windows/macOS Intel 实机验收、
+真实账号授权后的用量/充值交互、Stable 数据迁移回退。当前 `updates-status` 返回 idle，`updates-open` 明确拒绝。
+Windows 官方 preload 的 mandatory overlay 在开发无策略时允许 status 请求失败，本壳沿用此开发行为；
+不能接入官方发行源让其安装原版覆盖 Shell。原版 Welcome/CLI/update 专用窗口及 IPC 不计作当前项目主窗口漏接。
 
 ### 验证边界
 

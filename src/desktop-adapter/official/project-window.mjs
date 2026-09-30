@@ -9,12 +9,18 @@ import {createOfficialThemeSync} from './theme-sync.mjs';
 import {prepareOfficialProfile} from './profile.mjs';
 import {createOfficialHostRequest, projectDisposer} from './host-request.mjs';
 import {configureOfficialProjectSession} from './web-session.mjs';
+import {watchOfficialAccount} from './account-session.mjs';
 
 /** 官方 createWindow 的原生窗口行为；Shell 增加逐项目 Session 和窗口状态。 */
-export function officialWindowOptions(electron, {preload, partition, title, windowState, primary = true}) {
+export function officialWindowOptions(electron, {preload, partition, title, windowState, primary = true, services}, platform = process.platform) {
   return {width: 1280, height: 820, minWidth: 520, minHeight: 600, show: false, title,
     ...visibleBounds(windowState, electron.screen.getAllDisplays()),
-    ...(process.platform === 'darwin' ? {titleBarStyle: 'hiddenInset', trafficLightPosition: {x: 16, y: 18},
+    ...(platform === 'win32' && primary ? {titleBarStyle: 'hidden', autoHideMenuBar: true, titleBarOverlay: {
+      height: services.WINDOWS_TITLEBAR_HEIGHT,
+      color: electron.nativeTheme.shouldUseDarkColors ? '#1b1b1c' : '#f9fafb',
+      symbolColor: electron.nativeTheme.shouldUseDarkColors ? '#f9fafb' : '#0f1115',
+    }} : {}),
+    ...(platform === 'darwin' ? {titleBarStyle: 'hiddenInset', trafficLightPosition: {x: 16, y: 18},
       vibrancy: 'sidebar', visualEffectState: 'active', backgroundColor: '#00000000'} : {}),
     webPreferences: {preload, partition, nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, webviewTag: primary, devTools: true}};
@@ -24,7 +30,7 @@ export async function openOfficialProjectWindow(electron, options) {
   const runtimeDir = runtimeDirectory();
   const services = options.services;
   const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(options.startupTimeout ?? 60000)]);
-  let host, window, projectSession, ipc, platformView, flushState, detachTheme, themeSync;
+  let host, window, projectSession, ipc, platformView, flushState, detachTheme, themeSync, stopAccount;
   let closing = false, opened = false, fatal;
   let locale = options.locale ?? 'en';
   const onError = options.onError ?? console.error;
@@ -39,6 +45,7 @@ export async function openOfficialProjectWindow(electron, options) {
   const aborted = () => failure.reject(signal.reason);
   signal.addEventListener('abort', aborted, {once: true});
   const closeResources = projectDisposer([
+    () => {stopAccount?.()},
     () => {themeSync?.dispose()},
     async () => {await detachTheme?.()},
     async () => {await ipc?.dispose(); ipc = undefined},
@@ -57,8 +64,10 @@ export async function openOfficialProjectWindow(electron, options) {
     const webModule = await import(pathToFileURL(join(runtimeDir, 'official/web-document.mjs')).href);
     platformView = new services.DesktopPlatformView(join(runtimeDir, 'desktop/preload-platform-account.cjs'),
       () => services.resolveDesktopLocale(locale).id, process.platform);
+    const environment = await wait(options.hostEnvironment?.read() ?? process.env);
+    signal.throwIfAborted();
     host = new hostModule.DesktopHostProcess(process.execPath, join(runtimeDir, 'dsh'), profile.profileDir, undefined,
-      {...process.env, DSH_HOME: profile.homeDir, DSH_TELEMETRY_MODE: 'DISABLED', DSH_CLIENT_VERSION: officialPin.version,
+      {...environment, DSH_HOME: profile.homeDir, DSH_TELEMETRY_MODE: 'DISABLED', DSH_CLIENT_VERSION: officialPin.version,
         DSH_PROJECT_MANIFEST: options.manifestPath}, fail, join(runtimeDir, 'runtime/primary-runtime'),
       {pnpm: join(runtimeDir, 'runtime/pnpm/bin/pnpm.cjs'), nodeBin: join(runtimeDir, 'runtime/bin')},
       next => platformView.setSession(next));
@@ -85,13 +94,17 @@ export async function openOfficialProjectWindow(electron, options) {
     const browserGuests = new services.DesktopBrowserGuests(() => ready.url);
     ipc = options.ipc.register(window, {...options, sessionKey: basename(options.stateDirectory), backend, platformView, browserGuests,
       hostUrl: ready.url, injections: ready.injections, onFailure: fail, onError,
+      getLocale: () => locale,
       onTheme: preference => themeSync.notify(preference),
       setLocale: value => {locale = value; options.onLocale?.(value)}});
     flushState = trackWindowState(window, options.saveWindowState ?? (() => {}), onError);
     window.on('focus', () => {options.onFocus?.(); options.onMenuChanged?.()});
     window.on('close', event => {
       if (closing) return;
-      event.preventDefault(); options.close?.();
+      event.preventDefault();
+      // 系统注销/关机按整个应用收尾并保存恢复集合，不当作用户逐个关闭项目。
+      if (options.sessionEnding?.()) {options.quitForSession?.(); return}
+      options.close?.();
     });
     window.on('closed', () => {if (!closing) fail(new Error('Project window was destroyed'))});
     const contents = window.webContents;
@@ -120,8 +133,10 @@ export async function openOfficialProjectWindow(electron, options) {
       for (const event of ['minimize', 'hide', 'restore', 'show']) window.on(event, backdrop);
     }
     contents.on('context-menu', (_event, {isEditable, selectionText, editFlags}) => {
-      const items = isEditable ? ['undo', 'redo', 'cut', 'copy', 'paste', 'selectAll'] : selectionText ? ['copy'] : [];
-      if (items.length) electron.Menu.buildFromTemplate(items.map(role => ({role, accelerator: '',
+      const items = isEditable ? ['undo', 'redo', null, 'cut', 'copy', 'paste', null, 'selectAll'] : selectionText ? ['copy'] : [];
+      const messages = services.resolveDesktopLocale(locale).messages;
+      if (items.length) electron.Menu.buildFromTemplate(items.map(role => role === null ? {type: 'separator'} : ({role, accelerator: '',
+        ...(process.platform === 'win32' ? {label: messages[role]} : {}),
         enabled: editFlags[`can${role[0].toUpperCase()}${role.slice(1)}`]}))).popup({window});
     });
     await wait(window.loadURL('dsh-app://app/'));
@@ -133,6 +148,8 @@ export async function openOfficialProjectWindow(electron, options) {
     if (options.windowState?.maximized) window.maximize();
     if (options.windowState?.fullScreen) window.setFullScreen(true);
     const focus = () => {if (!window.isDestroyed()) {if (window.isMinimized()) window.restore(); window.show(); window.focus()}};
+    stopAccount = watchOfficialAccount({account: backend.account, shell: electron.shell, nativeTheme: electron.nativeTheme,
+      focus, rememberReturn: options.rememberAccountReturn, onError});
     if (!options.hidden) focus();
     opened = true;
     return {window, close, focus, shortcuts: ipc.shortcuts, get locale() {return locale.startsWith('zh') ? 'zh' : 'en'},
