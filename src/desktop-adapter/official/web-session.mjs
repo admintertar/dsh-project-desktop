@@ -14,11 +14,12 @@ export function configureOfficialProjectSession({electron, partitionName, hostUr
   const partition = electron.session.fromPartition(partitionName);
   if (sessionOwners.has(partition)) throw new Error('Official project Session already has an owner');
   const owner = {};
+  const lifetime = new AbortController();
   let disposed = false;
   let boundWindow;
   const hostOrigin = new URL(hostUrl).origin;
   const hostAddress = new URL(hostUrl).host;
-  partition.protocol.handle('dsh-app', request => {
+  partition.protocol.handle('dsh-app', async request => {
     if (disposed) return Promise.resolve(new Response(null, {status: 410}));
     const url = new URL(request.url);
     if (url.hostname !== 'app') return Promise.resolve(new Response(null, {status: 404}));
@@ -26,7 +27,13 @@ export function configureOfficialProjectSession({electron, partitionName, hostUr
       || ['/favicon.svg', '/manifest.webmanifest'].includes(url.pathname)) {
       return serveWebDocument(request, webDist);
     }
-    return forwardWebRequest(request, hostUrl, cookie);
+    // 官方转发器保留 Request.signal；补上项目 Session 的寿命，停止 Host 前撤销旧窗口的在途请求。
+    const signal = AbortSignal.any([request.signal, lifetime.signal]);
+    try {return await forwardWebRequest(new Request(request, {signal}), hostUrl, cookie)}
+    catch (error) {
+      if (signal.aborted) return new Response(null, {status: 410});
+      throw error;
+    }
   });
   sessionOwners.set(partition, owner);
   return {partition, bindWindow(window) {
@@ -50,6 +57,7 @@ export function configureOfficialProjectSession({electron, partitionName, hostUr
     // the next Host uses that partition; repeated cleanup must not detach a new owner.
     if (sessionOwners.get(partition) !== owner) return;
     disposed = true;
+    lifetime.abort(new DOMException('Project Session closed', 'AbortError'));
     partition.protocol.unhandle('dsh-app');
     partition.webRequest.onBeforeSendHeaders(null);
     sessionOwners.delete(partition);

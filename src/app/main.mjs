@@ -19,6 +19,7 @@ import {bootLogDirectory, session as startTrace} from './boot-log.mjs';
 import {repository, officialPin, runtimeDirectory} from '../desktop-adapter/official/paths.mjs';
 import {openOfficialProjectWindow} from '../desktop-adapter/official/project-window.mjs';
 import {installOfficialProjectIpc} from '../desktop-adapter/official/project-ipc.mjs';
+import {createOfficialQuitGuard} from '../desktop-adapter/official/quit-guard.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, dialog, protocol} = electron;
 const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png');
@@ -28,7 +29,8 @@ if (process.argv.some(arg => retiredModes.includes(arg))) {
   console.error('Retired community test mode; use yarn smoke:official-shell');
   app.exit(1);
 }
-const testing = process.argv.includes('--official-shell-smoke') && !app.isPackaged;
+const closeTesting = process.argv.includes('--official-close-smoke') && !app.isPackaged;
+const testing = (process.argv.includes('--official-shell-smoke') || closeTesting) && !app.isPackaged;
 app.setName(productName);
 protocol.registerSchemesAsPrivileged([{scheme: 'dsh-app', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true,
@@ -45,7 +47,7 @@ async function run() {
   const trace = startTrace('boot', `shell=${productVersion} official=${officialPin.version} platform=${process.platform}`);
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
   const session = new SessionState(join(userData, 'workspace-session.json'));
-  let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services;
+  let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services, quitGuard;
   let quitting = false, quitReady = false, startupComplete = false, lastLocale = 'en';
   const report = error => {
     console.error(error);
@@ -68,6 +70,8 @@ async function run() {
     }});
   if (storedTheme) electron.nativeTheme.themeSource = storedTheme;
   const workspace = new ProjectWorkspace({session, resolveProject: resolveProjectFile, create: createProject,
+    confirm: request => quitGuard?.confirm(request) ?? true,
+    focusConfirmation: () => quitGuard?.focus(),
     changed() {
       refreshMenus();
       if (guide && !guide.isDestroyed()) guide.webContents.send('project-desktop:state-changed');
@@ -147,8 +151,9 @@ async function run() {
     await open(target);
   }
   async function close(path, {showWelcome = true} = {}) {
-    await workspace.close(path);
+    if (!await workspace.close(path)) return false;
     if (showWelcome && !quitting && !projects.size) await showGuide();
+    return true;
   }
   async function open(target, {showWelcomeOnError = true} = {}) {
     if (quitting) throw new Error('Application is shutting down');
@@ -245,15 +250,18 @@ async function run() {
   app.on('before-quit', event => {
     if (quitReady) return;
     event.preventDefault();
-    if (quitting) return;
+    if (quitting) {quitGuard?.focus(); return}
     quitting = true;
-    void cancelGuideCreations().then(() => workspace.shutdown()).then(async () => {
+    void workspace.shutdown({beforeStop: cancelGuideCreations}).then(async approved => {
+      if (!approved) {quitting = false; refreshMenus(); return}
       await officialIpc?.dispose();
+      quitGuard?.dispose();
       quitReady = true; tray?.destroy(); trace.end('quit'); app.exit(process.exitCode ?? 0);
     }).catch(error => {quitting = false; report(error); perform(showGuide)});
   });
   await app.whenReady();
   services = await import(pathToFileURL(join(runtimeDirectory(), 'official/native-services.mjs')).href);
+  quitGuard = createOfficialQuitGuard(electron, services, {locale: language, name: productName, icon: appIcon});
   officialIpc = installOfficialProjectIpc(electron, services);
   await cleanupGuideClones(userData);
   lastLocale = app.getLocale().startsWith('zh') ? 'zh' : 'en';
@@ -269,9 +277,10 @@ async function run() {
   if (testing) {
     startupComplete = true;
     let timeout;
-    try {await Promise.race([(await import('../../scripts/official-shell-smoke-case.mjs')).runOfficialShellSmoke({
+    const smoke = closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
+    try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({
       electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc,
-    }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), 120000)})])} catch (error) {console.error(error); process.exitCode = 1}
+    }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {console.error(error); process.exitCode = 1}
     finally {clearTimeout(timeout); app.quit()}
     return;
   }

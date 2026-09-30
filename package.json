@@ -25,7 +25,8 @@
     "package:mac": "node scripts/official-release-pending.mjs",
     "package:win": "node scripts/official-release-pending.mjs",
     "check": "yarn run build && yarn run test && node scripts/check-project-files.mjs",
-    "smoke:official-shell": "node scripts/smoke-official-shell.mjs"
+    "smoke:official-shell": "node scripts/smoke-official-shell.mjs",
+    "smoke:official-close": "node scripts/smoke-official-shell.mjs --close"
   },
   "dependencies": {
     "yaml": "2.8.3"

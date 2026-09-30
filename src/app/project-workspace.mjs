@@ -5,9 +5,11 @@ import {ProjectRegistry} from '../windows/project-registry.mjs';
 export class ProjectWorkspace {
   #queues = new Map();
   #recoveries = new Map();
+  #transitions = new Map();
+  #shutdownTask;
   #quitting = false;
-  constructor({session, resolveProject, create, recovery, changed = () => {}}) {
-    Object.assign(this, {session, resolveProject, create, recovery, changed});
+  constructor({session, resolveProject, create, recovery, changed = () => {}, confirm = async () => true, focusConfirmation = () => {}}) {
+    Object.assign(this, {session, resolveProject, create, recovery, changed, confirm, focusConfirmation});
     this.registry = new ProjectRegistry();
     this.projects = new Map();
     this.errors = new Map();
@@ -62,17 +64,34 @@ export class ProjectWorkspace {
     await this.registry.close(path);
     this.projects.delete(path);
   }
+  /** 同一项目的重复动作共用一次决定；相反动作不排到确认之后误操作新 Host。 */
+  #transition(path, action, execute) {
+    const current = this.#transitions.get(path);
+    if (current) {
+      this.focusConfirmation();
+      return current.action === action ? current.task : Promise.resolve(false);
+    }
+    const task = this.#run(path, async () => {
+      const project = this.projects.get(path);
+      if (!await this.confirm({action, path, projects: project ? [project] : []})) return false;
+      return execute();
+    });
+    this.#transitions.set(path, {action, task});
+    void task.finally(() => {if (this.#transitions.get(path)?.task === task) this.#transitions.delete(path)}).catch(() => {});
+    return task;
+  }
   close(path) {
-    return this.#run(path, async () => {
+    return this.#transition(path, 'close', async () => {
       try {
         await this.#stop(path);
         this.#recoveries.get(path)?.dispose(); this.#recoveries.delete(path);
         this.session.remove(path); this.errors.delete(path); this.changed();
+        return true;
       } catch (error) {this.#fail(path, error); throw error}
     });
   }
   restart(path) {
-    return this.#run(path, async () => {
+    return this.#transition(path, 'restart', async () => {
       const safeMode = Boolean(this.projects.get(path)?.safeMode);
       try {await this.#stop(path); return await this.#open(path, safeMode)}
       catch (error) {this.#fail(path, error); throw error}
@@ -141,15 +160,34 @@ export class ProjectWorkspace {
   failures() {
     return this.session.list().filter(item => ['failed', 'recovering'].includes(item.phase)).map(item => ({...item, error: this.errors.get(item.path), safeMode: Boolean(this.projects.get(item.path)?.safeMode)}));
   }
-  async shutdown() {
+  /** 退出先等待已受理操作，再检查整个项目集合；确认前不停止任何 Host，取消恢复正常操作。 */
+  shutdown({beforeStop = async () => {}} = {}) {
+    if (this.#shutdownTask) {this.focusConfirmation(); return this.#shutdownTask}
+    const task = this.#shutdown(beforeStop);
+    this.#shutdownTask = task;
+    void task.finally(() => {if (this.#shutdownTask === task) this.#shutdownTask = undefined}).catch(() => {});
+    return task;
+  }
+  async #shutdown(beforeStop) {
     this.#quitting = true;
     await Promise.allSettled([...this.#queues.values()]);
+    try {
+      if (!await this.confirm({action: 'quit', projects: [...this.projects.values()]})) {
+        this.#quitting = false;
+        return false;
+      }
+      await beforeStop();
+    } catch (error) {
+      this.#quitting = false;
+      throw error;
+    }
     try {
       // Explicit project closes remove records. Application quit preserves the set.
       await this.registry.closeAll();
       this.projects.clear();
       for (const recovery of this.#recoveries.values()) recovery.dispose();
       this.#recoveries.clear();
+      return true;
     } catch (error) {
       this.#quitting = false;
       for (const path of this.projects.keys()) {

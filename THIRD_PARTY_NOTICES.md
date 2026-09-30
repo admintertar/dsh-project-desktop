@@ -8,7 +8,7 @@ not restrict the rights granted by those third-party licenses.
 
 The active Shell compiles unchanged modules from DeepSeek's
 `deepseek-harness/apps/desktop`, pinned by `official-source.lock.json`. The
-window, IPC, session and settings adaptations are listed in docs/architecture.md.
+window, IPC, session, settings and quit-confirmation adaptations are listed in docs/architecture.md.
 The runtime includes the official LICENSE and package-level notices. The guide
 uses official locale, primitives and theme components, with Shell-owned geometry.
 The companion plugin candidate is recorded in `project-source.lock.json`;

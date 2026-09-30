@@ -52,6 +52,59 @@ test('application quit preserves open set; explicit project close removes only t
   assert.equal(new SessionState(file).list().length, 0);
 });
 
+test('cancelled close and restart keep Host ownership and do not queue a conflicting action', async () => {
+  let stops = 0, inspections = 0;
+  const {workspace, session} = fixture(async () => ({focus() {}, close: async () => {stops++}}));
+  const one = await workspace.open(a); const other = await workspace.open(b);
+  let decision = Promise.withResolvers();
+  workspace.confirm = async request => {inspections++; assert.deepEqual(request.projects, [one]); return decision.promise};
+  const closing = workspace.close(a);
+  assert.equal(workspace.close(a), closing);
+  assert.equal(await workspace.restart(a), false);
+  decision.resolve(false);
+  assert.equal(await closing, false); assert.equal(inspections, 1);
+  decision = Promise.withResolvers();
+  const restarting = workspace.restart(a); decision.resolve(false);
+  assert.equal(await restarting, false);
+  assert.equal(workspace.projects.get(a), one); assert.equal(workspace.projects.get(b), other);
+  assert.equal(session.get(a).phase, 'open'); assert.equal(stops, 0);
+  workspace.confirm = async () => true;
+  assert.equal(await workspace.close(a), true); assert.equal(stops, 1);
+  assert.equal(workspace.projects.get(b), other);
+  await workspace.shutdown();
+});
+
+test('quit awaits an opening project, blocks new opens and cancels without losing the restore set', async () => {
+  const opening = Promise.withResolvers(), inspection = Promise.withResolvers(), decision = Promise.withResolvers();
+  let stops = 0, prepared = 0;
+  const {workspace, session} = fixture(async () => {await opening.promise; return {focus() {}, close: async () => {stops++}}});
+  workspace.confirm = async request => {inspection.resolve(request); return decision.promise};
+  const pendingOpen = workspace.open(a);
+  const quitting = workspace.shutdown({beforeStop: async () => {prepared++}});
+  assert.equal(workspace.shutdown(), quitting);
+  await assert.rejects(workspace.open(b), /closing/);
+  opening.resolve(); const one = await pendingOpen;
+  assert.deepEqual((await inspection.promise).projects, [one]);
+  decision.resolve(false); assert.equal(await quitting, false);
+  assert.equal(stops, 0); assert.equal(prepared, 0); assert.equal(session.get(a).phase, 'open');
+  assert.equal(await workspace.open(a), one);
+  workspace.confirm = async () => true;
+  await workspace.open(b);
+  assert.equal(await workspace.shutdown({beforeStop: async () => {prepared++}}), true);
+  assert.equal(prepared, 1); assert.equal(stops, 2);
+  assert.deepEqual(session.list().map(item => item.path).sort(), [a, b]);
+});
+
+test('a failed confirmation leaves live projects usable instead of marking them failed', async () => {
+  const {workspace, session} = fixture(); const one = await workspace.open(a);
+  workspace.confirm = async () => {throw new Error('Dialog unavailable')};
+  await assert.rejects(workspace.close(a), /Dialog unavailable/);
+  await assert.rejects(workspace.shutdown(), /Dialog unavailable/);
+  assert.equal(workspace.projects.get(a), one); assert.equal(session.get(a).phase, 'open');
+  assert.equal(await workspace.open(a), one);
+  workspace.confirm = async () => true; await workspace.shutdown();
+});
+
 test('one missing project does not prevent restoring another; interrupted startup waits for explicit retry', async () => {
   const {session} = fixture();
   session.update(a, {title: 'Alpha', phase: 'open'}); session.update(b, {title: 'Bravo', phase: 'open'});

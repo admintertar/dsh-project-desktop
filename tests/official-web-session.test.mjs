@@ -113,6 +113,32 @@ test('official IPC owner requires the project main frame and dsh-app origin', ()
   assert.equal(owners.size, 0);
 });
 
+test('closing a Session aborts its in-flight forwarding without cancelling another project', async () => {
+  const partitions = new Map(), requests = [];
+  const electron = {session: {fromPartition(name) {
+    const partition = {protocol: {handle(_name, callback) {partition.handle = callback}, unhandle() {}},
+      webRequest: {onBeforeSendHeaders() {}}};
+    partitions.set(name, partition); return partition;
+  }}};
+  const options = {electron, hostUrl: 'http://127.0.0.1:12345/', cookie: 'owned', webDist: '/web',
+    serveWebDocument: () => new Response('static'),
+    forwardWebRequest: request => new Promise((resolve, reject) => {
+      requests.push({request, resolve});
+      request.signal.addEventListener('abort', () => reject(request.signal.reason), {once: true});
+    })};
+  const a = configureOfficialProjectSession({...options, partitionName: 'persist:a'});
+  const b = configureOfficialProjectSession({...options, partitionName: 'persist:b'});
+  const one = a.partition.handle(new Request('dsh-app://app/api/a'));
+  const two = b.partition.handle(new Request('dsh-app://app/api/b'));
+  a.dispose();
+  assert.equal((await one).status, 410);
+  assert.equal(requests[0].request.signal.aborted, true);
+  assert.equal(requests[1].request.signal.aborted, false);
+  requests[1].resolve(new Response('still running'));
+  assert.equal(await (await two).text(), 'still running');
+  b.dispose();
+});
+
 test('IPC cleanup works after WebContents destruction without erasing a newer owner', () => {
   const owners = createOfficialWindowOwners();
   const window = {webContents: {id: 7}};

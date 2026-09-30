@@ -31,23 +31,26 @@ export function installOfficialProjectIpc(electron, services) {
         for (const channel of handlers.splice(0)) ipc.removeHandler(channel);
         for (const [channel, listener] of listeners.splice(0)) ipc.removeListener(channel, listener);
         registrations.delete(dispose);
-        // 先撤销新请求入口，等已进入官方元数据接口的调用结束，再允许 Host 停止。
+        // 先撤销新请求入口，等元数据请求及主题等单向通知完成，再允许 Host 停止。
         await Promise.allSettled([...pending]);
+      };
+      const track = callback => {
+        const operation = Promise.resolve().then(callback);
+        pending.add(operation);
+        void operation.then(() => pending.delete(operation), () => pending.delete(operation));
+        return operation;
       };
       const handle = (channel, callback) => {
         ipc.handle(channel, (event, ...args) => {
           owners.trusted(event);
-          const operation = Promise.resolve().then(() => callback(...args));
-          pending.add(operation);
-          void operation.then(() => pending.delete(operation), () => pending.delete(operation));
-          return operation;
+          return track(() => callback(...args));
         });
         handlers.push(channel);
       };
       const on = (channel, callback) => {
         const listener = (event, ...args) => {
           try {owners.trusted(event)} catch {return}
-          void Promise.resolve().then(() => callback(...args)).catch(context.onError);
+          void track(() => callback(...args)).catch(context.onError);
         };
         ipc.on(channel, listener); listeners.push([channel, listener]);
       };

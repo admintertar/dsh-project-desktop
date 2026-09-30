@@ -27,6 +27,7 @@
   只接管带有本适配器来源/项目标记的 Home。旧 Stable Home 会被拒绝且保留原字节，等待独立迁移。
 - `web-session.mjs` 复用官方 `web-document.ts` 的静态页面、认证与 HTTP 转发逻辑。
   WebSocket 同时校验项目 Session、WebContents、Host 地址和 Origin；重开前释放旧协议处理器。
+  关闭时取消该 Session 的在途 HTTP 转发；正常关闭导致的取消返回 410，其他错误保持原样，不影响别的项目。
 - `build-official-native.mjs` 原样编译官方 `keyboard.ts`、`directory-picker.ts`、`welcome-backend.ts`、
   `device-info.ts`、`locale.ts`、`browser-guests.ts`、`platform-view.ts` 和 `microphone-permissions.ts`。
   `scoped-electron.mjs` 将单窗口实现的 IPC 注册点改为 `webContents.ipc`，不改官方快捷键/目录选择行为。
@@ -38,6 +39,12 @@
   renderer 启动色可能早于 settings 更新，只有与 Host 已保存偏好一致的通知才能传播，避免重开时覆盖全局选择。
 - 窗口等待官方 boot gate、transport 和加载页退出。启动失败统一清理；Host 停止未确认时保留 Registry
   所有权并允许重试，不能启动第二个 Host。运行中失败回欢迎页，只影响所属项目。
+- `quit-guard.mjs` 复用从官方 `quit-confirmation.ts` 编译的 `DesktopQuitConfirmation`，检查来自真实
+  `DesktopHostProcess.inspectQuit()`。关闭/重启检查单个项目，应用退出汇总所有项目；检查失败按可能有运行任务提示，
+  同时保留其他 Host 已知的计划提醒。只适配品牌、动作与项目范围文案，保留官方按钮顺序、默认键和取消行为。
+  `ProjectWorkspace` 在项目队列内检查，重复动作合并；应用退出先等待已受理的打开/关闭操作，确认前不停止 Host。
+  取消或弹窗失败保留运行状态；确认退出后才取消创建事务、停止所有项目，并保留下次恢复的项目集合。
+  Host 停止前先等待已受理的 IPC 请求与单向主题通知完成，并撤销旧 Session 的 HTTP 转发。
 - 引导页使用 Shell 自有布局常量与 CSS，直接编译固定官方 locale/primitives/theme 和 Project 的资源控件。
   不再加载社区 AdvancedFrame、样式安装器或 window-options。
 
@@ -48,8 +55,10 @@
 
 当前真实平台为 macOS arm64。正式主进程已验证欢迎页创建、两个项目、真实 API Key 状态、快捷键 IPC、
 关闭/重开/重启、共享主题、旧数据拒绝接管和关闭后 owner/协议释放。
+关闭确认另以真实 Jobs 后台任务和显式启用的官方 Schedule 提醒完成原生确认/取消、多项目隔离、应用退出、
+中英文、明暗和键盘验收；Schedule 测试组合不改变默认生产 Profile。
 运行目录是未签名开发产物，Project 插件仍使用已校验的开发工作树；不等于安装包依赖闭包。
-登录后账号页面、真实浏览器会话、麦克风、完整快捷键编辑/物理按键、活跃任务关闭确认、`dsh://open`、
+登录后账号页面、真实浏览器会话、麦克风、完整快捷键编辑/物理按键、`dsh://open`、
 自动更新、用户数据迁移回退、Windows 与 macOS Intel 验收尚未完成。打包命令会明确停止。
 
 ## 旧 Stable 架构（仅供删除审计）

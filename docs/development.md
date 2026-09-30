@@ -30,6 +30,12 @@ start 校验完整官方 payload 和 Shell 构建来源；缺失时明确停止�
 只复制结论 JSON/必要截图到任务 artifacts。测试不填写 API Key、不修改真实 Stable 数据。
 日志可能包含临时 Host 启动 token，不能直接放进任务产物。
 
+`yarn smoke:official-close` 验证运行中任务的关闭确认，需要操作真实原生弹窗：按日志依次取消关闭、取消重启、
+确认重启、取消计划提醒项目关闭、取消应用退出、确认计划提醒项目关闭、确认应用退出。
+可用 Escape 取消、Enter 确认；对话框之间留有输入事件释放时间。整个交互流程最多 10 分钟。
+测试只在 TEMP 的 Profile 中加入 Jobs 测试生产者与固定官方 Schedule 服务，不发送模型请求，不改写 `inspectQuit`。
+成功退出后写 `close-result.json`；启动器要求进程退出码与结果文件同时有效。
+
 当前仅验证 macOS arm64。安装包/CI、签名、自动更新、旧数据迁移与回退尚未接入，
 `package:mac`/`package:win` 会停止并提示此限制。旧 smoke flags 也被拒绝，避免误启动默认用户数据。
 

@@ -59,7 +59,7 @@ English summary: read the companion plugin's shared frontend guidelines and this
 通用规范的语言、主题、键盘、禁用、窄窗口和滚动验收同样适用。涉及原生功能时，必须打开并操作真实官方界面，核对外观、确认、取消与所属项目的实际结果；仅模拟返回值不算完成 UI 复用验收。
 
 - 修改引导窗口：验证鼠标/键盘调整、双击恢复、宽度持久化、紧凑导航、滚动稳定性、加载/失败/重试和关闭后草稿行为，按范围运行 `yarn run smoke:guide`。
-- 修改项目生命周期：运行 `yarn run smoke:official-shell`，验证创建、双项目、原生关闭、重开、重启、失败清理与另一个项目存活。活跃任务关闭确认及旧数据迁移单独验收；不恢复社区 Profile/Recovery 流程。
+- 修改项目生命周期：运行 `yarn run smoke:official-shell`，验证创建、双项目、原生关闭、重开、重启、失败清理与另一个项目存活。运行/计划任务的关闭确认使用 `yarn run smoke:official-close`，验证官方原生弹窗、确认/取消及项目范围；旧数据迁移单独验收，不恢复社区 Profile/Recovery 流程。
 - 修改共享主题：验证多个项目窗口即时同步、重新打开、跟随系统、折叠侧栏和与系统明暗不一致；启动临时主题不覆盖保存值。
 - 源码变更执行 `yarn run check`，其余原生检查按 [开发说明](development.md) 选择；记录真实平台与未覆盖项，不能从 macOS x64 结果推断其他平台验收通过。
 
