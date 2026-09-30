@@ -2,7 +2,7 @@ import {openSync, closeSync, readSync, readdirSync, lstatSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
-import {repository} from '../src/desktop-adapter/paths.mjs';
+import {repository} from '../src/desktop-adapter/official/paths.mjs';
 
 export async function signMacApp(app, identity) {
   if (!app.endsWith('.app') || !identity) throw new Error('Provide a concrete .app and a signing identity (or - for local ad-hoc signing)');

@@ -1,63 +1,34 @@
+/** Run the shipped Shell, Host and plugin after relocation; never uses the user's Home. */
 import assert from 'node:assert/strict';
-import {existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
+import {mkdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
-import {createProjectInDirectory} from '../src/app/project-files.mjs';
-import {productVersion} from '../src/app/product.mjs';
+import {createProjectFile} from '../dist/project-files.mjs';
 
-/** A local installation diagnostic. All fixtures live in a new, launcher-owned temporary directory. */
-export async function verifyInstallation({electron, open, close, workspace, showGuide, userData}) {
-  assert.equal(electron.app.isPackaged, true);
+export async function runOfficialShellSmoke({electron, open, close, workspace, userData, showGuide}) {
   const guide = await showGuide();
-  await guide.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-  const text = await guide.webContents.executeJavaScript('document.body.innerText');
-  assert.match(text, /最近项目|Recent projects/);
-  assert.ok(await guide.webContents.executeJavaScript('Boolean(document.querySelector("[data-check-updates]"))'));
-  const paths = await Promise.all(['First', 'Second'].map(name => {const path = join(userData, name); mkdirSync(path); return createProjectInDirectory(path)}));
-  const [first, second] = await Promise.all(paths.map(open));
-  assert.ok(first && second, 'Packaged projects did not open: ' + JSON.stringify(workspace.failures()));
-  for (const project of [first, second]) assert.ok(['zh', 'en'].includes(project.locale), 'Native locale must be resolved before menu refresh');
-  assert.notEqual(first.host.result.pid, second.host.result.pid);
-  assert.equal(new URL(first.window.webContents.getURL()).searchParams.get('dsh-desktop-version'), productVersion);
-  assert.equal(first.host.result.harnessVersion, '0.1.7-rc.2');
-  for (const [name, project] of [['first', first], ['second', second]]) {
-    const response = await project.host.request('/api/project/snapshot');
-    if (response.status !== 200) {
-      await response.body?.cancel();
-      const html = await (await project.host.request('/')).text();
-      const boot = html.match(/(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u);
-      const entries = boot ? JSON.parse(boot[1]).entries.map(entry => entry.id) : [];
-      const pluginPath = join(project.host.result.profile, '.project-plugin', 'lib', 'index.js');
-      let pluginImport = 'ok';
-      try {await import(pathToFileURL(pluginPath).href)} catch (error) {pluginImport = String(error)}
-      const logDirectory = join(project.host.stateDirectory, 'logs');
-      const hostErrors = existsSync(logDirectory) ? readdirSync(logDirectory).filter(file => file.endsWith('.error.log'))
-        .flatMap(file => readFileSync(join(logDirectory, file), 'utf8').split(/\r?\n/u))
-        .filter(line => /\[E\]|Error|Cannot find|ERR_MODULE/u.test(line)).slice(-12) : [];
-      throw new Error(`Packaged ${name} Project API returned ${response.status}: ${JSON.stringify({
-        projectTools: project.host.result.tools.filter(tool => tool.startsWith('project_')),
-        projectEntry: entries.includes('dsh-plugin-project'),
-        projectClientEntry: entries.includes('dsh-plugin-project/client'),
-        profileName: project.host.result.profileName,
-        pluginImport, hostErrors,
-      })}`);
-    }
-    await response.body?.cancel();
+  assert.match(await guide.webContents.executeJavaScript('document.body.innerText'), /DSH Project/);
+  const projects = [];
+  for (const name of ['Installed Alpha', 'Installed Beta']) {
+    const directory = join(userData, name); mkdirSync(directory);
+    const manifest = createProjectFile(join(directory, name + '.agent-project'));
+    const project = await open(manifest);
+    await project.window.webContents.executeJavaScript('globalThis.__DSH_BOOT_READY__.promise');
+    assert.match(await project.window.webContents.executeJavaScript('document.body.innerText'), new RegExp(name));
+    assert.equal((await project.host.request('/api/project/snapshot')).status, 200);
+    assert.equal(await project.window.webContents.executeJavaScript('window.dshOnboarding.hasApiKey()'), false);
+    projects.push({manifest, project});
   }
-  await first.host.updateShellSettings('locale', {preference: 'zh'}); first.focus();
-  await first.window.webContents.executeJavaScript('new Promise(resolve => setTimeout(resolve, 500))');
-  const fileMenu = electron.Menu.getApplicationMenu().items.find(item => item.label === '文件');
-  assert.ok(fileMenu?.submenu.items.some(item => item.label === '新建项目…'));
-  writeFileSync(join(userData, 'packaged-project.png'), (await first.window.webContents.capturePage()).toPNG());
-  const safe = await workspace.safeMode(paths[0]);
-  assert.equal(safe.host.result.projectSessionVersion, null);
-  const temporary = safe.host.stateDirectory; await workspace.exitSafeMode(paths[0]);
-  assert.equal(existsSync(temporary), false);
-  await workspace.open(paths[0]);
-  await Promise.all(paths.map(path => close(path)));
-  const result = {ok: true, packaged: electron.app.isPackaged, name: electron.app.getName(),
-    appPath: electron.app.getAppPath(), electron: process.versions.electron, platform: process.platform, arch: process.arch, evidence: userData,
-    checks: ['packaged-welcome', 'two-packaged-project-hosts', 'official-renderer-health', 'chinese-native-menu', 'packaged-safe-mode', 'temporary-cleanup', 'normal-reopen']};
-  writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2));
-  console.log('INSTALLATION_CHECK=' + JSON.stringify(result));
+  const [a, b] = projects;
+  assert.notEqual(a.project.host.url, b.project.host.url);
+  assert.notEqual(a.project.window.webContents.session, b.project.window.webContents.session);
+  await close(a.manifest, {showWelcome: false});
+  assert.equal((await b.project.host.request('/api/project/snapshot')).status, 200);
+  const reopened = await open(a.manifest);
+  assert.equal((await reopened.host.request('/api/project/snapshot')).status, 200);
+  for (const {manifest} of projects) await close(manifest, {showWelcome: false});
+  assert.equal(workspace.projects.size, 0);
+  const build = JSON.parse(readFileSync(new URL('../dist/build.json', import.meta.url)));
+  console.log('INSTALLATION_CHECK=' + JSON.stringify({ok: true, packaged: electron.app.isPackaged,
+    platform: process.platform, arch: process.arch, appPath: electron.app.getAppPath(), version: electron.app.getVersion(),
+    officialCommit: build.sourceCommit, projectCommit: build.projectCommit, welcome: true, twoProjects: true, closeIsolation: true, reopen: true}));
 }

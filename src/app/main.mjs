@@ -32,7 +32,7 @@ import {spawn} from 'node:child_process';
 const {app, BrowserWindow, Menu, Tray, nativeImage, dialog, protocol} = electron;
 const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png');
 const trayIcon = join(repository, 'assets/tray', process.platform === 'darwin' ? 'tray-iconTemplate.png' : 'tray-icon-blue.png');
-const retiredModes = ['--native-smoke', '--lifecycle-test', '--profile-recovery-test', '--verify-installation', '--update-test'];
+const retiredModes = ['--native-smoke', '--lifecycle-test', '--profile-recovery-test', '--update-test'];
 if (process.argv.some(arg => retiredModes.includes(arg))) {
   console.error('Retired community test mode; use yarn smoke:official-shell');
   app.exit(1);
@@ -40,12 +40,13 @@ if (process.argv.some(arg => retiredModes.includes(arg))) {
 const closeTesting = process.argv.includes('--official-close-smoke') && !app.isPackaged;
 const accountTesting = process.argv.includes('--official-account-sharing-smoke') && !app.isPackaged;
 const updateTesting = process.argv.includes('--official-update-smoke') && !app.isPackaged;
-const testing = (process.argv.includes('--official-shell-smoke') || closeTesting || accountTesting || updateTesting) && !app.isPackaged;
+const installationCheck = process.argv.includes('--verify-installation');
+const testing = installationCheck || ((process.argv.includes('--official-shell-smoke') || closeTesting || accountTesting || updateTesting) && !app.isPackaged);
 app.setName(productName);
 protocol.registerSchemesAsPrivileged([{scheme: 'dsh-app', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true,
 }}]);
-const userData = resolveUserData({testing, environment: process.env, appData: app.getPath('appData'),
+const userData = resolveUserData({installationCheck, testing, environment: process.env, appData: app.getPath('appData'),
   temporaryDirectory: () => mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))});
 app.setPath('userData', userData);
 app.setAppUserModelId('local.dsh.project.desktop');
@@ -351,7 +352,7 @@ async function run() {
     startupComplete = true;
     deepLinks.ready();
     let timeout;
-    const smoke = updateTesting ? '../../scripts/official-update-smoke-case.mjs'
+    const smoke = installationCheck ? '../../scripts/install-check.mjs' : updateTesting ? '../../scripts/official-update-smoke-case.mjs'
       : accountTesting ? '../../scripts/shared-account-smoke-case.mjs'
       : closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
     try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({

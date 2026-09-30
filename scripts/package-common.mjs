@@ -2,130 +2,115 @@ import {constants, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rea
 import {basename, dirname, isAbsolute, join, relative, resolve, sep} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {repository, runtimePackage, desktopSource, localProjectSource} from '../src/desktop-adapter/paths.mjs';
-import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
-import {verifyRuntimeDependencies} from '../src/desktop-adapter/stable/verify.mjs';
-import {verifyUpstream} from './verify-upstream.mjs';
+import {createRequire} from 'node:module';
+import {build} from 'esbuild';
+import {repository, runtimeDirectory, officialSource, officialPin, projectSource} from '../src/desktop-adapter/official/paths.mjs';
+import {verifyOfficialSource} from './verify-official-source.mjs';
+import {verifyOfficialRuntimePayload} from '../src/desktop-adapter/official/runtime-payload.mjs';
+import {verifyProjectPlugin} from '../src/desktop-adapter/official/profile.mjs';
+import {officialRuntimeTarget} from '../src/desktop-adapter/official/runtime-inputs.mjs';
 import {copyProductionDependencies} from './package-dependencies.mjs';
 
 export const product = 'DSH Project Desktop';
 export const appId = 'local.dsh.project.desktop';
+export const officialRequire = createRequire(join(officialSource, 'apps/desktop/package.json'));
 export const copyOptions = {recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE};
 export function isWithin(root, target) {
   const child = relative(resolve(root), resolve(target));
   return child === '' || (!isAbsolute(child) && child !== '..' && !child.startsWith('..' + sep));
 }
-
-/** Check actual link destinations as well as link text, including chained links. */
-export function auditLinks(directory, {allowAbsolute = false} = {}) {
-  const root = realpathSync(directory);
-  let links = 0;
+export function auditLinks(directory) {
+  const root = realpathSync(directory); let links = 0;
   function visit(folder) {
     for (const entry of readdirSync(folder, {withFileTypes: true})) {
       const path = join(folder, entry.name);
       if (entry.isDirectory()) visit(path);
       else if (entry.isSymbolicLink()) {
         const target = readlinkSync(path);
-        if ((!allowAbsolute && isAbsolute(target)) || !existsSync(path)
-          || !isWithin(directory, resolve(dirname(path), target)) || !isWithin(root, realpathSync(path))) {
-          throw new Error('Non-relocatable packaged link: ' + relative(directory, path));
-        }
+        if (isAbsolute(target) || !existsSync(path) || !isWithin(root, realpathSync(path))) throw new Error('Non-relocatable packaged link: ' + relative(directory, path));
         links++;
       }
     }
   }
-  visit(directory);
-  return links;
+  visit(directory); return links;
 }
 
-export async function preparePackage(platform, arch) {
-  if (platform !== process.platform || (arch !== process.arch && !(platform === 'darwin' && arch === 'universal'))) throw new Error('Packages must be built on the target platform and architecture');
-  if (localProjectSource !== undefined) throw new Error(`Release packaging requires the pinned Project commit; unset DSH_PROJECT_PLUGIN_SOURCE (${localProjectSource})`);
-  verifyUpstream(); verifyRuntimeDependencies();
+/** Assemble only the self-contained official runtime and pinned Project production graph. */
+export async function preparePackage(platform = process.platform, arch = process.arch) {
+  if (platform !== process.platform || arch !== process.arch) throw new Error('Packages require the native target runner');
+  if (process.env.DSH_PROJECT_PLUGIN_SOURCE) throw new Error('Unset DSH_PROJECT_PLUGIN_SOURCE before packaging');
+  verifyOfficialSource(officialSource); verifyProjectPlugin(projectSource);
+  const target = officialRuntimeTarget(platform, arch), runtime = runtimeDirectory();
+  const inventory = verifyOfficialRuntimePayload(runtime, officialPin, target);
+  const pin = JSON.parse(readFileSync(join(repository, 'project-source.lock.json'), 'utf8'));
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], {encoding: 'utf8'}).trim();
+  if (git(projectSource, 'rev-parse', 'HEAD') !== pin.commit || git(projectSource, 'status', '--porcelain')) throw new Error('Project source differs from its release pin');
+  const built = JSON.parse(readFileSync(join(repository, 'dist/build.json'), 'utf8'));
+  if (built.projectLocalSource || built.sourceCommit !== officialPin.commit || built.projectCommit !== pin.commit) throw new Error('Rebuild release assets from fixed sources');
   const manifest = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8'));
-  const electronRoot = dirname(desktopRequire.resolve('electron/package.json'));
-  const electronVersion = JSON.parse(readFileSync(join(electronRoot, 'package.json'), 'utf8')).version;
-  const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: repository, encoding: 'utf8'}).trim();
-  const sourceHasLocalChanges = Boolean(execFileSync('git', ['status', '--porcelain'], {cwd: repository, encoding: 'utf8'}).trim());
-  mkdirSync(join(repository, '.cache'), {recursive: true});
+  const electronVersion = JSON.parse(readFileSync(join(officialSource, 'apps/desktop/node_modules/electron/package.json'), 'utf8')).version;
+  const sourceCommit = git(repository, 'rev-parse', 'HEAD');
+  const sourceHasLocalChanges = Boolean(git(repository, 'status', '--porcelain', '--untracked-files=normal'));
+  if (sourceHasLocalChanges) throw new Error('Release packaging requires a clean source checkout');
   const staging = mkdtempSync(join(repository, '.cache/package-'));
   const appDirectory = join(staging, 'app'); mkdirSync(appDirectory);
-  const payload = join(staging, 'payload'); mkdirSync(payload);
-  for (const name of ['src', 'dist', 'assets', 'upstream.lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
-    cpSync(join(repository, name), join(appDirectory, name), copyOptions);
+  for (const name of ['dist', 'assets', 'official-source.lock.json', 'project-source.lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) cpSync(join(repository, name), join(appDirectory, name), copyOptions);
+  // Keep only the active main-process import closure; historical adapters never ship.
+  const graph = await build({entryPoints: [join(repository, 'src/app/main.mjs')], bundle: true, platform: 'node',
+    format: 'esm', packages: 'external', write: false, metafile: true});
+  for (const input of Object.keys(graph.metafile.inputs)) {
+    const source = resolve(input), name = relative(repository, source);
+    if (!name.startsWith('src' + sep) || !name.endsWith('.mjs')) continue;
+    if (name.includes('desktop-adapter' + sep) && !name.includes('desktop-adapter' + sep + 'official' + sep)) throw new Error('Community module in release graph');
+    mkdirSync(dirname(join(appDirectory, name)), {recursive: true}); cpSync(source, join(appDirectory, name));
   }
+  // Host provider modules use URL-based imports and must preserve their relative locations.
+  cpSync(join(repository, 'src/desktop-adapter/official'), join(appDirectory, 'src/desktop-adapter/official'), copyOptions);
   mkdirSync(join(appDirectory, 'scripts'));
   cpSync(join(repository, 'scripts/install-check.mjs'), join(appDirectory, 'scripts/install-check.mjs'));
   mkdirSync(join(appDirectory, 'THIRD_PARTY_LICENSES'));
-  cpSync(join(repository, '.upstream/harness-guide/LICENSE'), join(appDirectory, 'THIRD_PARTY_LICENSES/Harness.txt'));
-  mkdirSync(join(appDirectory, '.upstream/desktop/dsh-plugin-desktop'), {recursive: true});
-  cpSync(join(desktopSource, 'package.json'), join(appDirectory, '.upstream/desktop/dsh-plugin-desktop/package.json'));
+  cpSync(join(officialSource, 'LICENSE'), join(appDirectory, 'THIRD_PARTY_LICENSES/Harness.txt'));
   writeFileSync(join(appDirectory, 'package.json'), JSON.stringify({name: manifest.name, version: manifest.version,
     description: manifest.description, author: 'DSH Project Desktop contributors', type: 'module', main: manifest.main,
     private: true, license: manifest.license, dependencies: manifest.dependencies}, null, 2));
   mkdirSync(join(appDirectory, 'node_modules'));
-  cpSync(join(repository, 'node_modules/yaml'), join(appDirectory, 'node_modules/yaml'), copyOptions);
-  const runtime = join(repository, '.cache/runtime');
-  const projectModules = join(repository, '.cache/project-dependencies');
-  for (const source of [runtime, projectModules]) auditLinks(source, {allowAbsolute: platform === 'win32'});
-  cpSync(runtime, join(payload, 'runtime'), {...copyOptions, dereference: true, verbatimSymlinks: false,
-    filter: path => basename(path) !== 'node_modules'});
-  const desktopManifest = JSON.parse(readFileSync(join(runtimePackage, 'package.json'), 'utf8'));
-  const projectManifest = JSON.parse(readFileSync(join(runtime, 'dsh-plugin-project/package.json'), 'utf8'));
-  const desktopDependencies = {...desktopManifest.dependencies};
-  // The official Host resolves ajv-formats from Desktop's module URL while
-  // mounting the Profile root. It is installed transitively but omitted from
-  // Desktop's direct manifest, so retain it in the packaged production graph.
-  desktopDependencies['ajv-formats'] = JSON.parse(readFileSync(join(runtimePackage, 'node_modules/ajv-formats/package.json'), 'utf8')).version;
-  // The Profile resolver anchors MCP SDK's converter at Desktop's module URL.
-  // Include the audited Project cache copy in the production dependency walk.
-  desktopDependencies['zod-to-json-schema'] = JSON.parse(readFileSync(join(projectModules, 'zod-to-json-schema/package.json'), 'utf8')).version;
-  // This workspace-only market is intentionally absent from Shell setup. The
-  // supported dshmarket runtime stays in the production graph.
-  delete desktopDependencies['dsh-community-market'];
-  // Plugin peers use the same pinned Desktop graph as their owning Profile.
-  for (const name of Object.keys(projectManifest.peerDependencies ?? {})) {
-    desktopDependencies[name] ??= JSON.parse(readFileSync(desktopRequire.resolve(name + '/package.json'), 'utf8')).version;
+  cpSync(join(repository, 'node_modules/yaml'), join(appDirectory, 'node_modules/yaml'), {...copyOptions, dereference: true, verbatimSymlinks: false});
+  const payload = join(staging, 'payload'); mkdirSync(payload);
+  const packagedRuntime = join(payload, '.cache/official-runtime', target);
+  cpSync(runtime, packagedRuntime, {...copyOptions, filter: path => path !== join(runtime, 'electron')});
+  // The outer Electron app supplies the executable; all runtime resources stay intact.
+  writeFileSync(join(packagedRuntime, 'source.json'), JSON.stringify({...inventory, kind: 'official-packaged-runtime',
+    inventory: inventory.inventory.filter(file => !file.path.startsWith('electron/'))}, null, 2) + '\n');
+  const plugin = join(packagedRuntime, 'dsh/node_modules/dsh-plugin-project'); mkdirSync(plugin);
+  for (const name of ['package.json', 'lib', 'cordis.patch.yml', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) cpSync(join(projectSource, name), join(plugin, name), copyOptions);
+  const pluginManifest = JSON.parse(readFileSync(join(projectSource, 'package.json'), 'utf8'));
+  // Peers resolve to the same official runtime, rather than another copied build workspace.
+  const dependencies = await copyProductionDependencies({manifest: {name: pluginManifest.name, dependencies: pluginManifest.dependencies},
+    modules: join(projectSource, 'node_modules'), scratch: join(staging, 'collect-project'), destination: join(plugin, 'node_modules'), platform});
+  for (const name of Object.keys(pluginManifest.peerDependencies ?? {})) {
+    if (!existsSync(join(packagedRuntime, 'dsh/node_modules', name))) throw new Error('Missing official Project peer: ' + name);
   }
-  const dependencyInventory = {
-    desktop: await copyProductionDependencies({manifest: {...desktopManifest, dependencies: desktopDependencies},
-      modules: join(runtimePackage, 'node_modules'), scratch: join(staging, 'collect-desktop'),
-      destination: join(payload, 'runtime/dsh-plugin-desktop/node_modules'), platform}),
-    project: await copyProductionDependencies({manifest: projectManifest, modules: projectModules,
-      scratch: join(staging, 'collect-project'), destination: join(payload, 'project-dependencies'), platform, flatCache: true}),
-  };
-  // Shell Profile materialization reads this version to choose Electron ABI
-  // rebuild inputs. Electron itself comes from the outer application bundle.
-  const electronMetadata = join(payload, 'runtime/dsh-plugin-desktop/node_modules/electron');
-  mkdirSync(electronMetadata, {recursive: true});
-  cpSync(join(electronRoot, 'package.json'), join(electronMetadata, 'package.json'));
-  if (existsSync(join(electronRoot, 'LICENSE'))) cpSync(join(electronRoot, 'LICENSE'), join(electronMetadata, 'LICENSE'));
   const links = auditLinks(payload);
-  const target = `${platform === 'darwin' ? 'mac' : 'win'}-${arch}`;
-  const output = join(repository, 'release', `${manifest.version}-${target}-${new Date().toISOString().replaceAll(/[:.]/g, '-')}`);
-  mkdirSync(output, {recursive: true});
+  const output = join(repository, 'release', `${manifest.version}-${target}`); mkdirSync(output, {recursive: true});
   const config = {
-    appId, productName: product, electronVersion, electronDist: join(electronRoot, 'dist'),
+    appId, productName: product, electronVersion, electronDist: join(runtime, 'electron'),
     directories: {app: appDirectory, output}, asar: false, npmRebuild: false, nodeGypRebuild: false,
-    files: ['src/**/*.mjs', 'scripts/install-check.mjs', 'dist/**/*', 'assets/**/*', 'upstream.lock.json',
-      'LICENSE', 'THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_LICENSES/*', '.upstream/desktop/dsh-plugin-desktop/package.json'],
-    extraResources: [{from: payload, to: 'app/.cache', filter: ['**/*', '**/.*']}],
+    electronFuses: {runAsNode: true, onlyLoadAppFromAsar: false},
+    files: ['src/**/*.mjs', 'scripts/install-check.mjs', 'dist/**/*', 'assets/**/*', '*-source.lock.json',
+      'LICENSE', 'THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_LICENSES/*'],
+    extraResources: [{from: payload, to: 'app', filter: ['**/*', '**/.*']}],
+    fileAssociations: [{ext: 'agent-project', name: 'Agent Project', role: 'Editor'}],
   };
-  return {manifest, electronVersion, sourceCommit, sourceHasLocalChanges, staging, appDirectory, output, links, config, platform, arch, dependencyInventory};
+  return {manifest, electronVersion, sourceCommit, sourceHasLocalChanges, staging, appDirectory, output, links, config,
+    platform, arch, target, dependencies, officialCommit: officialPin.commit, projectCommit: pin.commit};
 }
-
 export function checksum(file) {
   const sha256 = createHash('sha256').update(readFileSync(file)).digest('hex');
-  writeFileSync(file + '.sha256', `${sha256}  ${basename(file)}\n`);
-  return sha256;
+  writeFileSync(file + '.sha256', `${sha256}  ${basename(file)}\n`); return sha256;
 }
-
 export function recordPackage(prepared, details) {
-  const {output, electronVersion, sourceCommit, sourceHasLocalChanges, links, platform, arch, dependencyInventory} = prepared;
-  const result = {platform, arch, electronVersion, sourceCommit, sourceHasLocalChanges, links, dependencyInventory, ...details};
+  const {output, electronVersion, sourceCommit, sourceHasLocalChanges, platform, arch, target, officialCommit, projectCommit, dependencies} = prepared;
+  const result = {platform, arch, target, electronVersion, sourceCommit, sourceHasLocalChanges, officialCommit, projectCommit, dependencies, ...details};
   writeFileSync(join(output, 'package-result.json'), JSON.stringify(result, null, 2) + '\n');
-  mkdirSync(join(repository, '.local'), {recursive: true});
-  writeFileSync(join(repository, '.local/last-package.json'), JSON.stringify(result, null, 2) + '\n');
-  verifyUpstream(); console.log(JSON.stringify(result, null, 2));
-  return result;
+  console.log(JSON.stringify(result, null, 2)); return result;
 }

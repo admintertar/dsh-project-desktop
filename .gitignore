@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 # Yarn 4 keeps its resolution state here; only the lockfile is versioned.
 .yarn/*
 !.yarn/patches

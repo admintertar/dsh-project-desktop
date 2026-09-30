@@ -124,9 +124,9 @@ Windows 官方 preload 的 mandatory overlay 在开发无策略时允许 status 
 关闭/重开/重启、共享主题、旧数据拒绝接管和关闭后 owner/协议释放。
 关闭确认另以真实 Jobs 后台任务和显式启用的官方 Schedule 提醒完成原生确认/取消、多项目隔离、应用退出、
 中英文、明暗和键盘验收；Schedule 测试组合不改变默认生产 Profile。
-运行目录是未签名开发产物，Project 插件仍使用已校验的开发工作树；不等于安装包依赖闭包。
+开发运行目录保持未签名。0.2.0 打包阶段会校验并嵌入官方运行时与固定插件的生产依赖闭包，见本文末尾发行边界。
 登录后账号页面、真实浏览器会话、麦克风、完整快捷键编辑/物理按键、`dsh://open`、
-更新安装包的真实安装交接、用户数据迁移回退、Windows 与 macOS Intel 验收尚未完成。打包命令会明确停止。
+用户数据迁移回退仍未实现。Windows 与 macOS Intel 安装产物必须由对应 CI 原生任务验证，具体发行结果以该版本 CI 为准。
 
 ## 旧 Stable 架构（仅供删除审计）
 
@@ -293,3 +293,9 @@ macOS 下载后打开 Universal DMG，用户替换应用；Windows 确认安装�
 显式选择配套的 Desktop/Harness 版本，更新锁文件，在独立分支运行源码完整性、依赖版本、双 Host 与图形验收。验证通过才改变开发/发行基线。保留上一个锁定组合，不自动追踪最新版本。
 
 不通过复制整个官方运行时大文件、打补丁或修改私有字段规避边界。确实需要拥有的窗口或产品逻辑写在 Shell 内；必要私有模块访问留在清单中，升级时逐项审查。
+
+## 0.2.0 官方发行边界
+
+构建与发布工作流完全使用 DeepSeek 官方 `apps/desktop`，不再检出社区 Desktop。运行时沿用官方核心 tarball、过滤、描述清单、native/Office smoke；壳复用固定官方 `electron-builder`，仅适配独立主进程、品牌、自有插件、GitHub 发行和未签名安装包。插件位于已打包官方 `dsh/node_modules/dsh-plugin-project`，与其官方 peers 在同一运行时，生产依赖通过官方 builder collector 单独收集。源码路径配置文件不进入安装包。
+
+原生目标为 mac-arm64、mac-x64、win-x64，每个目标必须通过搬移安装验收。macOS 无 Developer ID，因此保留本项目的 ad-hoc 签名；Windows NSIS 沿用本项目安装行为，不接官方 COS、签名账户或发布身份。v2 自有更新清单包含两种 macOS 架构，更新器保留 v1 读取能力。

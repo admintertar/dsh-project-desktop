@@ -1,88 +1,37 @@
-# dsh-project-desktop
+# DSH Project Desktop
 
 English · [简体中文](README.md)
 
-An independent AI development desktop for projects spanning multiple repositories. It retains DeepSeek Harness chat, agents and foundational UI while owning the application entry point, project windows and recovery experience.
+An independent AI desktop for multi-repository projects. The Shell owns welcome, project creation/opening/switching, windows and menus, and loads the official DeepSeek UI. The [Project plugin](https://github.com/admintertar/dsh-plugin-project) provides resources, tasks, memory, skills, MCP and project workspaces.
 
-**No DSH Desktop fork is maintained.** Official Desktop and Harness sources are pinned and unmodified; integration is confined to `src/desktop-adapter/`. The companion **dsh-plugin-project** owns resources, tasks, memory, skills and MCP features within each project.
+## Current version
 
+Shell **0.2.0 Stable**, bundling official DeepSeek Harness/Desktop **0.2.0-rc.2**. [official-source.lock.json](official-source.lock.json) and [project-source.lock.json](project-source.lock.json) pin the sources. No Anywhere Labs community Desktop dependency or modified official sources.
 
-> **Current branch (direct official migration):** setup/build/start now use DeepSeek's official Desktop/Harness **0.2.0-rc.2**.
-> The Shell owns welcome, project creation/switching, menus and multiple windows; Project owns in-window project pages.
-> Community Profile/Recovery/Safe Mode modules are retired. See [current development commands](docs/development.md).
-> The feature/release description below documents published 0.1.11; packaging, updates and Stable data migration remain pending.
+- Projects have separate windows, Hosts, Profiles, model API keys and browser partitions.
+- DeepSeek account sign-in and theme preference are shared across project windows.
+- Updates reuse the official sidebar indicator and dialog with our own installers.
+- File → Close Page preserves official contextual behavior; Project → Close Current Project closes that project's window and Host.
 
-## Features
+## Installation
 
-- **Project startup:** restore the projects left open at exit; otherwise show a welcome screen with recent-project search, creation and opening.
-- **Project creation:** choose a composition, initialize the project and independent resource Git repositories, link existing directories or clone asynchronously with authentication UI.
-- **Window isolation:** one Electron main process with separate renderers, Hosts, Profiles, runtime data and browser partitions for each project.
-- **Multiple Profiles per project:** each project owns a DSH Home. Use the official windows under **Project Tools → Profiles…** to create or switch environments. Selection stays local; switching restarts only that project.
-- **Recovery and safe mode:** handle project failures, configuration checkpoints, dependency rebuilding and temporary safe mode without stopping other projects.
-- **Desktop integration:** native file menus, window restoration, notifications, diagnostics, shared light/dark preference and Chinese/English UI.
+Download from [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest): macOS arm64 (Apple Silicon) and x64 (Intel) DMGs, and Windows x64 installer/portable ZIP. macOS uses ad-hoc signing without notarization; Windows is unsigned.
 
-## Compatibility and status
+**Install manually when upgrading from 0.1.x. Legacy community Stable data migration is not available; this release preserves and rejects legacy Homes.** Retain the old application and data backup if you need previous conversations, and wait for migration tooling. Application identity and the default data directory are retained. See [0.2.0 release notes](docs/releases/0.2.0.md).
 
-Early development; only the `stable` channel is supported: Desktop **2.0.15** and Harness **0.1.7-rc.2**. The plugin revision is pinned in [upstream.lock.json](upstream.lock.json). Stable is a release channel, not a long-term API guarantee.
+## Development and CI
 
-The `codex/direct-official-desktop` branch is migrating to DeepSeek's official Desktop / Harness **0.2.0-rc.2**. The formal launch and installer paths still use the Stable runtime above. See [development notes](docs/development.md) and the project task for migration commands and status.
-
-The current local native acceptance baseline is **macOS x64**. GitHub Actions produces one macOS Universal DMG for Intel and Apple Silicon, plus Windows x64 installers. The same DMG is launched on both Mac architectures; acceptance depends on each job's result. Background checks use our own Releases; installer downloads require confirmation and checksum verification. Linux packages, formally signed releases and silent installation are not provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
-
-## Development setup
-
-Requires Node.js `^22.19.0 || >=24.0.0`, Git, tar and Corepack. Native dependencies may require platform build tools. Place the two repositories alongside the official source caches:
-
-```text
-workspace/
-├── dsh-plugin-project/
-├── dsh-project-desktop/
-├── dsh-desktop-source/          # Official source cache
-└── deepseek-harness-source/     # Official source cache
-```
-
-First complete `yarn install --immutable` and setup in the plugin repository as described in its README. Source caches must contain the pinned commits; no fork maintenance is needed. See [development instructions](docs/development.md) for official dependency installation and Electron preparation.
-
-From this repository, install development tools and import pinned sources and matching dependencies:
+Use Node 24, official pnpm locks and this project's Yarn locks. See [development notes](docs/development.md).
 
 ```sh
-yarn install --immutable
-yarn run setup -- \
-  --desktop-source ../dsh-desktop-source \
-  --harness-source ../deepseek-harness-source \
-  --project-source ../dsh-plugin-project \
-  --desktop-dependencies ../dsh-desktop-source/dsh-plugin-desktop/node_modules \
-  --project-dependencies ../dsh-plugin-project/node_modules
-yarn run check
-yarn start
+yarn check
+yarn smoke:official-shell
+yarn package:mac # native macOS
+yarn package:win # native Windows x64
 ```
 
-Setup exports committed objects, checks tree hashes and versions, and copies independent dependencies. `.upstream/` stays unchanged; build products go to `.cache/` and `dist/`. The runtime does not link back to development repositories. Open an existing project with `yarn start -- /path/to/example.agent-project`. Configure model providers in project settings; automated checks do not call models.
+[Official Desktop CI and Release](.github/workflows/package.yml) checks source identity, builds, window lifecycle and relocated packages on three native runners. A `v*` tag matching package.json publishes only after all targets pass. Manual runs may build selected platforms. See [packaging notes](docs/packaging.md).
 
-## Project data
+## License
 
-The root Git repository stores the project definition, memory, tasks and shared configuration. Each resource Git repository owns its code. `memory/` lives at the project root; `.agent-project/` stores program data, sharing portable records while ignoring machine-local bindings and temporary journals precisely. Project-level Git remotes and resource remotes are separate.
-
-See [project directories and files](docs/project-directory-structure.md). Application runtime data, sessions and model configuration live under application userData, outside project source.
-
-## Checks and packaging
-
-`yarn run check` covers application logic, source integrity, building, recovery, safe mode, project creation and real dual-Host smoke tests. Separate `smoke:native`, `smoke:profiles`, `smoke:resources` and `smoke:lifecycle` checks require a graphical session and are not part of headless checks. `smoke:profiles` exercises the official Profile windows, Recovery Assistant and per-project recovery isolation.
-
-```sh
-yarn run package:mac
-# On Windows x64:
-yarn run package:win
-```
-
-Download installers from [GitHub Releases](https://github.com/admintertar/dsh-project-desktop/releases/latest). Local packages are written to `release/`. In Actions → **Package Desktop** → **Run workflow**, select `all`, `mac` or `win`; select `all` with `publish` enabled to publish after verification. Pushing a `v*` tag matching `package.json` automatically builds and publishes. Replacing a release requires the explicit `replace_existing` input. macOS uses ad-hoc signing without notarization; Windows builds are unsigned. Welcome, the macOS application-name menu and the tray menu share application-level update checks using the Shell version. Settings has no added version label or update popover. See [packaging notes](docs/packaging.md) for verification and limitations.
-
-## Architecture and rights
-
-Update checks read the static `update.json` release asset and verify installer size and SHA-256 without anonymous GitHub API calls or user tokens. Same-version republication requires a one-time manual reinstall.
-
-See [architecture](docs/architecture.md) for integration boundaries and the inventory of pinned private upstream interfaces. Upgrades must validate Desktop, Harness and plugin revisions together; the application does not follow latest automatically.
-
-UI work must follow the [Shell frontend guidelines](docs/frontend-guidelines.md) (detailed requirements in Chinese) and the linked shared rules, including complete official UI and workflow reuse.
-
-Original code is currently **publicly readable with all other rights reserved; no open-source license is granted**. See [LICENSE](LICENSE). Third-party material retains its original terms in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). `private: true` only prevents accidental npm publication.
+Independently maintained; not an official DeepSeek distribution. Our code is publicly readable with all other rights reserved; no open-source license is granted. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

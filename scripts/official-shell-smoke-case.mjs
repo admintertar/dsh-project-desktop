@@ -94,7 +94,7 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
     project.window.reload();
     await until(() => project.window.webContents.executeJavaScript('document.body.innerText'),
       text => text.includes(name) && /项目模式|Project mode/.test(text), 'Reload official shortcut definitions');
-    assert.match(api.device, /platform=darwin/);
+    assert.ok(api.device.includes('platform=' + process.platform));
     assert.equal(api.boot, true);
     const response = await project.host.request('/api/project/snapshot');
     assert.equal(response.status, 200);

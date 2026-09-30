@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
-import {repository} from '../src/desktop-adapter/paths.mjs';
+import {repository} from '../src/desktop-adapter/official/paths.mjs';
 import {verifyPackagedLaunch} from './verify-packaged-launch.mjs';
 
 export async function verifyMacPackage(app) {
@@ -16,19 +16,19 @@ export async function verifyMacPackage(app) {
   for (const asset of assets) assert.deepEqual(readFileSync(join(relocated, 'Contents/Resources/app/assets', asset)),
     readFileSync(join(repository, 'assets', asset)), `Packaged artwork differs: ${asset}`);
   const executable = join(relocated, 'Contents/MacOS/DSH Project Desktop');
-  const universalExecutables = [executable,
+  const nativeExecutables = [executable,
     join(relocated, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework')];
   for (const name of readdirSync(join(relocated, 'Contents/Frameworks')).filter(name => name.endsWith('.app'))) {
-    universalExecutables.push(join(relocated, 'Contents/Frameworks', name, 'Contents/MacOS', name.slice(0, -4)));
+    nativeExecutables.push(join(relocated, 'Contents/Frameworks', name, 'Contents/MacOS', name.slice(0, -4)));
   }
-  for (const file of universalExecutables) execFileSync('lipo', [file, '-verify_arch', 'x86_64', 'arm64']);
+  for (const file of nativeExecutables) execFileSync('lipo', [file, '-verify_arch', process.arch === 'arm64' ? 'arm64' : 'x86_64']);
   const result = await verifyPackagedLaunch(executable, root);
   execFileSync('codesign', ['--verify', '--deep', '--strict', relocated], {stdio: 'inherit'});
   const info = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', join(relocated, 'Contents/Info.plist')], {encoding: 'utf8'}));
   if (info.CFBundleName !== 'DSH Project Desktop') throw new Error('App bundle still has the development runner identity');
   assert.deepEqual(readFileSync(join(relocated, 'Contents/Resources', info.CFBundleIconFile)),
     readFileSync(join(repository, 'assets/app-icon.icns')), 'Bundle icon must use the product artwork');
-  return {...result, bundleIdentifier: info.CFBundleIdentifier, universalExecutables: universalExecutables.length,
+  return {...result, bundleIdentifier: info.CFBundleIdentifier, nativeExecutables: nativeExecutables.length,
     signatureIntactAfterLaunch: true, artworkVerified: true, relocated};
 }
 

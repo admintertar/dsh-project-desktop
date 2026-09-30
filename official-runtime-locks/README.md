@@ -10,12 +10,12 @@ then uses `--prod --frozen-lockfile --trust-lockfile` in a new install directory
 A missing or mismatched lock fails before dependency installation; it never
 silently resolves a newer graph.
 
-The initial `mac-arm64` lock was generated with official
-`createRuntimeProjectMetadata` and pnpm 11.7.0 `install --lockfile-only`, then
-checked with official `verifyDesktopCoreLockfile`. Other targets still require
-lock generation and native verification before being added here. Updates must
-regenerate the core tarballs and target lock together, review their diff, and
-rerun the native payload/Host/Office and relocation checks.
+The lock covers all supported optional native packages (Darwin arm64/x64 and
+Windows x64). Each target metadata binds that same reviewed dependency graph;
+the release matrix must prove frozen installation and official payload/Host/Office
+checks on its native runner before that target can be published. No target may
+resolve a replacement lock during CI.
 
-This is an unsigned development runtime input. It does not change the released
-Stable application, its updater, or the formal Shell build/packaging entry.
+Runtime preparation is unsigned. Packaging independently verifies source identity,
+collects the pinned Project plugin, applies product branding and local ad-hoc
+macOS signing, and launches the relocated application before publication.

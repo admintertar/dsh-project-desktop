@@ -1,311 +1,51 @@
-# Development / 开发准备
+# 官方 Desktop 开发 / Official Desktop development
 
-## 当前分支：直接使用 DeepSeek 官方 Desktop
+当前运行、构建、打包和 CI 仅使用固定的 DeepSeek 官方 `deepseek-harness/apps/desktop` 及自有 Project 插件。历史社区源码和 `upstream.lock.json` 只作为归档，不用于安装或构建。
 
-以下命令用于已完成官方 `pnpm install --frozen-lockfile`、`pnpm run build:official` 的固定官方工作树。
-Node 使用 `^22.19.0 || >=24.0.0`，配套 Project 仓库也需要已安装开发依赖。
+## 准备
 
-```sh
-yarn setup -- --official-source ../deepseek-harness-official-021 --project-source ../dsh-plugin-project
-# 尚未准备运行 payload 时执行这两个命令：
-yarn prepare:official-package-set -- ../deepseek-harness-official-021
-yarn prepare:official-runtime -- ../deepseek-harness-official-021
-
-yarn check
-yarn smoke:official-shell
-yarn smoke:official-account-sharing
-yarn smoke:official-updates
-DSH_PROJECT_DESKTOP_USER_DATA=/private/tmp/dsh-official-development yarn start
-```
-
-setup 校验两个来源并调用插件自己的 setup/build，把本机路径存入忽略目录
-`.cache/official-shell-inputs.json`；它不会读取旧 `upstream.lock.json`，不复制社区缓存，
-不修改任何运行中的 Profile。Project 候选 pin 仅用于此开发分支，尚未作为发布/CI pin 推送。
-本地修改插件时可继续用 `DSH_PROJECT_PLUGIN_SOURCE`，先在插件仓库 build，再在 Shell build；
-默认路径则要求插件工作树干净且 HEAD 与候选 pin 相同。
-
-start 校验完整官方 payload 和 Shell 构建来源；缺失时明确停止，没有社区 fallback。
-`yarn check` 包含官方 Shell build、现行单测和项目文件保护检查；不再运行社区专属恢复/安全模式/打包测试。
-那些断言保存为 `tests/*.legacy.mjs`，见 `tests/LEGACY.md`。
-
-`smoke:official-shell` 从正式 main 启动，临时 userData 写到系统 TEMP，结果和页面截图保存在日志指示的目录。
-只复制结论 JSON/必要截图到任务 artifacts。测试不填写 API Key、不修改真实 Stable 数据。
-日志可能包含临时 Host 启动 token，不能直接放进任务产物。
-
-`yarn smoke:official-close` 验证运行中任务的关闭确认，需要操作真实原生弹窗：按日志依次取消关闭、取消重启、
-确认重启、取消计划提醒项目关闭、取消应用退出、确认计划提醒项目关闭、确认应用退出。
-可用 Escape 取消、Enter 确认；对话框之间留有输入事件释放时间。整个交互流程最多 10 分钟。
-测试只在 TEMP 的 Profile 中加入 Jobs 测试生产者与固定官方 Schedule 服务，不发送模型请求，不改写 `inspectQuit`。
-成功退出后写 `close-result.json`；启动器要求进程退出码与结果文件同时有效。
-
-当前仅验证 macOS arm64。安装包/CI、签名、自动更新、旧数据迁移与回退尚未接入，
-`package:mac`/`package:win` 会停止并提示此限制。旧 smoke flags 也被拒绝，避免误启动默认用户数据。
-
-## 以下为历史阶段记录，不能作为当前构建命令
-
-
-## Official 0.2.0-rc.2 migration work / 官方 0.2.0-rc.2 迁移开发
-
-The commands below this section still describe the released `0.1.11` Stable
-build. On the `codex/direct-official-desktop` branch, the new official source
-bridge can be prepared without changing that installed application or its
-data. Use Node 22.19+ and the exact commit in `official-source.lock.json`:
+推荐 Node 24、Git、Corepack 与平台编译工具；Windows 使用原生 PowerShell，启用 Git longpaths，关闭 autocrlf。先按 `official-source.lock.json` 检出官方 tag，确认 commit 一致，保留该 tag 引用：
 
 ```sh
 cd ../deepseek-harness
-pnpm install --frozen-lockfile
-pnpm run build:official
+corepack pnpm install --frozen-lockfile
 cd ../dsh-project-desktop
-yarn run prepare:official-development -- ../deepseek-harness
-```
-
-`scripts/verify-official-source.mjs` checks HEAD, release tag, Desktop tree,
-dependency lock and clean tracked source. `src/desktop-adapter/official/build-inputs.mjs`
-checks official Desktop, Host, CLI and Web package identities and built outputs.
-The command stages the official preload, Web dist, license and a compiled copy
-of the official `web-document.ts` in ignored `.cache/official-development/`.
-`inputs.json` records the source pin, live Host/CLI paths and SHA-256 of every
-staged file. The official Host and pnpm dependencies still run from the source
-workspace. This directory is for development verification, not a relocatable
-installation package. The two Host and two Electron window probes consume
-these mapped inputs; the formal Shell `build`, `start`, CI and packaging paths
-still use the previous Stable runtime until their official adapters are ready.
-
-To prepare the official first-party package set used by Desktop's production
-runtime, run `yarn run prepare:official-package-set -- ../deepseek-harness` after
-the pinned checkout has installed its pnpm lock. This command runs the official
-`build:official`, `release:pack` (DSH and vendor), private Desktop Host pack,
-native entry pack and `prepare-package-set.ts` stages. The output in ignored
-`.cache/official-package-set/` contains `desktop-packages.json`, its selected
-tarballs and `source.json` with the exact source pin and descriptor SHA-256.
-The official `verifyDesktopCorePackageSet` checks tarball sizes and SHA-512;
-the preparation command also checks the source pin and descriptor before
-returning the set.
-The set can be copied between directories, but it is only the first-party
-package closure. External npm dependencies, native binaries and the primary
-runtime are assembled in the next preparation stage described below.
-
-The migration now also has an unsigned native runtime preparation command:
-
-```sh
-yarn run prepare:official-runtime -- ../deepseek-harness
-# Reuse resources already prepared by the official prepare:runtime stage:
-yarn run prepare:official-runtime -- ../deepseek-harness --reuse-resources
-```
-
-Only `mac-arm64` currently has a reviewed production dependency lock in
-`official-runtime-locks/`; another target fails before downloading resources.
-The command uses official `prepare:runtime`, then reuses the complete package
-metadata, file filtering, manifest normalization, inventory and native smoke
-helpers from `prepare-dsh.ts`. Its development adaptation omits Developer ID
-signing and installs the committed lock into a fresh temporary directory.
-External dependency versions, tarball hashes, Electron's Node version and pnpm
-version must match the target lock. Build logs remain in ignored
-`.cache/official-runtime-logs/` and may contain temporary Host authentication URLs.
-
-`.cache/official-runtime/mac-arm64/` contains Electron, Host/CLI production
-packages, Web/preload resources, pnpm, Node, Python and Office resources. The
-official payload/Host/Office checks run before and after relocation. Its source
-manifest records every shipped file's hash and permissions plus the 14 internal
-Electron framework links; links back to the workspace are rejected. A probe can
-load it with:
-
-```sh
-node --import ../deepseek-harness/node_modules/tsx/dist/loader.mjs \
-  scripts/probe-official-electron-window.mjs ../deepseek-harness --two \
-  --plugin ../dsh-plugin-project --runtime .cache/official-runtime/mac-arm64
-```
-
-The probe controller still imports verified official source helpers, and its
-optional Project plugin is still a local development link. The prepared Host,
-Electron and window resources use the copied payload. Formal Shell startup,
-data migration, CI, installers and other native targets remain pending.
-
-The window probe also destroys and reopens window A in the same persistent
-Session, verifies that B stays usable, and checks complete protocol/IPC cleanup.
-It keeps the Host running during this check; Host restart and the formal Shell
-close confirmation remain separate acceptance gates.
-
-本节以下仍是已发布 `0.1.11` 的构建步骤。迁移分支的新命令只准备官方开发输入，
-不会修改已安装应用或用户数据。默认开发探针的 Host 和依赖链接本机官方工作区；
-新增官方核心 tarball 集合与 macOS arm64 未签名运行目录已通过搬移验证；正式
-Shell 主进程、插件发行打包、其他平台和旧数据迁移仍需接入。
-
-The shell imports immutable source snapshots and independent dependency caches.
-It does not require a private repository or a fork. Commands below use sibling
-directories as shown in the README. On macOS, install Xcode Command Line Tools
-for native module builds. Keep the Node version within package.json engines.
-
-壳读取固定源码和独立依赖，不要求私有仓库或 fork。以下目录均为 README 中的同级路径。
-macOS 原生模块需要 Xcode Command Line Tools；Node 版本应符合 package.json。
-
-Before UI work, read the required [Shell frontend guidelines](frontend-guidelines.md)
-and the shared component guidelines linked there. 修改界面前，必须阅读该前端规范及其引用的通用组件规则。
-
-## 1. Official source and dependencies / 官方源码与依赖
-
-Run from the parent workspace directory / 在这几个仓库的父目录执行：
-
-```sh
-git clone https://github.com/anywhere-labs/dsh-desktop.git dsh-desktop-source
-git -C dsh-desktop-source checkout --detach 08f179499c155f6653eb9ca25bab3d4453bd89d5
-git clone --filter=blob:none --no-checkout https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness-source
-cd dsh-desktop-source
 corepack yarn install --immutable
+cd ../dsh-plugin-project
+corepack yarn install --immutable
+cd ../dsh-project-desktop
+yarn prepare:official-package-set ../deepseek-harness
+yarn setup --official-source ../deepseek-harness --project-source ../dsh-plugin-project
+yarn prepare:official-runtime ../deepseek-harness
+yarn check
 ```
 
-Run Corepack from inside the official Desktop directory so it selects that
-repository's pinned Yarn version. Its unmodified lockfile controls runtime
-archives, upstream dependency patches and native packages. The official
-workspace installs multiple channels; the shell imports only stable. No
-official application build or launch is needed.
+`setup` 校验并构建 pin 中的插件。插件开发时可用 `DSH_PROJECT_PLUGIN_SOURCE=../dsh-plugin-project yarn build` 显式选择本地工作树；打包拒绝该开关和含本地来源标记的产物。官方源码必须干净，commit、Desktop tree、tag 与依赖锁 blob 均校验。
 
-必须在官方 Desktop 目录内运行 Corepack，才能选中其固定 Yarn 版本。官方锁文件管理
-运行时归档、依赖补丁和原生包。官方工作区可能安装多个通道，但壳只导入 stable；
-无需构建或启动官方桌面应用。
-
-For native launch and packaging, prepare the official Electron/native dependencies
-before copying the cache / 原生启动及打包前，先准备官方 Electron 和原生依赖：
+## 启动与验证
 
 ```sh
-cd dsh-plugin-desktop
-node node_modules/electron/install.js
-corepack yarn prepare:electron-native
+DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-development yarn start /path/to/Project.agent-project
+yarn smoke:official-shell
+yarn smoke:official-account-sharing
+yarn smoke:official-updates
 ```
 
-Downloads use the official package sources and may need network access. Existing
-verified caches may be supplied instead. The root source checkout is a disposable
-cache; no ongoing fork maintenance is involved.
+Windows 的环境变量用 `$env:DSH_PROJECT_DESKTOP_USER_DATA = ...` 设置。自定义 userData 用于开发隔离；不要改运行中的 Profile。临时测试数据放系统 TEMP，不进入任务 artifacts。`smoke:official-close` 需要操作真实运行任务的关闭确认弹窗，不能放进无人值守流水线冒充自动验证。
 
-## 2. Companion plugin / 配套插件
+源码改动执行 `yarn check`（构建、单测、项目文件检查）。UI/原生交互另行在真实窗口验证，不能用一个平台结果代替另一个。插件源码改动在插件仓库执行 `yarn check`。
 
-In `dsh-plugin-project`, follow its README: `yarn install --immutable`, setup from the official
-Desktop source, then `yarn run check`. The plugin Git repository must contain the
-exact `project.commit` recorded in this shell's `upstream.lock.json`. A source ZIP
-without that Git object cannot serve as the setup source. New plugin work must
-be committed and its commit/tree adopted explicitly; dirty files are not exported.
+## CI 与发行
 
-在插件目录按其 README 准备依赖并检查。壳需要锁文件中的插件 Git 提交；只有源码 ZIP
-不够。插件修改需要提交后显式更新壳的 commit/tree，不能通过修改 `.upstream/project/`
-替代升级。两个新仓库保留各自独立历史。
-
-### Local plugin source (development only) / 本地插件源码（仅开发）
-
-`DSH_PROJECT_PLUGIN_SOURCE=/path/to/dsh-plugin-project` compiles the companion
-plugin from that local working tree instead of the pinned snapshot, so
-uncommitted UI edits reach a development shell without committing, updating the
-lock or re-exporting `.upstream/project`. The pinned tree check becomes a
-repository identity check plus a warning, and release packaging refuses to run
-while the variable is set. Rebuild after every edit; the shell then needs a page
-reload, or a restart when it still serves the cached bundle:
+统一构建 workflow 为 `.github/workflows/package.yml`，名称 **Official Desktop CI and Release**。PR 和主分支构建三个原生目标；标签或显式 dispatch 才发布。Windows 使用 pwsh。Node 24、官方 pnpm frozen 和 Shell/插件 Yarn immutable 安装，目标必须通过官方运行时、Shell/插件检查、真实 Electron 与搬移安装验收。
 
 ```sh
-DSH_PROJECT_PLUGIN_SOURCE=../dsh-plugin-project yarn run build
-DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start -- /path/to/project
+yarn package:mac # native arm64 or x64 Mac
+yarn package:win # native Windows x64
 ```
 
-`DSH_PROJECT_PLUGIN_SOURCE=...` 让壳直接从本地工作区编译配套插件，未提交的界面改动不再需要提交、更新锁文件或重新导出 `.upstream/project`。固定树校验改为仓库身份校验并打印警告；设置该变量时打包会直接拒绝。每次改动后重新构建，然后刷新壳页面（若仍加载旧 bundle 则重启壳）。
+打包必须使用干净工作树和固定插件来源。产物与校验记录位于 `release/<version>-<target>`。流程与安装限制见 [packaging.md](packaging.md)、[0.2.0 release notes](releases/0.2.0.md)。
 
-## 3. Shell / 桌面壳
+旧社区 Stable Home 会保留并拒绝接管。迁移与回退仍需后续实现；当前发行不声明旧数据兼容。
 
-Run the `yarn install --immutable`, `yarn run setup` and `yarn run check` commands in the README.
-Setup copies dependencies into `.cache/`, audits their links and verifies source
-trees. The exported `.upstream/` source is never modified by the build. Start
-with `yarn start` only after the checks complete.
-
-An installed copy owns the default application data directory and its
-single-instance lock, so starting another build there quits immediately. Run a
-development build beside it with an isolated directory:
-
-```sh
-DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start
-```
-
-The override applies to normal launches only; test modes keep the directory their
-harness supplies through `DSH_PROJECT_DESKTOP_SMOKE_DATA`. Everything the shell
-persists — recent projects, window sessions, theme, per-project DSH homes and
-Chromium partitions — then lives under the isolated directory, so deleting it
-resets the build without touching the installed copy.
-
-已安装的副本占用默认应用数据目录和单实例锁，在默认位置启动第二个构建会立即退出。
-用上面的环境变量指定独立目录即可与其并行运行；该覆盖只作用于正常启动，测试模式仍
-使用 `DSH_PROJECT_DESKTOP_SMOKE_DATA` 指定的目录。
-
-If Electron was downloaded after setup, import just its matching binary with:
-
-```sh
-yarn run setup:electron -- ../dsh-desktop-source/dsh-plugin-desktop/node_modules/electron
-```
-
-The import refuses an already prepared destination. Do not overwrite an active
-runtime or rebuild dependencies used by running windows. For an upstream upgrade,
-use a separate checkout/cache and rerun acceptance before adopting the lock.
-
-### Startup and project-open timing / 启动与打开项目耗时
-
-每次启动都会写 `<userData>/boot.log`（`DSH_PROJECT_DESKTOP_USER_DATA` 生效时就在该目录下），
-不需要事先打开任何开关：`boot` 段是一次启动，`project/open:<项目>` 段是一次打开，
-Host 进程内部的阶段（首次 Profile 准备的 pnpm 依赖实体化、官方插件树、渲染进程注册）也追加在
-同一段里。每行是 `+该段开始以来的偏移` + `该阶段自己的耗时`，单阶段 ≥ 1 秒会带 `[SLOW >1000ms]`，
-段落结束时给出 `total` 与最慢阶段；文件超过 `DSH_PROJECT_BOOT_LOG_BYTES`（默认 256 KiB）时按半量
-截断，只保留最新记录。官方 `boot()` 内部另拆成模块解析、日志 sink、Loader 装载与三处装配阶段
-（`official host modules resolved` … `official cmdline provided`），并在 `official host booted` 之后
-补一行 `official plugin tree settled`，给出已装载入口数与最慢的插件入口。
-
-Every launch writes `<userData>/boot.log`, with no switch to remember first: `boot` covers the
-launch, `project/open:<name>` one project open, and the Host process appends its own stages
-(first-run pnpm materialization, the official plugin tree, renderer registration) to the same
-trace. Each line carries the offset since that trace began and the stage's own cost, a stage of
-1000 ms or more is marked `[SLOW >1000ms]`, and the trace ends with `total` and its slowest
-stage. The file is truncated to its newest half once it passes `DSH_PROJECT_BOOT_LOG_BYTES`
-(256 KiB by default). Inside the official `boot()` the trace is split further — module resolution,
-the log sink, Loader installation and the assembly between `official host modules resolved` and
-`official cmdline provided` — and `official plugin tree settled`, written after
-`official host booted`, names the entry that took the longest to load.
-
-Follow it live while reproducing a slow launch:
-
-```sh
-DSH_PROJECT_BOOT_TRACE=1 DSH_PROJECT_DESKTOP_USER_DATA=/tmp/dsh-dev-shell yarn start
-```
-
-`DSH_PROJECT_BOOT_LOG` points the trace at another file, and setting it to the empty string turns
-the trace off. In the app, 项目工具 → 导出日志与诊断… writes the whole trace plus each project's
-recovery reasons and the project's official diagnostics archive into one folder and reveals it.
-That entry implements the official `DesktopRuntime.exportDiagnostics` contract, so the method keeps
-its official name, and the official duplicate "导出诊断信息…" contribution is dropped from the menu
-(see `stable/official-tray.mjs`); `tests/desktop-runtime-contract.test.mjs` fails if either drifts.
-
-```powershell
-yarn probe:startup-trace <label>
-```
-
-runs one real native smoke launch with the trace on and fails unless the launch trace, a
-project-open trace, the Host-process stages, the host boot sub-stages and a `[SLOW >1000ms]` line
-are all present; its evidence lands in `.runtime/startup-trace-<stamp>-<label>-*/boot.log`.
-
-## Checks and limits / 验证范围
-
-| Command | Scope |
-| --- | --- |
-| `yarn run test` | Application logic and fixtures; requires the first build |
-| `yarn run verify:upstream` | Desktop/Harness/plugin source trees and runtime inventory |
-| `yarn run check` | Unit tests, build, recovery, safe mode, project files and dual-Host smoke |
-| `yarn run smoke:native` | Native creation/UI/preview/recovery checks; graphical session required |
-| `yarn run probe:startup-trace` | Real launch writes a usable startup/open trace (`boot`, `project/open:*`, Host stages, host boot sub-stages, a marked slow stage) |
-| `yarn run smoke:profiles` | Official Profile creation/selection, Recovery Assistant, checkpoint confirmation, Safe Mode and crash isolation |
-| `yarn run smoke:guide` | Compact welcome/create windows, official chrome, mouse/keyboard sidebar resizing, persistence, locale/theme and resource form regression |
-| `yarn run smoke:resources` | Native resource status and remote-association checks |
-| `yarn run smoke:lifecycle` | Native lifecycle and single-instance behavior |
-| `yarn run smoke:updates` | Real official update dialogs with synthetic release/download fixtures, menu/state/error checks and two unaffected Hosts |
-| `yarn run smoke:updates:live` | After publication: real anonymous static downloads, manifest/checksum validation and the official latest-version dialog in isolated Electron; optionally pin `DSH_PROJECT_UPDATE_COMMIT` |
-| `yarn run test:recovery:network` | Network dependency recovery with an isolated test registry |
-| `yarn run package:mac` | Universal macOS DMG, built on a Mac, with ad-hoc signing and verification of the mounted artifact |
-| `yarn run package:win` | Native Windows x64 NSIS installer and portable ZIP with extracted-app verification |
-
-Automated checks use synthetic temporary projects and do not call models. Native
-checks are separate and require Electron. The local acceptance baseline is macOS
-x64; the packaging workflow runs each additional platform's own checks. Developer
-ID and Authenticode signing require separate validation. See [packaging](packaging.md)
-for manual/tag Actions triggers and artifact downloads. Local checks do not push
-source or publish releases; the explicitly triggered release workflow owns publication.
+也可在已有三个平台均通过的构建上运行 **Publish Verified Desktop**，输入其 run ID；工作流核对成功状态、工作流路径、仓库和精确提交后，直接发布同一批已验证字节，不重新构建。

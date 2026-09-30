@@ -1,15 +1,15 @@
 import {constants, cpSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync} from 'node:fs';
 import {dirname, join, relative} from 'node:path';
-import {desktopRequire} from '../src/desktop-adapter/stable/modules.mjs';
+import {officialRequire} from './package-common.mjs';
 
 /** Reuse the pinned official builder's production graph, hoisting and file filters.
  * The Shell keeps separate Desktop/Project roots because Profiles resolve them
  * independently; only collection inputs, never upstream manifests, are adapted.
  */
 export async function copyProductionDependencies({manifest, modules, scratch, destination, platform = process.platform, flatCache = false}) {
-  const {TraversalNodeModulesCollector} = desktopRequire('app-builder-lib/out/node-module-collector/traversalNodeModulesCollector.js');
-  const {NodeModuleCopyHelper} = desktopRequire('app-builder-lib/out/util/NodeModuleCopyHelper.js');
-  const {FileMatcher, excludedExts} = desktopRequire('app-builder-lib/out/fileMatcher.js');
+  const {TraversalNodeModulesCollector} = officialRequire('app-builder-lib/out/node-module-collector/traversalNodeModulesCollector.js');
+  const {NodeModuleCopyHelper} = officialRequire('app-builder-lib/out/util/NodeModuleCopyHelper.js');
+  const {FileMatcher, excludedExts} = officialRequire('app-builder-lib/out/fileMatcher.js');
   mkdirSync(scratch, {recursive: true});
   writeFileSync(join(scratch, 'package.json'), JSON.stringify(manifest));
   if (flatCache) {

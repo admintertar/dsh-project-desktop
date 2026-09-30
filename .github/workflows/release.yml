@@ -1,0 +1,43 @@
+name: Publish Verified Desktop
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Official Desktop CI and Release run ID for this exact commit
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: project-desktop-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Require the successful native build for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: node scripts/verify-release-run.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run }}
+          pattern: dsh-project-desktop-*-${{ github.sha }}
+          path: .cache/release-download
+      - name: Publish the verified build without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-release.mjs .cache/release-download

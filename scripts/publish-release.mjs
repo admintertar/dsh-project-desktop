@@ -16,26 +16,33 @@ function files(directory) {
   });
 }
 
-/** Only the six checked distribution files are published, never CI paths/logs. */
+/** Only the checked native distribution files are published, never CI paths/logs. */
 export function collectReleaseAssets(root, version, commit) {
   assert.match(version, /^\d+\.\d+\.\d+$/);
   assert.match(commit, /^[a-f0-9]{40}$/);
   const results = files(root).filter(path => basename(path) === 'package-result.json');
-  assert.equal(results.length, 2, 'Both platform build records are required');
+  assert.equal(results.length, 3, 'All three native target records are required');
   const assets = [], platforms = new Set();
+  const official = JSON.parse(readFileSync(new URL('../official-source.lock.json', import.meta.url)));
+  const project = JSON.parse(readFileSync(new URL('../project-source.lock.json', import.meta.url)));
   for (const path of results) {
     const result = JSON.parse(readFileSync(path, 'utf8'));
     assert.equal(result.sourceCommit, commit);
     assert.equal(result.sourceHasLocalChanges, false, 'Release builds require a clean source checkout');
     assert.equal(result.validation.ok, true); assert.equal(result.validation.packaged, true);
-    assert.ok(!platforms.has(result.platform)); platforms.add(result.platform);
+    assert.equal(result.officialCommit, official.commit); assert.equal(result.projectCommit, project.commit);
+    assert.equal(result.validation.officialCommit, official.commit); assert.equal(result.validation.projectCommit, project.commit);
+    const target = `${result.platform}-${result.arch}`;
+    assert.ok(!platforms.has(target)); platforms.add(target);
+    assert.equal(result.validation.platform, result.platform); assert.equal(result.validation.arch, result.arch);
+    assert.equal(result.validation.version, version);
     const entries = result.platform === 'darwin'
-      ? [[`DSH-Project-Desktop-${version}-mac-universal.dmg`, result.bytes, result.sha256]]
+      ? [[`DSH-Project-Desktop-${version}-mac-${result.arch}.dmg`, result.bytes, result.sha256]]
       : result.platform === 'win32' ? [
         [`DSH-Project-Desktop-${version}-win-x64-Setup.exe`, result.bytes.installer, result.sha256.installer],
         [`DSH-Project-Desktop-${version}-win-x64-Portable.zip`, result.bytes.portable, result.sha256.portable],
       ] : [];
-    assert.equal(result.arch, result.platform === 'darwin' ? 'universal' : 'x64');
+    assert.ok(result.platform === 'darwin' ? ['arm64', 'x64'].includes(result.arch) : result.arch === 'x64');
     for (const [name, size, hash] of entries) {
       const file = join(dirname(path), name), checksum = file + '.sha256';
       assert.equal(statSync(file).size, size); assert.equal(sha256(file), hash);
@@ -43,7 +50,7 @@ export function collectReleaseAssets(root, version, commit) {
       for (const asset of [file, checksum]) assets.push({path: asset, name: basename(asset), size: statSync(asset).size, digest: 'sha256:' + sha256(asset)});
     }
   }
-  assert.deepEqual([...platforms].sort(), ['darwin', 'win32']); assert.equal(assets.length, 6);
+  assert.deepEqual([...platforms].sort(), ['darwin-arm64', 'darwin-x64', 'win32-x64']); assert.equal(assets.length, 8);
   return assets;
 }
 

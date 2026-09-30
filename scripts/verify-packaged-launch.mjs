@@ -6,6 +6,7 @@ import {isWithin} from './package-common.mjs';
 /** A fresh relocated app must finish the real two-project installation diagnostic. */
 export async function verifyPackagedLaunch(executable, root) {
   const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE;
+  for (const key of ['DSH_PROJECT_PLUGIN_SOURCE', 'DSH_OFFICIAL_SOURCE_DIR', 'DSH_OFFICIAL_RUNTIME_DIR', 'DSH_PROJECT_DESKTOP_USER_DATA', 'NODE_PATH']) delete env[key];
   const log = await new Promise((resolve, reject) => {
     const child = spawn(executable, ['--verify-installation'], {env, stdio: ['ignore', 'pipe', 'pipe']});
     let output = '', timedOut = false;

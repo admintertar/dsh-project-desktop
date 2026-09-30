@@ -32,7 +32,8 @@ export class ProjectReleaseUpdater extends EventEmitter {
     let manifest;
     try {manifest = parseUpdateManifest(JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(Buffer.concat(chunks))))}
     catch {throw new Error('Invalid Project Desktop update manifest')}
-    const suffix = this.platform === 'darwin' ? 'mac-universal.dmg' : this.platform === 'win32' && this.arch === 'x64' ? 'win-x64-Setup.exe' : undefined;
+    const suffix = this.platform === 'darwin' && ['arm64', 'x64'].includes(this.arch)
+      ? manifest.schemaVersion === 1 ? 'mac-universal.dmg' : `mac-${this.arch}.dmg` : this.platform === 'win32' && this.arch === 'x64' ? 'win-x64-Setup.exe' : undefined;
     if (!suffix) throw new Error('Unsupported Project Desktop update platform');
     const installer = manifest.assets.find(asset => asset.name === `DSH-Project-Desktop-${manifest.version}-${suffix}`);
     if (!installer || installer.size > packageLimit) throw new Error('Invalid Project Desktop installer');

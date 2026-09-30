@@ -1,6 +1,6 @@
 {
   "name": "dsh-project-desktop",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -22,8 +22,8 @@
     "prepare:official-runtime": "node scripts/prepare-official-runtime.mjs",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "package:mac": "node scripts/official-release-pending.mjs",
-    "package:win": "node scripts/official-release-pending.mjs",
+    "package:mac": "node scripts/package-macos.mjs",
+    "package:win": "node scripts/package-windows.mjs",
     "check": "yarn run build && yarn run test && node scripts/check-project-files.mjs",
     "smoke:official-shell": "node scripts/smoke-official-shell.mjs",
     "smoke:official-account-sharing": "node scripts/smoke-official-shell.mjs --account-sharing",

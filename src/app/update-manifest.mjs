@@ -7,12 +7,14 @@ export const versionUpdateManifestUrl = version => `${releasesPage}/download/v${
 const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export function parseUpdateManifest(value) {
-  if (value?.schemaVersion !== 1 || value.channel !== 'stable' || typeof value.version !== 'string'
+  if (![1, 2].includes(value?.schemaVersion) || value.channel !== 'stable' || typeof value.version !== 'string'
     || !stableVersion.test(value.version) || !/^[a-f0-9]{40}$/.test(value.sourceCommit)
     || value.releaseUrl !== `${releasesPage}/tag/v${value.version}` || !Array.isArray(value.assets)) {
     throw new Error('Invalid stable Project Desktop update manifest');
   }
-  const assets = ['mac-universal.dmg', 'win-x64-Setup.exe', 'win-x64-Portable.zip'].map(suffix => {
+  const suffixes = value.schemaVersion === 1 ? ['mac-universal.dmg', 'win-x64-Setup.exe', 'win-x64-Portable.zip']
+    : ['mac-arm64.dmg', 'mac-x64.dmg', 'win-x64-Setup.exe', 'win-x64-Portable.zip'];
+  const assets = suffixes.map(suffix => {
     const name = `DSH-Project-Desktop-${value.version}-${suffix}`;
     const matches = value.assets.filter(item => item?.name === name);
     if (matches.length !== 1) throw new Error('The update manifest is missing an unambiguous package');
@@ -24,13 +26,13 @@ export function parseUpdateManifest(value) {
     return {name, url: item.url, size: item.size, sha256: item.sha256};
   });
   if (value.assets.length !== assets.length) throw new Error('Unexpected update manifest package');
-  return {schemaVersion: 1, channel: 'stable', version: value.version, sourceCommit: value.sourceCommit,
+  return {schemaVersion: value.schemaVersion, channel: 'stable', version: value.version, sourceCommit: value.sourceCommit,
     releaseUrl: value.releaseUrl, assets};
 }
 
 /** Input is the publisher's already verified distribution assets, never paths or logs. */
 export function createUpdateManifest(assets, version, sourceCommit) {
-  return parseUpdateManifest({schemaVersion: 1, channel: 'stable', version, sourceCommit,
+  return parseUpdateManifest({schemaVersion: assets.some(asset => asset.name.endsWith('-mac-arm64.dmg')) ? 2 : 1, channel: 'stable', version, sourceCommit,
     releaseUrl: `${releasesPage}/tag/v${version}`,
     assets: assets.filter(asset => !asset.name.endsWith('.sha256')).map(asset => ({
       name: asset.name, size: asset.size, sha256: asset.digest?.replace(/^sha256:/, ''),
