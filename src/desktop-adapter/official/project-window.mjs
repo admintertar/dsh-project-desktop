@@ -5,6 +5,7 @@ import {visibleBounds, trackWindowState} from '../../windows/window-state.mjs';
 import {externalUrl} from '../../windows/renderer-security.mjs';
 import {officialPin, runtimeDirectory} from './paths.mjs';
 import {officialHostSettings} from './host-settings.mjs';
+import {createOfficialThemeSync} from './theme-sync.mjs';
 import {prepareOfficialProfile} from './profile.mjs';
 import {createOfficialHostRequest, projectDisposer} from './host-request.mjs';
 import {configureOfficialProjectSession} from './web-session.mjs';
@@ -23,7 +24,7 @@ export async function openOfficialProjectWindow(electron, options) {
   const runtimeDir = runtimeDirectory();
   const services = options.services;
   const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(options.startupTimeout ?? 60000)]);
-  let host, window, projectSession, ipc, platformView, flushState, detachTheme;
+  let host, window, projectSession, ipc, platformView, flushState, detachTheme, themeSync;
   let closing = false, opened = false, fatal;
   let locale = options.locale ?? 'en';
   const onError = options.onError ?? console.error;
@@ -38,6 +39,7 @@ export async function openOfficialProjectWindow(electron, options) {
   const aborted = () => failure.reject(signal.reason);
   signal.addEventListener('abort', aborted, {once: true});
   const closeResources = projectDisposer([
+    () => {themeSync?.dispose()},
     async () => {await detachTheme?.()},
     async () => {await ipc?.dispose(); ipc = undefined},
     () => {flushState?.(); if (window && !window.isDestroyed()) window.destroy()},
@@ -66,6 +68,7 @@ export async function openOfficialProjectWindow(electron, options) {
     const send = createOfficialHostRequest(ready.url, cookie);
     const request = (path, init = {}) => send(path, {signal: AbortSignal.timeout(10000), ...init});
     const settings = officialHostSettings(request);
+    themeSync = createOfficialThemeSync({read: signal => settings.getTheme(signal), apply: value => options.onTheme?.(value)});
     // 写入真实官方 settings，不经 native-theme IPC 回调，避免 SharedTheme 队列重入。
     detachTheme = await options.connectTheme?.(settings);
     signal.throwIfAborted();
@@ -82,9 +85,7 @@ export async function openOfficialProjectWindow(electron, options) {
     const browserGuests = new services.DesktopBrowserGuests(() => ready.url);
     ipc = options.ipc.register(window, {...options, sessionKey: basename(options.stateDirectory), backend, platformView, browserGuests,
       hostUrl: ready.url, injections: ready.injections, onFailure: fail, onError,
-      // Host 启动时的 injections 可能早于共享主题写入。只传播官方 settings 已确认的偏好，
-      // 不把 renderer 临时启动色反向保存到所有项目。
-      onTheme: async preference => {if (await settings.getTheme() === preference) return options.onTheme?.(preference)},
+      onTheme: preference => themeSync.notify(preference),
       setLocale: value => {locale = value; options.onLocale?.(value)}});
     flushState = trackWindowState(window, options.saveWindowState ?? (() => {}), onError);
     window.on('focus', () => {options.onFocus?.(); options.onMenuChanged?.()});

@@ -36,7 +36,9 @@
 - `project-ipc.mjs` 只接收所属 `dsh-app://app/` 主 Frame；API Key 和语言读取官方 Welcome Backend，
   不伪造 onboarding 完成。浏览器、平台页面和麦克风桥接继续复用上述官方 helper。
 - `host-settings.mjs` 使用官方 `settings/describe`、`settings/update` RPC 同步共享主题，携带 namespace revision。
-  renderer 启动色可能早于 settings 更新，只有与 Host 已保存偏好一致的通知才能传播，避免重开时覆盖全局选择。
+  官方 `ThemeRuntime.setTheme` 先更新 DOM，再异步保存 `ConfigForm`。`theme-sync.mjs` 在最多 10 秒内等候
+  Host 保存值与通知一致，再同步 SharedTheme 和 nativeTheme；单次读取不一致不能丢弃通知。
+  后续通知取消过时读取，关闭项目取消等待及在途请求。启动临时色同样经过保存值校验，避免覆盖全局选择。
 - 窗口等待官方 boot gate、transport 和加载页退出。启动失败统一清理；Host 停止未确认时保留 Registry
   所有权并允许重试，不能启动第二个 Host。运行中失败回欢迎页，只影响所属项目。
 - `quit-guard.mjs` 复用从官方 `quit-confirmation.ts` 编译的 `DesktopQuitConfirmation`，检查来自真实

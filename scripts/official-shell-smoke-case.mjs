@@ -105,6 +105,8 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
   writeFileSync(join(userData, 'page-state.json'), JSON.stringify(identities, null, 2));
   await a.host.setTheme('dark');
   await until(() => b.host.getTheme(), value => value === 'dark', 'Shared dark theme');
+  await until(() => electron.nativeTheme.themeSource, value => value === 'dark', 'Native dark material');
+  assert.equal(electron.nativeTheme.shouldUseDarkColors, true);
   await until(() => b.window.webContents.executeJavaScript('document.body.hasAttribute("data-ds-dark-theme")'), Boolean, 'Dark renderer');
   await capture(b.window, 'beta-dark');
   const sessionA = a.window.webContents.session;
@@ -119,8 +121,16 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
   await assert.rejects(fetch(urlA));
   await b.host.setTheme('light');
   await until(() => reopened.host.getTheme(), value => value === 'light', 'Shared light theme');
+  await until(() => electron.nativeTheme.themeSource, value => value === 'light', 'Native light material');
+  assert.equal(electron.nativeTheme.shouldUseDarkColors, false);
   const restarted = await restart(manifestA);
   assert.equal(restarted.window.webContents.session, sessionA);
+  assert.equal(await restarted.host.getTheme(), 'light');
+  await b.host.setTheme('system');
+  await until(() => restarted.host.getTheme(), value => value === 'system', 'Shared system theme');
+  await until(() => electron.nativeTheme.themeSource, value => value === 'system', 'Native system material');
+  await until(() => restarted.window.webContents.executeJavaScript('document.body.hasAttribute("data-ds-dark-theme")'),
+    value => value === electron.nativeTheme.shouldUseDarkColors, 'System renderer and material agree');
   // 旧 Stable Home 必须拒绝接管且原样保留，B 仍可访问。
   const dirC = join(fixture, 'legacy'); mkdirSync(dirC, {recursive: true});
   const legacy = createProjectFile(join(dirC, 'legacy.agent-project'));
@@ -140,7 +150,7 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
   const result = {platform: process.platform, arch: process.arch, officialVersion: '0.2.0-rc.2',
     welcomeAndCreation: true, guideLocalesThemesNarrowKeyboardCancel: true, twoProjects: true, realApiKeyState: true, officialShortcuts: true,
     nativeClose: true, reopen: true, restart: true, sameSession: true, legacyDataPreserved: true,
-    allOwnersReleased: true, sharedTheme: true, rendererErrors: errors};
+    allOwnersReleased: true, sharedTheme: true, nativeThemeLightDarkSystem: true, rendererErrors: errors};
   writeFileSync(join(userData, 'result.json'), JSON.stringify(result, null, 2) + '\n');
   console.log(`Official Shell smoke passed: ${userData}`);
 }
