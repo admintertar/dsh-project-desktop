@@ -40,14 +40,16 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
         handle.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true})); return before;
       })()`);
       await until(() => form.webContents.executeJavaScript('Number(document.querySelector(".guideResizeHandle").getAttribute("aria-valuenow"))'), value => value === widths + 16, 'Keyboard resize');
-      for (const theme of ['light', 'dark']) {
+      // 在窗口仍存活时完成系统主题恢复及 Renderer 校验。Windows Electron 44
+      // 在 closed 回调的同一轮微任务里修改 nativeTheme 会触发原生崩溃。
+      for (const theme of ['light', 'dark', 'system']) {
         console.log('Official smoke: guide theme and resize', locale, theme);
         electron.nativeTheme.themeSource = theme;
         form.setSize(420, 460);
         await until(() => form.webContents.executeJavaScript(`({compact: Boolean(document.querySelector('[data-guide-compact]')),
           dark: document.body.hasAttribute('data-ds-dark-theme'), overflow: document.documentElement.scrollWidth > innerWidth,
           footer: document.querySelector('.createContent>footer').getBoundingClientRect().bottom <= innerHeight + 1})`),
-        value => value.compact && value.dark === (theme === 'dark') && !value.overflow && value.footer, 'Narrow guide layout');
+        value => value.compact && value.dark === electron.nativeTheme.shouldUseDarkColors && !value.overflow && value.footer, 'Narrow guide layout');
       }
       const closed = new Promise(resolve => form.once('closed', resolve));
       console.log('Official smoke: close guide', locale);
@@ -56,7 +58,6 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
       await until(() => form.isDestroyed(), Boolean, 'Guide cancellation');
     } finally {if (!form.isDestroyed()) form.destroy()}
   }
-  electron.nativeTheme.themeSource = 'system';
   const guide = await showGuide(); collect(guide);
   await until(() => guide.webContents.executeJavaScript('document.body.innerText'), text => /Recent projects|最近项目/i.test(text), 'Welcome content');
   assert.equal(await guide.webContents.executeJavaScript('typeof require'), 'undefined');

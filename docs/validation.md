@@ -576,3 +576,18 @@ traps apply to any native-surface check done beside a running application.
 - Do not write source files with shell redirection on this platform: a PowerShell
   round-trip added a BOM and mangled the Chinese diagnostics copy in
   `native.mjs`. Use the file tools, and verify with `git diff` afterwards.
+
+## Official 0.2.0 Windows smoke theme cleanup
+
+On Windows Server 2022, the pinned Electron 44.0.0 exits with `0xFFFF7003`
+when the smoke sets `nativeTheme.themeSource = 'system'` immediately after
+awaiting a window's `closed` event. A standalone Electron program, without
+the Shell or official modules, reproduced this in Actions run `36713000793`.
+Restoring the system theme while the window remains alive passed the same
+native probe in run `36713461113`.
+
+The guide smoke now checks light, dark and system themes before clicking
+Cancel. It waits for the renderer's actual theme to match `nativeTheme`,
+then verifies closure as before. This removes the unsafe cleanup ordering
+and adds system-theme coverage without weakening the cancellation check.
+The temporary diagnosis workflow and script were removed after reproduction.
