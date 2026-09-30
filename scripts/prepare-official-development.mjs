@@ -79,10 +79,11 @@ export async function prepareOfficialDevelopment(source) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (!process.argv[2] || process.argv.length !== 3) {
+  const args = process.argv.slice(2).filter(arg => arg !== '--');
+  if (args.length !== 1) {
     throw new Error('Usage: node scripts/prepare-official-development.mjs /path/to/deepseek-harness');
   }
-  const result = await prepareOfficialDevelopment(process.argv[2]);
+  const result = await prepareOfficialDevelopment(args[0]);
   const saved = JSON.parse(readFileSync(join(result.destination, 'inputs.json'), 'utf8'));
   console.log(`Prepared ${saved.version} official development inputs at ${result.destination}`);
 }

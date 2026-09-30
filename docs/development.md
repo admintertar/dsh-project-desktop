@@ -27,9 +27,25 @@ installation package. The two Host and two Electron window probes consume
 these mapped inputs; the formal Shell `build`, `start`, CI and packaging paths
 still use the previous Stable runtime until their official adapters are ready.
 
+To prepare the official first-party package set used by Desktop's production
+runtime, run `yarn run prepare:official-package-set -- ../deepseek-harness` after
+the pinned checkout has installed its pnpm lock. This command runs the official
+`build:official`, `release:pack` (DSH and vendor), private Desktop Host pack,
+native entry pack and `prepare-package-set.ts` stages. The output in ignored
+`.cache/official-package-set/` contains `desktop-packages.json`, its selected
+tarballs and `source.json` with the exact source pin and descriptor SHA-256.
+The official `verifyDesktopCorePackageSet` checks tarball sizes and SHA-512;
+the preparation command also checks the source pin and descriptor before
+returning the set.
+The set can be copied between directories, but it is only the first-party
+package closure. Official `prepare:runtime` and `prepare:dsh` still need to
+assemble external npm dependencies, native binaries and the primary runtime
+before the Shell has a relocatable installation payload.
+
 本节以下仍是已发布 `0.1.11` 的构建步骤。迁移分支的新命令只准备官方开发输入，
 不会修改已安装应用或用户数据。临时目录中的 Host 和依赖仍链接本机官方工作区，
-需要继续完成正式构建闭包与主进程接入。
+新增官方核心 tarball 集合可搬移，但尚缺外部依赖和原生运行时；需要继续完成
+正式构建闭包与主进程接入。
 
 The shell imports immutable source snapshots and independent dependency caches.
 It does not require a private repository or a fork. Commands below use sibling
