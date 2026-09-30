@@ -50,8 +50,15 @@ const userData = resolveUserData({installationCheck, testing, environment: proce
   temporaryDirectory: () => mkdtempSync(join(tmpdir(), 'dsh-project-install-check-'))});
 app.setPath('userData', userData);
 app.setAppUserModelId('local.dsh.project.desktop');
+function reportFailure(error) {
+  console.error(error);
+  if (testing) {
+    mkdirSync(userData, {recursive: true});
+    writeFileSync(join(userData, 'smoke-error.log'), String(error?.stack ?? error) + '\n', {mode: 0o600});
+  }
+}
 if (!app.requestSingleInstanceLock()) app.quit();
-else void run().catch(error => {console.error(error); app.exit(1)});
+else void run().catch(error => {reportFailure(error); app.exit(1)});
 
 async function run() {
   bootLogDirectory(userData);
@@ -357,7 +364,7 @@ async function run() {
       : closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
     try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({
       electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc, deepLinks, updates, updateFixture,
-    }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {console.error(error); process.exitCode = 1}
+    }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {reportFailure(error); process.exitCode = 1}
     finally {clearTimeout(timeout); app.quit()}
     return;
   }

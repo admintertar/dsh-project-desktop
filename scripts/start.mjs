@@ -17,8 +17,14 @@ if (built.sourceCommit !== pin.commit || !Array.isArray(built.inputs)) {
 }
 const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE;
 if (existsSync(official)) env.DSH_OFFICIAL_RUNTIME_DIR = official;
-const child = spawn(electron, [repository, ...process.argv.slice(2)], {stdio: 'inherit', env});
+// Windows GUI executables need explicit output pipes for main-process errors
+// to reach the invoking terminal and Actions log.
+const child = spawn(electron, [repository, ...process.argv.slice(2)], {stdio: ['inherit', 'pipe', 'pipe'], env});
+child.stdout.pipe(process.stdout); child.stderr.pipe(process.stderr);
 // Also forward signals when launched through the Project plugin's Node wrapper.
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 child.on('error', error => {console.error(error.message); process.exitCode = 1});
-child.on('exit', code => {process.exitCode = code ?? 1});
+child.on('close', (code, signal) => {
+  if (code !== 0) console.error(`Electron exited with ${code ?? signal}`);
+  process.exitCode = code ?? 1;
+});
