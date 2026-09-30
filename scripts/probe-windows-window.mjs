@@ -28,9 +28,11 @@ for(const locale of ['en','zh']){
   note('resize');window.setSize(420,460);await delay(200);note('resized');
   await window.webContents.executeJavaScript('document.body.innerText');note('read');
  }
- note('close');window.close();await delay(200);note('closed');
+ note('close');const closed=new Promise(resolve=>window.once('closed',resolve));window.close();await closed;note('closed');
 }
-nativeTheme.themeSource='system';note('passed');app.quit();
+note('restore theme');nativeTheme.themeSource='system';note('theme restored');
+const welcome=new BrowserWindow({show:false});await welcome.loadFile(join(import.meta.dirname,'index.html'));
+welcome.show();note('passed');app.quit();
 })().catch(error=>{note(String(error.stack));app.exit(1)});
 `);
 const env = {...process.env, ELECTRON_ENABLE_LOGGING: '1', ELECTRON_LOG_FILE: join(directory, 'chromium.log')};
