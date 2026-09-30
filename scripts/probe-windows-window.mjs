@@ -16,6 +16,7 @@ const {app,BrowserWindow,nativeTheme,Menu,screen}=electron;
 const note=value=>{console.log(value);appendFileSync(join(import.meta.dirname,'phases.log'),value+'\\n')};
 app.setPath('userData',join(import.meta.dirname,'user-data'));
 app.on('window-all-closed',()=>{});
+void (async()=>{
 await app.whenReady(); note('ready');
 Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'File',submenu:[{label:'New Project'}]}]));
 for(const locale of ['en','zh']){
@@ -30,6 +31,7 @@ for(const locale of ['en','zh']){
  note('close');window.close();await delay(200);note('closed');
 }
 nativeTheme.themeSource='system';note('passed');app.quit();
+})().catch(error=>{note(String(error.stack));app.exit(1)});
 `);
 const env = {...process.env, ELECTRON_ENABLE_LOGGING: '1', ELECTRON_LOG_FILE: join(directory, 'chromium.log')};
 delete env.ELECTRON_RUN_AS_NODE;
