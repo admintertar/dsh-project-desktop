@@ -29,9 +29,11 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
   };
   // 引导窗口组合继续复用官方控件；覆盖中英文、明暗、窄布局、取消与键盘分隔线。
   for (const locale of ['en', 'zh']) {
+    console.log('Official smoke: create guide', locale);
     const form = await createGuideWindow(electron, {repository, locale, mode: 'create', hidden: true,
       recent: {list: () => []}, defaultDirectory: userData, open: async () => {throw new Error('Unexpected guide submission')}});
     try {
+      console.log('Official smoke: guide ready', locale);
       await until(() => form.webContents.executeJavaScript('Boolean(document.querySelector(".guideResizeHandle"))'), Boolean, 'Guide frame');
       const widths = await form.webContents.executeJavaScript(`(() => {
         const handle = document.querySelector('.guideResizeHandle'); const before = Number(handle.getAttribute('aria-valuenow'));
@@ -39,6 +41,7 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
       })()`);
       await until(() => form.webContents.executeJavaScript('Number(document.querySelector(".guideResizeHandle").getAttribute("aria-valuenow"))'), value => value === widths + 16, 'Keyboard resize');
       for (const theme of ['light', 'dark']) {
+        console.log('Official smoke: guide theme and resize', locale, theme);
         electron.nativeTheme.themeSource = theme;
         form.setSize(420, 460);
         await until(() => form.webContents.executeJavaScript(`({compact: Boolean(document.querySelector('[data-guide-compact]')),
@@ -47,6 +50,7 @@ export async function runOfficialShellSmoke({electron, open, close, restart, sho
         value => value.compact && value.dark === (theme === 'dark') && !value.overflow && value.footer, 'Narrow guide layout');
       }
       const closed = new Promise(resolve => form.once('closed', resolve));
+      console.log('Official smoke: close guide', locale);
       await Promise.race([closed, form.webContents.executeJavaScript('document.querySelector(".createContent>footer button:first-child").click()')]);
       await closed;
       await until(() => form.isDestroyed(), Boolean, 'Guide cancellation');

@@ -1,0 +1,23 @@
+name: Windows native startup diagnostic
+on:
+  push:
+    branches: [codex/direct-official-desktop, codex/official-release-ci]
+    paths: [scripts/probe-windows-window.mjs, .github/workflows/windows-native-probe.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --prefix .cache/native-probe --no-package-lock electron@44.0.0
+      - run: node scripts/probe-windows-window.mjs
+      - if: always()
+        run: Get-Content .cache/native-probe/*.log
