@@ -234,7 +234,7 @@ async function run() {
       {type: 'separator'}, ...officialClose,
       command(zh ? '关闭项目' : 'Close Project', () => close(currentPath()),
         {id: 'project-close', accelerator: 'CmdOrCtrl+Shift+W', enabled: Boolean(current)}),
-    ]}, ...(process.platform === 'win32' ? [] : [roles.edit]), roles.view,
+    ]}, ...(process.platform === 'win32' && current ? [] : [roles.edit]), roles.view,
     {label: zh ? '项目' : 'Project', submenu: [
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '重启当前项目' : 'Restart Current Project', () => restart(currentPath()), {enabled: Boolean(current)}),
