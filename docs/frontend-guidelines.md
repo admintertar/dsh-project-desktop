@@ -26,6 +26,8 @@ English summary: read the companion plugin's shared frontend guidelines and this
 
 共享 `system/light/dark` 偏好由 Shell 的 SharedTheme 管理，经官方 settings RPC 同步项目窗口和 Electron `nativeTheme`；字体、语言与其他设置保持各自范围。欢迎/创建窗口沿用应用主题，原生菜单跟随当前项目语言，欢迎页沿用最近项目语言。Renderer 启动时的临时主题不得覆盖已经保存的共享偏好。
 
+DeepSeek 登录账号由 Shell 按应用共享，继续使用官方登录和退出界面。一次登录同步所有项目窗口，退出确认的账号任务影响涵盖所有打开项目，取消不改变账号。模型 API Key、第三方授权、Host 认证密钥与浏览器分区仍按项目隔离。
+
 ## 3. 欢迎与创建窗口的布局基线
 
 这两个窗口复用官方窗口参数，由 Shell 自有 [GuideFrame](../src/desktop-adapter/official/GuideFrame.tsx) 管理双栏布局，控件、locale 与主题来自固定官方源码。布局常量归 Shell，不依赖社区 AdvancedFrame；不得为了调整引导尺寸改写上游源码。

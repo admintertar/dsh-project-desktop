@@ -14,7 +14,7 @@
 
 | 负责方 | 当前职责 |
 | --- | --- |
-| Shell | 欢迎/创建/打开/切换项目，菜单、窗口位置、多窗口生命周期与共享主题 |
+| Shell | 欢迎/创建/打开/切换项目，菜单、窗口位置、多窗口生命周期、共享主题与 DeepSeek 登录账号 |
 | Project 插件 | 官方主窗口中的项目页面与工作区替换 |
 | DeepSeek | Host、Web 主界面、聊天/模型/设置，以及已有原生桥接实现 |
 
@@ -39,6 +39,18 @@
   每次授权只打开一次带当前 nativeTheme 的官方链接，失败/过期/成功聚焦所属项目；关闭先释放订阅。
   官方 Host 负责 PKCE、state、loopback `/oauth/callback` 和凭据，Renderer 负责登录弹窗、账号状态与注销。
   自有欢迎页不随单项目注销被全局替换。错误日志不携带授权 URL。
+- `shared-account-store.mjs` 在启动所有 Host 前接入应用级 `userData/account/.credentials.yaml`。
+  首次仅从本壳拥有的官方 Home 接入单一已有登录；多个不同登录明确报冲突。共享文件即使为空也作为权威，
+  退出后不会从旧项目记录恢复登录；旧文件保留用于回退。使用官方 parser、跨进程锁和 0600 原子写入。
+- `shared-credentials-host.mjs` 是壳自己的 Host 适配入口。`account-credentials.mjs` 完整继承官方
+  `LocalCredentialProvider`，只把 `deepseek-account-platform/default`、`device` 路由到共享的第二个官方 provider。
+  `resolve/describe/set/unset` 的环境优先级及其他 record 原样继承；API Key、第三方授权与
+  `client-connection/browser-session` 仍按项目隔离。共享记录变更通知官方账号服务，删除时触发官方账号任务取消。
+  `profile.mjs` 只在 Host 启动前切换凭据 provider 的组合入口，保留已有配置和 YAML 注释；不修改运行中的 Profile。
+- `shared-account-sessions.mjs` 在所属项目的 `dsh-app` HTTP 转发处协调官方账号请求，先执行官方参数验证。
+  所有窗口的登录/退出操作进入同一队列，后发登录取消另一窗口的旧尝试；退出等待其他 Host 的授权提交结束，
+  再通过官方 signOut 清除和撤销账号。官方确认弹窗的任务影响查询汇总全部打开的 Host，查询失败保留“未知”提示。
+  关闭项目撤销新账号请求并等待已受理操作，账号凭据从不进入 Renderer、项目 manifest 或任务记录。
 - `deep-links.mjs` 接收 macOS `open-url` 与启动/第二实例参数中的精确 `dsh://open[/]`，准备完成前排队。
   协议仅唤起，不能传 token/code；多项目优先最近发起登录且仍存活的窗口，取消/关闭撤销该目标。
   成功状态先聚焦所属窗口，解决协议本身不携带项目 id 的限制。仅 packaged 或显式
@@ -77,6 +89,10 @@
 `DSH_OFFICIAL_ACCOUNT_SMOKE=1` 额外在线调用官方登录初始化/取消，从真实官方菜单与弹窗操作，并在 OS
 `shell.openExternal` 边界截获 URL，验证原生监听、主题参数与项目唤回；不提交用户凭据，不代表账号授权成功。
 官方 browser helper 直接阻断当前 Host；其他项目 Host 由独立 Cookie 认证拒绝访问，不宣称 guest 禁止所有 loopback 网络。
+
+`yarn smoke:official-account-sharing` 在临时 userData 和本机 Platform 夹具上执行真实官方 PKCE、回调、
+授权交换、账号状态订阅与注销；验证只登录一次、双窗口与新窗口/重启、官方取消/确认、并发登录及退出期间的回调清理。
+该夹具不使用真实账号，不代表线上账号授权或平台充值验收。
 
 发行前仍须完成自有更新器/强制版本策略、全局 CLI 安装、签名安装包与协议关联、Windows/macOS Intel 实机验收、
 真实账号授权后的用量/充值交互、Stable 数据迁移回退。当前 `updates-status` 返回 idle，`updates-open` 明确拒绝。

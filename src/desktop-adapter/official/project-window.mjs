@@ -10,6 +10,7 @@ import {prepareOfficialProfile} from './profile.mjs';
 import {createOfficialHostRequest, projectDisposer} from './host-request.mjs';
 import {configureOfficialProjectSession} from './web-session.mjs';
 import {watchOfficialAccount} from './account-session.mjs';
+import {hasRunningAccountTasks} from './shared-account-sessions.mjs';
 
 /** 官方 createWindow 的原生窗口行为；Shell 增加逐项目 Session 和窗口状态。 */
 export function officialWindowOptions(electron, {preload, partition, title, windowState, primary = true, services}, platform = process.platform) {
@@ -30,7 +31,7 @@ export async function openOfficialProjectWindow(electron, options) {
   const runtimeDir = runtimeDirectory();
   const services = options.services;
   const signal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(options.startupTimeout ?? 60000)]);
-  let host, window, projectSession, ipc, platformView, flushState, detachTheme, themeSync, stopAccount;
+  let host, window, projectSession, ipc, platformView, flushState, detachTheme, themeSync, stopAccount, accountSession;
   let closing = false, opened = false, fatal;
   let locale = options.locale ?? 'en';
   const onError = options.onError ?? console.error;
@@ -46,6 +47,7 @@ export async function openOfficialProjectWindow(electron, options) {
   signal.addEventListener('abort', aborted, {once: true});
   const closeResources = projectDisposer([
     () => {stopAccount?.()},
+    async () => {await accountSession?.dispose()},
     () => {themeSync?.dispose()},
     async () => {await detachTheme?.()},
     async () => {await ipc?.dispose(); ipc = undefined},
@@ -68,6 +70,7 @@ export async function openOfficialProjectWindow(electron, options) {
     signal.throwIfAborted();
     host = new hostModule.DesktopHostProcess(process.execPath, join(runtimeDir, 'dsh'), profile.profileDir, undefined,
       {...environment, DSH_HOME: profile.homeDir, DSH_TELEMETRY_MODE: 'DISABLED', DSH_CLIENT_VERSION: officialPin.version,
+        DSH_PROJECT_OFFICIAL_RUNTIME: runtimeDir, DSH_PROJECT_ACCOUNT_STORE: options.accountStore ?? '',
         DSH_PROJECT_MANIFEST: options.manifestPath}, fail, join(runtimeDir, 'runtime/primary-runtime'),
       {pnpm: join(runtimeDir, 'runtime/pnpm/bin/pnpm.cjs'), nodeBin: join(runtimeDir, 'runtime/bin')},
       next => platformView.setSession(next));
@@ -83,10 +86,12 @@ export async function openOfficialProjectWindow(electron, options) {
     signal.throwIfAborted();
     // Cookie 已由官方认证函数取得。再次连接元数据接口使用已认证的根页面，禁止跟随重定向。
     const backend = await wait(services.connectDesktopWelcome(new URL('/', ready.url).href, request, async () => cookie));
+    accountSession = options.accountSessions?.connect(options.manifestPath,
+      {account: backend.account, hasRunningTasks: () => hasRunningAccountTasks(request)});
     locale = services.resolveDesktopStartupLocale(await wait(backend.readLocalePreference()), electron.app.getPreferredSystemLanguages()).id;
     const partitionName = `persist:project-${basename(options.stateDirectory)}`;
     projectSession = configureOfficialProjectSession({electron, partitionName, hostUrl: ready.url, cookie,
-      webDist: join(runtimeDir, 'desktop/web'), ...webModule});
+      webDist: join(runtimeDir, 'desktop/web'), ...webModule, accountSession});
     window = new electron.BrowserWindow(officialWindowOptions(electron, {...options, partition: partitionName,
       preload: join(runtimeDir, 'desktop/preload-app.cjs')}));
     projectSession.bindWindow(window);

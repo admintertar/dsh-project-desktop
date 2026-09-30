@@ -23,6 +23,9 @@ import {createOfficialQuitGuard} from '../desktop-adapter/official/quit-guard.mj
 import {installOfficialDeepLinks} from '../desktop-adapter/official/deep-links.mjs';
 import {createOfficialHostEnvironment} from '../desktop-adapter/official/host-environment.mjs';
 import {installOfficialSessionEnd} from '../desktop-adapter/official/session-end.mjs';
+import {officialCredentials} from '../desktop-adapter/official/credential-runtime.mjs';
+import {prepareSharedAccountStore} from '../desktop-adapter/official/shared-account-store.mjs';
+import {SharedAccountSessions} from '../desktop-adapter/official/shared-account-sessions.mjs';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, dialog, protocol} = electron;
 const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png');
@@ -33,7 +36,8 @@ if (process.argv.some(arg => retiredModes.includes(arg))) {
   app.exit(1);
 }
 const closeTesting = process.argv.includes('--official-close-smoke') && !app.isPackaged;
-const testing = (process.argv.includes('--official-shell-smoke') || closeTesting) && !app.isPackaged;
+const accountTesting = process.argv.includes('--official-account-sharing-smoke') && !app.isPackaged;
+const testing = (process.argv.includes('--official-shell-smoke') || closeTesting || accountTesting) && !app.isPackaged;
 app.setName(productName);
 protocol.registerSchemesAsPrivileged([{scheme: 'dsh-app', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true,
@@ -51,6 +55,8 @@ async function run() {
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
   const session = new SessionState(join(userData, 'workspace-session.json'));
   let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services, quitGuard, hostEnvironment, sessionEnd;
+  let accountStore;
+  const accountSessions = new SharedAccountSessions();
   let quitting = false, quitReady = false, startupComplete = false, lastLocale = 'en';
   const report = error => {
     console.error(error);
@@ -184,7 +190,7 @@ async function run() {
     let project;
     try {
       project = await openOfficialProjectWindow(electron, {...state, signal, title, locale: language(),
-        hidden: testing, ipc: officialIpc, services, hostEnvironment, windowState: session.window(manifest),
+        hidden: testing, ipc: officialIpc, services, hostEnvironment, accountStore, accountSessions, windowState: session.window(manifest),
         rememberAccountReturn: focus => deepLinks.remember(focus),
         sessionEnding: () => sessionEnd.ending, quitForSession: () => app.quit(),
         applicationItems: () => [
@@ -281,6 +287,8 @@ async function run() {
   await app.whenReady();
   sessionEnd = installOfficialSessionEnd(electron);
   services = await import(pathToFileURL(join(runtimeDirectory(), 'official/native-services.mjs')).href);
+  accountStore = await prepareSharedAccountStore({userData, sourceCommit: officialPin.commit,
+    credentials: await officialCredentials(runtimeDirectory())});
   hostEnvironment = createOfficialHostEnvironment(services);
   // app.exit 不触发 will-quit，仍需终止尚在读取的 shell 进程组。
   app.on('will-quit', () => hostEnvironment.dispose());
@@ -302,7 +310,8 @@ async function run() {
     startupComplete = true;
     deepLinks.ready();
     let timeout;
-    const smoke = closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
+    const smoke = accountTesting ? '../../scripts/shared-account-smoke-case.mjs'
+      : closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
     try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({
       electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc, deepLinks,
     }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {console.error(error); process.exitCode = 1}

@@ -13,6 +13,11 @@ Account watching, authorization-link theme handling, protocol activation, Window
 caption/edit menus, context menus and system-session ending adapt the pinned
 Desktop main.ts. The login-shell-environment.ts and windows-layout.ts helpers
 are compiled unchanged with the other official native services.
+Shared sign-in reuses the official credentials-local provider, document parser,
+atomic-write lock and account controller. The Shell routes only the two
+deepseek-account-platform records to application storage and coordinates
+cross-window actions; official PKCE, dialogs, request validation and revocation
+remain unchanged. See account-credentials.mjs and shared-account-sessions.mjs.
 The runtime includes the official LICENSE and package-level notices. The guide
 uses official locale, primitives and theme components, with Shell-owned geometry.
 The companion plugin candidate is recorded in `project-source.lock.json`;

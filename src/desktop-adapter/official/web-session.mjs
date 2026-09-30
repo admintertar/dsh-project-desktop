@@ -7,7 +7,7 @@ const sessionOwners = new WeakMap();
 
 /** Register one project bridge; dispose it before reusing this persistent partition. */
 export function configureOfficialProjectSession({electron, partitionName, hostUrl, cookie, webDist,
-  serveWebDocument, forwardWebRequest}) {
+  serveWebDocument, forwardWebRequest, accountSession}) {
   if (!partitionName.startsWith('persist:') || !/^http:\/\/127\.0\.0\.1:\d+\//.test(hostUrl)) {
     throw new Error('Official project Session requires a persistent partition and loopback Host URL');
   }
@@ -29,7 +29,11 @@ export function configureOfficialProjectSession({electron, partitionName, hostUr
     }
     // 官方转发器保留 Request.signal；补上项目 Session 的寿命，停止 Host 前撤销旧窗口的在途请求。
     const signal = AbortSignal.any([request.signal, lifetime.signal]);
-    try {return await forwardWebRequest(new Request(request, {signal}), hostUrl, cookie)}
+    try {
+      const scoped = new Request(request, {signal});
+      const forward = next => forwardWebRequest(next, hostUrl, cookie);
+      return await (accountSession ? accountSession.forward(scoped, forward) : forward(scoped));
+    }
     catch (error) {
       if (signal.aborted) return new Response(null, {status: 410});
       throw error;

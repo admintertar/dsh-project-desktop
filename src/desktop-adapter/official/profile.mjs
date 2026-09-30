@@ -4,6 +4,8 @@ import {pathToFileURL} from 'node:url';
 import {parse} from 'yaml';
 import {claimProjectState} from '../../app/project-state.mjs';
 import {officialPin, projectSource} from './paths.mjs';
+import {sharedAccountProfile} from './account-profile.mjs';
+import {officialCredentials} from './credential-runtime.mjs';
 
 export function verifyProjectPlugin(source = projectSource) {
   const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8'));
@@ -17,7 +19,7 @@ export function verifyProjectPlugin(source = projectSource) {
 }
 
 /** 只初始化本适配器拥有的 Home；现有 Stable 数据留给独立迁移流程。 */
-export async function prepareOfficialProfile({runtimeDir, stateDirectory, manifestPath, pluginSource = projectSource}) {
+export async function prepareOfficialProfile({runtimeDir, stateDirectory, manifestPath, accountStore, pluginSource = projectSource}) {
   const source = verifyProjectPlugin(pluginSource);
   const homeDir = join(stateDirectory, 'dsh');
   const marker = join(homeDir, 'official-shell.json');
@@ -49,6 +51,15 @@ export async function prepareOfficialProfile({runtimeDir, stateDirectory, manife
   const servers = Array.isArray(patch) ? patch.filter(item => item?.id === 'webserver') : [];
   if (servers.length !== 1 || servers[0].config?.port !== 0 || servers[0].config?.host !== '127.0.0.1') {
     throw new Error('Official project Profile requires one loopback WebServer with port 0');
+  }
+  if (accountStore) {
+    // The Host is stopped here. Change only the provider composition; preserve
+    // user configuration, YAML tags and comments, and never patch a live Profile.
+    const next = sharedAccountProfile(readFileSync(patchPath, 'utf8'), new URL('./shared-credentials-host.mjs', import.meta.url).href);
+    if (next !== readFileSync(patchPath, 'utf8')) {
+      const {writeFileAtomic} = await officialCredentials(runtimeDir);
+      await writeFileAtomic(patchPath, next, {mode: 0o600});
+    }
   }
   const target = join(profileDir, 'node_modules/dsh-plugin-project');
   const link = lstatSync(target, {throwIfNoEntry: false});
