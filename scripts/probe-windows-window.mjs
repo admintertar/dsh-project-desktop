@@ -23,14 +23,14 @@ for(const locale of ['en','zh']){
  note('create '+locale); const window=new BrowserWindow({width:980,height:720,minWidth:420,minHeight:460,show:false,
   webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,backgroundThrottling:false,partition:'probe'}});
  note('created');await window.loadFile(join(import.meta.dirname,'index.html'));note('loaded');
- for(const theme of ['light','dark']){
+ for(const theme of ['light','dark','system']){
   note('theme '+theme);nativeTheme.themeSource=theme;await delay(150);
   note('resize');window.setSize(420,460);await delay(200);note('resized');
   await window.webContents.executeJavaScript('document.body.innerText');note('read');
  }
  note('close');const closed=new Promise(resolve=>window.once('closed',resolve));window.close();await closed;note('closed');
 }
-note('restore theme');nativeTheme.themeSource='system';note('theme restored');
+note('system theme restored before closing windows');
 const welcome=new BrowserWindow({show:false});await welcome.loadFile(join(import.meta.dirname,'index.html'));
 welcome.show();note('passed');app.quit();
 })().catch(error=>{note(String(error.stack));app.exit(1)});
