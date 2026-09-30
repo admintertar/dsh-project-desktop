@@ -328,16 +328,22 @@ async function run() {
       await finishQuit();
     }).catch(error => {quitting = false; report(error); perform(showGuide)});
   });
+  trace.stage('electron/ready begin');
   await app.whenReady();
+  trace.stage('electron/ready');
   sessionEnd = installOfficialSessionEnd(electron);
+  trace.stage('official/native-services begin');
   services = await import(pathToFileURL(join(runtimeDirectory(), 'official/native-services.mjs')).href);
+  trace.stage('official/native-services');
   if (updateTesting) updateFixture = (await import('../../scripts/official-update-fixture.mjs')).createOfficialUpdateFixture();
   updates = await createProjectUpdates(electron, {directory: join(userData, 'updates'), output: join(repository, 'dist/official-updates'),
     version: productVersion, productName, locale: language, getWindow: () => active()?.window ?? guide,
     installArtifact, changed: refreshMenus, automatic: !testing && app.isPackaged,
     ...(updateFixture ? {request: updateFixture.request} : {})});
+  trace.stage('official/updates');
   accountStore = await prepareSharedAccountStore({userData, sourceCommit: officialPin.commit,
     credentials: await officialCredentials(runtimeDirectory())});
+  trace.stage('official/account-store');
   hostEnvironment = createOfficialHostEnvironment(services);
   // app.exit 不触发 will-quit，仍需终止尚在读取的 shell 进程组。
   app.on('will-quit', () => hostEnvironment.dispose());
@@ -345,6 +351,7 @@ async function run() {
   quitGuard = createOfficialQuitGuard(electron, services, {locale: language, name: productName, icon: appIcon});
   officialIpc = installOfficialProjectIpc(electron, services);
   await cleanupGuideClones(userData);
+  trace.stage('shell/services');
   lastLocale = app.getLocale().startsWith('zh') ? 'zh' : 'en';
   app.setAboutPanelOptions({applicationName: productName, applicationVersion: productVersion,
     ...(process.platform === 'darwin' ? {version: `DSH ${officialPin.version}`} : {credits: `DeepSeek Harness ${officialPin.version}`})});
@@ -353,8 +360,10 @@ async function run() {
   if (icon.isEmpty()) throw new Error(`Failed to load tray icon: ${trayIcon}`);
   if (process.platform === 'darwin') icon.setTemplateImage(true);
   tray = new Tray(icon); tray.setToolTip(productName);
+  trace.stage('shell/tray');
   tray.on('click', () => perform(showApplication));
   refreshMenus();
+  trace.stage('shell/menu');
   if (testing) {
     startupComplete = true;
     deepLinks.ready();

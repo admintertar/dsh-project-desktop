@@ -10,14 +10,15 @@ const mode = process.argv.includes('--updates') ? '--official-update-smoke'
   : process.argv.includes('--account-sharing') ? '--official-account-sharing-smoke'
   : process.argv.includes('--close') ? '--official-close-smoke' : '--official-shell-smoke';
 const child = spawn(process.execPath, [join(repository, 'scripts/start.mjs'), mode], {
-  stdio: 'inherit', env: {...process.env, DSH_PROJECT_DESKTOP_SMOKE_DATA: root},
+  stdio: 'inherit', env: {...process.env, DSH_PROJECT_DESKTOP_SMOKE_DATA: root,
+    ELECTRON_ENABLE_LOGGING: '1', ELECTRON_LOG_FILE: join(root, 'chromium.log')},
 });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 child.on('error', error => {console.error(error); process.exitCode = 1});
 child.on('close', code => {
   process.exitCode = code ?? 1;
   if (code !== 0) {
-    for (const name of ['smoke-error.log', 'boot.log']) {
+    for (const name of ['smoke-error.log', 'boot.log', 'chromium.log']) {
       const path = join(root, name);
       if (existsSync(path)) console.error(`${name}:\n${readFileSync(path, 'utf8').replace(/([?&]token=)[^\s&]+/gu, '$1[redacted]')}`);
     }
