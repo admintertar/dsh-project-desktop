@@ -26,7 +26,7 @@ test('window sessions install no renderer permission handler and no download blo
   // Official parity: the pinned Desktop runtime has neither. A deny-all policy
   // rejects `navigator.clipboard.writeText` as `clipboard-read` while the official
   // client swallows that rejection, killing every copy button silently.
-  for (const file of ['../src/desktop-adapter/native.mjs', '../src/windows/guide-window.mjs']) {
+  for (const file of ['../src/desktop-adapter/official/project-window.mjs', '../src/windows/guide-window.mjs']) {
     const source = readFileSync(new URL(file, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /setPermission(Request|Check)Handler/u, file);
     assert.doesNotMatch(source, /will-download/u, file);

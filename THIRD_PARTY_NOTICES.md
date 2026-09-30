@@ -4,6 +4,20 @@ Original Shell code is governed by the rights-reserved notice in LICENSE.
 The material identified below retains its original terms; the Shell notice does
 not restrict the rights granted by those third-party licenses.
 
+## Direct official branch
+
+The active Shell compiles unchanged modules from DeepSeek's
+`deepseek-harness/apps/desktop`, pinned by `official-source.lock.json`. The
+window, IPC, session and settings adaptations are listed in docs/architecture.md.
+The runtime includes the official LICENSE and package-level notices. The guide
+uses official locale, primitives and theme components, with Shell-owned geometry.
+The companion plugin candidate is recorded in `project-source.lock.json`;
+Yarn development dependencies are recorded in `yarn.lock`.
+
+Anywhere Labs code is no longer loaded by setup/build/start/check. The following
+notices remain for historical adapters still present for deletion review; they
+are not a dependency requirement for this migration.
+
 ## Components and adaptations
 
 - DSH Desktop, Anywhere Labs: https://github.com/anywhere-labs/dsh-desktop

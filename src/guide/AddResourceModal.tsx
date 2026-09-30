@@ -1,6 +1,6 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import {Button, Input} from '@deepseek-ai/dsh-client-ui-primitives';
-import {ProjectScrollableModal, ProjectSelect, ProjectSettingRow, ProjectSettingsCard, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
+import {ProjectScrollableModal, ProjectSelect, ProjectSettingRow, ProjectSettingsCard, resourceErrorText} from '../desktop-adapter/official/guide-resources-client';
 import {validResourceBranch, validResourceUrl} from '../shared/remote-resource.mjs';
 import {defaultResourceTarget, resourceTargetsOverlap, suggestedResourceName, validResourceName, validResourceTarget} from '../shared/resource-draft.mjs';
 

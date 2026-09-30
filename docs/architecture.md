@@ -6,17 +6,56 @@
 
 官方 Desktop 与 DSH 都在快速变化，stable 仅指发行通道。目标是把升级影响限制在清晰的接入边界，避免长期维护 Desktop fork，并非保证每次升级零修改。
 
-## 官方 0.2.0-rc.2 迁移中的新边界
+## 当前官方主进程（0.2.0-rc.2 开发分支）
 
-`src/desktop-adapter/official/web-session.mjs` 已从临时双窗口实验提取为 Shell 自有的逐项目 Electron Session 适配器。它调用固定官方 `apps/desktop/src/web-document.ts` 的 `serveWebDocument` 和 `forwardWebRequest`，在 `dsh-app://app/` 提供官方静态资源，将动态请求连同所属 Host Cookie 转发到项目 Host；同一 Session 的 WebSocket 仅允许所属 WebContents、Host 地址及 `dsh-app://app` Origin，才改写 Origin 并附带 Cookie。每个 Session 只允许一个活跃所有者，`dispose()` 成对释放协议与 WebSocket 注册，旧生命周期重复清理不会删除新所有者。`ipc-owners.mjs` 已接入真实探针，用主 Frame 和所属 WebContents 校验 preload IPC；注册时返回清理闭包，窗口销毁后无需读取已销毁的 Electron 对象。真实 payload 双窗口实验已验证 A 销毁后在同一 Session 重开，B 保持可用，全部关闭后协议和 IPC 注册清空。此实验保持 Host 运行，尚不覆盖正式 Shell 的 Host 重启、Profile 恢复和用户关闭确认。官方 `dsh://open` 仍是操作系统唤起入口，与窗口页面协议分工不同。
+`src/app/main.mjs` 已直接接入 `src/desktop-adapter/official/`。默认 setup、build、start 和 check
+均不读取 `upstream.lock.json`、社区 Desktop 源码或旧 `.cache/runtime`。唯一上游 pin 是
+`official-source.lock.json`；配套插件候选提交由独立 `project-source.lock.json` 固定。
 
-官方开发构建输入统一由 `official/build-inputs.mjs` 映射：校验固定工作区中 Desktop、Desktop Host、CLI、Web 包身份和版本，以及它们的构建输出、pnpm 版本。`prepare-official-development.mjs` 在 `.cache/official-development/` 暂存官方 Web dist、preload、许可证与由官方 `web-document.ts` 编译的模块，并记录全部暂存文件的 SHA-256。双 Host 和双窗口探针改为取这份映射。Host/CLI 和依赖仍位于固定官方工作区，因此它是开发输入验证，不是可搬移的安装包闭包。
+| 负责方 | 当前职责 |
+| --- | --- |
+| Shell | 欢迎/创建/打开/切换项目，菜单、窗口位置、多窗口生命周期与共享主题 |
+| Project 插件 | 官方主窗口中的项目页面与工作区替换 |
+| DeepSeek | Host、Web 主界面、聊天/模型/设置，以及已有原生桥接实现 |
 
-`prepare-official-package-set.mjs` 进一步调用固定官方仓库自己的构建、打包和 `prepare-package-set.ts`，生成 287 个筛选后的第一方 tarball 与官方 `desktop-packages.json`；`source.json` 记录来源 pin 和清单 SHA-256，官方 `verifyDesktopCorePackageSet` 校验每个包的大小与 SHA-512。该集合已验证可复制到另一目录，且篡改包会被拒绝。它是下一层运行目录组装的输入，外部 npm 依赖、原生二进制与主运行时按下述流程加入。
+### 官方模块与适配理由
 
-`prepare-official-runtime.mjs` 已在 macOS arm64 完成下一层组装：原样调用官方 `prepare:runtime`，由 `official-runtime-worker.mjs` 复用 `prepare-dsh.ts` 的官方元数据、安装配置、文件过滤、manifest 整理、完整性清单和原生/Host/Office smoke。适配原因是官方 macOS `prepare:dsh` 强制 Developer ID 签名，本地迁移实验暂不签名；该适配同时将外部 npm 解析结果固定为 `official-runtime-locks/mac-arm64/`，每次在新目录按 frozen lock 安装，避免依赖漂移和旧 node_modules 残留。输出包含完整 Host/CLI、Electron、Web/preload、pnpm、Node/Python 与 Office 资源；移动后重复上游真实检查通过。`runtime-payload.mjs` 记录并校验全部产物的字节、执行权限和包内框架链接，拒绝外部路径。双窗口探针的 `--runtime` 路径已用真实 Project 插件验证，但插件仍是开发链接，探针控制脚本仍引用固定官方源码；正式 Shell、数据和发行流程尚未接入。
+- `project-window.mjs` 直接使用从官方 `apps/desktop/src/host-process.ts` 编译的 `DesktopHostProcess`。
+  每个项目有独立 DSH Home、`profiles/desktop`、随机 loopback 端口、Cookie 和持久化 Chromium 分区。
+  原生窗口参数以官方 `main.ts/createWindow` 为来源，Shell 补窗口位置、标题、焦点和关闭回调。
+- `profile.mjs` 调用官方 `dsh-app-boot/initProfile`，添加 Project bundle 和随机端口。
+  只接管带有本适配器来源/项目标记的 Home。旧 Stable Home 会被拒绝且保留原字节，等待独立迁移。
+- `web-session.mjs` 复用官方 `web-document.ts` 的静态页面、认证与 HTTP 转发逻辑。
+  WebSocket 同时校验项目 Session、WebContents、Host 地址和 Origin；重开前释放旧协议处理器。
+- `build-official-native.mjs` 原样编译官方 `keyboard.ts`、`directory-picker.ts`、`welcome-backend.ts`、
+  `device-info.ts`、`locale.ts`、`browser-guests.ts`、`platform-view.ts` 和 `microphone-permissions.ts`。
+  `scoped-electron.mjs` 将单窗口实现的 IPC 注册点改为 `webContents.ipc`，不改官方快捷键/目录选择行为。
+  当前键位配置保存在各项目状态目录，避免两个官方单写入协调器竞争同一文件。
+  Platform 账号分区名另加项目命名空间，避免相同账号跨项目共享 Cookie。
+- `project-ipc.mjs` 只接收所属 `dsh-app://app/` 主 Frame；API Key 和语言读取官方 Welcome Backend，
+  不伪造 onboarding 完成。浏览器、平台页面和麦克风桥接继续复用上述官方 helper。
+- `host-settings.mjs` 使用官方 `settings/describe`、`settings/update` RPC 同步共享主题，携带 namespace revision。
+  renderer 启动色可能早于 settings 更新，只有与 Host 已保存偏好一致的通知才能传播，避免重开时覆盖全局选择。
+- 窗口等待官方 boot gate、transport 和加载页退出。启动失败统一清理；Host 停止未确认时保留 Registry
+  所有权并允许重试，不能启动第二个 Host。运行中失败回欢迎页，只影响所属项目。
+- 引导页使用 Shell 自有布局常量与 CSS，直接编译固定官方 locale/primitives/theme 和 Project 的资源控件。
+  不再加载社区 AdvancedFrame、样式安装器或 window-options。
 
-当前正式 `src/app/main.mjs` 仍调用下方的社区 stable adapter；上述新模块已接到官方临时双窗口探针并用真实 Electron/Project 插件验证，尚未接入正式窗口、恢复和打包链。旧架构说明记录已发布 0.1.11 的实现，不代表官方迁移已完成。
+`tests/official-shell-imports.test.mjs` 校验实际主进程模块图和欢迎页构建输入中没有社区依赖。
+`tests/*.legacy.mjs` 与下方旧架构用于删除审计，不进入默认测试。
+
+### 验证边界
+
+当前真实平台为 macOS arm64。正式主进程已验证欢迎页创建、两个项目、真实 API Key 状态、快捷键 IPC、
+关闭/重开/重启、共享主题、旧数据拒绝接管和关闭后 owner/协议释放。
+运行目录是未签名开发产物，Project 插件仍使用已校验的开发工作树；不等于安装包依赖闭包。
+登录后账号页面、真实浏览器会话、麦克风、完整快捷键编辑/物理按键、活跃任务关闭确认、`dsh://open`、
+自动更新、用户数据迁移回退、Windows 与 macOS Intel 验收尚未完成。打包命令会明确停止。
+
+## 旧 Stable 架构（仅供删除审计）
+
+以下章节描述已发布 0.1.11 的社区实现。其中的“官方 Desktop”历史措辞指社区包装层，
+不能据此恢复社区私有模块。当前实现以以上分工与官方源码 pin 为准。
 
 ## 所有权
 

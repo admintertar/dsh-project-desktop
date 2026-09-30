@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync} from 'node:fs';
 import {join} from 'node:path';
-import {repository} from '../src/desktop-adapter/paths.mjs';
+import {repository} from '../src/desktop-adapter/official/paths.mjs';
 import {findProjectFile, createProjectInDirectory, RecentProjects} from '../src/app/project-files.mjs';
 mkdirSync(join(repository, '.runtime'), {recursive: true});
 const root = mkdtempSync(join(repository, '.runtime/project-files-'));

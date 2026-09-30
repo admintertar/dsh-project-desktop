@@ -1,5 +1,41 @@
 # Development / 开发准备
 
+## 当前分支：直接使用 DeepSeek 官方 Desktop
+
+以下命令用于已完成官方 `pnpm install --frozen-lockfile`、`pnpm run build:official` 的固定官方工作树。
+Node 使用 `^22.19.0 || >=24.0.0`，配套 Project 仓库也需要已安装开发依赖。
+
+```sh
+yarn setup -- --official-source ../deepseek-harness-official-021 --project-source ../dsh-plugin-project
+# 尚未准备运行 payload 时执行这两个命令：
+yarn prepare:official-package-set -- ../deepseek-harness-official-021
+yarn prepare:official-runtime -- ../deepseek-harness-official-021
+
+yarn check
+yarn smoke:official-shell
+DSH_PROJECT_DESKTOP_USER_DATA=/private/tmp/dsh-official-development yarn start
+```
+
+setup 校验两个来源并调用插件自己的 setup/build，把本机路径存入忽略目录
+`.cache/official-shell-inputs.json`；它不会读取旧 `upstream.lock.json`，不复制社区缓存，
+不修改任何运行中的 Profile。Project 候选 pin 仅用于此开发分支，尚未作为发布/CI pin 推送。
+本地修改插件时可继续用 `DSH_PROJECT_PLUGIN_SOURCE`，先在插件仓库 build，再在 Shell build；
+默认路径则要求插件工作树干净且 HEAD 与候选 pin 相同。
+
+start 校验完整官方 payload 和 Shell 构建来源；缺失时明确停止，没有社区 fallback。
+`yarn check` 包含官方 Shell build、现行单测和项目文件保护检查；不再运行社区专属恢复/安全模式/打包测试。
+那些断言保存为 `tests/*.legacy.mjs`，见 `tests/LEGACY.md`。
+
+`smoke:official-shell` 从正式 main 启动，临时 userData 写到系统 TEMP，结果和页面截图保存在日志指示的目录。
+只复制结论 JSON/必要截图到任务 artifacts。测试不填写 API Key、不修改真实 Stable 数据。
+日志可能包含临时 Host 启动 token，不能直接放进任务产物。
+
+当前仅验证 macOS arm64。安装包/CI、签名、自动更新、旧数据迁移与回退尚未接入，
+`package:mac`/`package:win` 会停止并提示此限制。旧 smoke flags 也被拒绝，避免误启动默认用户数据。
+
+## 以下为历史阶段记录，不能作为当前构建命令
+
+
 ## Official 0.2.0-rc.2 migration work / 官方 0.2.0-rc.2 迁移开发
 
 The commands below this section still describe the released `0.1.11` Stable

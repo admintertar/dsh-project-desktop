@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {parse} from 'yaml';
 import {GuideClones, cleanupGuideClones} from '../src/app/guide-clones.mjs';
 import {createProjectFromPlan} from '../src/app/project-bootstrap.mjs';
-import {loadGuideResources} from '../src/desktop-adapter/stable/guide-resources.mjs';
+import {loadGuideResources} from '../src/desktop-adapter/official/guide-resources.mjs';
 import {validResourceBranch} from '../src/shared/remote-resource.mjs';
 import {privateGitFixture, waitUntil} from './fixtures/private-git.mjs';
 

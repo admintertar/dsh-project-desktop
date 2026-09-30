@@ -6,6 +6,12 @@
 
 **不维护 DSH Desktop fork。** 官方 Desktop 与 Harness 使用固定提交的原始源码；适配集中在 `src/desktop-adapter/`。项目内的资源、任务、记忆、技能和 MCP 由配套仓库 **dsh-plugin-project** 提供。
 
+
+> **当前分支（直接依赖官方迁移）：** setup/build/start 已改为 DeepSeek 官方 Desktop/Harness **0.2.0-rc.2**。
+> Shell 负责欢迎/创建/打开/切换项目、菜单和多窗口；插件负责项目内页面与工作区替换。
+> 社区 Profile、恢复助手与安全模式模块已退出运行链。当前命令见[开发说明](docs/development.md)。
+> 下方产品与发行描述保留已发布 0.1.11 基线；新分支的安装包、更新、Stable 数据迁移尚未完成。
+
 ## 产品能力
 
 - **项目启动体验**：恢复上次仍打开的多个项目；没有待恢复项目时显示欢迎页，支持搜索最近项目、新建和打开。
@@ -19,7 +25,7 @@
 
 当前是早期开发版本，只支持 `stable` 通道：Desktop **2.0.15**、Harness **0.1.7-rc.2**，插件提交由 [upstream.lock.json](upstream.lock.json) 固定。stable 表示发行通道，不是长期 API 稳定承诺。
 
-`codex/direct-official-desktop` 分支正在迁移至 DeepSeek 官方 Desktop / Harness **0.2.0-rc.2**。当前正式启动与安装包仍沿用上述 Stable 链路；迁移开发命令和阶段状态见[开发说明](docs/development.md)与项目任务记录。
+`codex/direct-official-desktop` 分支正在迁移至 DeepSeek 官方 Desktop / Harness **0.2.0-rc.2**。安装包仍未迁移，当前正式启动已切换官方开发链路；迁移开发命令和阶段状态见[开发说明](docs/development.md)与项目任务记录。
 
 当前本地原生验收基线为 **macOS x64**。GitHub Actions 生成同时支持 Intel / Apple Silicon 的 macOS Universal DMG，以及 Windows x64 安装包；同一 DMG 分别在两种 Mac 架构启动自检，各平台状态以对应任务结果为准。应用支持后台检查自有 Release、确认后下载并校验安装包。Linux、正式签名发行与静默安装尚未提供。项目独立维护，不是 DeepSeek 或 Anywhere Labs 的官方发行版。
 

@@ -15,6 +15,7 @@ import {verifyOfficialSource} from './verify-official-source.mjs';
 import {readOfficialRuntimeLock} from '../src/desktop-adapter/official/runtime-inputs.mjs';
 import {inventoryOfficialPayload, verifyOfficialRuntimePayload} from '../src/desktop-adapter/official/runtime-payload.mjs';
 import {build} from 'esbuild';
+import {buildOfficialNative} from './build-official-native.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const {source, pin} = verifyOfficialSource(process.argv[2]);
@@ -114,10 +115,24 @@ try {
     const desktop = join(staging, 'desktop');
     mkdirSync(desktop);
     cpSync(join(source, 'apps/web/dist'), join(desktop, 'web'), {recursive: true});
-    cpSync(join(source, 'apps/desktop/lib/preload-app.cjs'), join(desktop, 'preload-app.cjs'));
+    for (const name of ['preload-app.cjs', 'preload-platform-account.cjs']) {
+      cpSync(join(source, 'apps/desktop/lib', name), join(desktop, name));
+    }
     cpSync(join(source, 'LICENSE'), join(staging, 'LICENSE'));
+    writeFileSync(join(staging, 'package.json'), JSON.stringify({name: '@deepseek-ai/dsh-official-runtime', version: pin.version, type: 'module'}) + '\n');
     await build({entryPoints: [join(source, 'apps/desktop/src/web-document.ts')], outfile: join(desktop, 'web-document.mjs'),
       bundle: true, platform: 'node', format: 'esm', target: 'node22'});
+    // Shell 的项目窗口直接复用官方 Desktop 的 Host 生命周期；把官方源码编译进
+    // payload 后，启动时不需要读取官方工作树，也不会落回社区 dsh-desktop 模块。
+    const official = join(staging, 'official');
+    mkdirSync(official);
+    await build({entryPoints: [join(source, 'apps/desktop/src/host-process.ts')],
+      outfile: join(official, 'host-process.mjs'), bundle: true, platform: 'node',
+      format: 'esm', target: 'node22'});
+    await build({entryPoints: [join(source, 'apps/desktop/src/web-document.ts')],
+      outfile: join(official, 'web-document.mjs'), bundle: true, platform: 'node',
+      format: 'esm', target: 'node22'});
+    await buildOfficialNative(source, official);
     await manifests.prepareRuntimeManifests(dsh);
     // Upstream's pnpm version check inherits cwd. Keep it outside the Shell's
     // Yarn workspace so repository package-manager policy cannot affect it.

@@ -3,8 +3,8 @@ import {createRoot} from 'react-dom/client';
 import {Button, Input, Menu, Modal, IconEllipsisOutlineRegular, IconFolderOpenOutlineRegular, IconLinkOutlineRegular, IconProjectAddOutlineRegular, IconSearchOutlineRegular, IconPlusOutlineRegular,
   IconChevronLeftOutlineRegular, IconChevronDownOutlineRegular, IconWarningOutlineRegular, IconTrashOutlineRegular, IconBranchOutlineRegular, IconEditOutlineRegular, IconCloseOutlineRegular, IconLoadingOutlineRegular, Tag, Tooltip} from '@deepseek-ai/dsh-client-ui-primitives';
 import './style.css';
-import {createGuideLocale} from '../desktop-adapter/stable/guide-locale';
-import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResourceCopy, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
+import {createGuideLocale} from '../desktop-adapter/official/guide-locale';
+import {GuideResourceAuth, ProjectSelect, createGuideAuthController, guideResourceCopy, resourceErrorText} from '../desktop-adapter/official/guide-resources-client';
 import {RemoteRepositoryModal} from './RemoteRepositoryModal';
 import {AddResourceModal} from './AddResourceModal';
 import {CloneRepositoryModal} from './CloneRepositoryModal';
@@ -12,7 +12,7 @@ import {defaultResourceTarget, draftResourceTarget} from '../shared/resource-dra
 import {projectPathPreview} from '../shared/project-path.mjs';
 import {PROJECT_COMPOSITIONS as templates, RESOURCE_ROLE_KEYS} from '../shared/project-templates.mjs';
 import {useModalBoundary} from './useModalBoundary';
-import {GuideFrame} from '../desktop-adapter/stable/GuideFrame';
+import {GuideFrame} from '../desktop-adapter/official/GuideFrame';
 
 const copy = {
   zh: {title: '项目', body: '会话、资料、记忆和任务，都从这里开始。', resizeSidebar: '调整侧栏宽度',

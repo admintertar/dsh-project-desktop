@@ -1,6 +1,6 @@
 import {useEffect, useId, useRef, useState} from 'react';
 import {Button, IconLoadingOutlineRegular, Input} from '@deepseek-ai/dsh-client-ui-primitives';
-import {ProjectScrollableModal, ProjectSettingRow} from '../desktop-adapter/stable/guide-resources-client';
+import {ProjectScrollableModal, ProjectSettingRow} from '../desktop-adapter/official/guide-resources-client';
 import {repositoryFolderName, validRepositoryName, validResourceBranch, validResourceUrl} from '../shared/remote-resource.mjs';
 import {projectPathPreview} from '../shared/project-path.mjs';
 

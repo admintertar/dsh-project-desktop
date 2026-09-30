@@ -1,6 +1,6 @@
 import {useId, useState} from 'react';
 import {Button, Input} from '@deepseek-ai/dsh-client-ui-primitives';
-import {ProjectScrollableModal, ProjectSettingRow, resourceErrorText} from '../desktop-adapter/stable/guide-resources-client';
+import {ProjectScrollableModal, ProjectSettingRow, resourceErrorText} from '../desktop-adapter/official/guide-resources-client';
 import {validResourceBranch, validResourceUrl} from '../shared/remote-resource.mjs';
 
 export function RemoteRepositoryModal({item, t, rt, onSave, onClose, onUnlink}: any) {

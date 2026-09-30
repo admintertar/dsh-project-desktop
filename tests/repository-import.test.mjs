@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {classifyProjectTarget} from '../src/app/project-files.mjs';
 import {RepositoryImports} from '../src/app/repository-import.mjs';
 import {GuideClones} from '../src/app/guide-clones.mjs';
-import {loadGuideResources} from '../src/desktop-adapter/stable/guide-resources.mjs';
+import {loadGuideResources} from '../src/desktop-adapter/official/guide-resources.mjs';
 import {repositoryFolderName, validRepositoryName} from '../src/shared/remote-resource.mjs';
 import {privateGitFixture, waitUntil} from './fixtures/private-git.mjs';
 

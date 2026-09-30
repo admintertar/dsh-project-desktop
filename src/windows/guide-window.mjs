@@ -5,8 +5,8 @@ import {trustedSender} from './renderer-security.mjs';
 import {GuideClones} from '../app/guide-clones.mjs';
 import {RepositoryImports} from '../app/repository-import.mjs';
 import {LastDirectories, pickRememberedDirectory} from '../app/last-directories.mjs';
-import {inspectGuideResource} from '../desktop-adapter/stable/guide-resources.mjs';
-import {guideWindowOptions} from '../desktop-adapter/stable/guide-window-options.mjs';
+import {inspectGuideResource} from '../desktop-adapter/official/guide-resources.mjs';
+import {guideWindowOptions} from '../desktop-adapter/official/guide-window-options.mjs';
 import {GuideLayoutState} from './guide-layout-state.mjs';
 import {productVersion} from '../app/product.mjs';
 

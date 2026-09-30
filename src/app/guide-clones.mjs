@@ -2,7 +2,7 @@ import {constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, 
 import {cp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {loadGuideResources} from '../desktop-adapter/stable/guide-resources.mjs';
+import {loadGuideResources} from '../desktop-adapter/official/guide-resources.mjs';
 import {validResourceUrl, validResourceBranch} from '../shared/remote-resource.mjs';
 
 const marker = 'project-creation-draft-v1';

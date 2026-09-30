@@ -6,6 +6,12 @@ An independent AI development desktop for projects spanning multiple repositorie
 
 **No DSH Desktop fork is maintained.** Official Desktop and Harness sources are pinned and unmodified; integration is confined to `src/desktop-adapter/`. The companion **dsh-plugin-project** owns resources, tasks, memory, skills and MCP features within each project.
 
+
+> **Current branch (direct official migration):** setup/build/start now use DeepSeek's official Desktop/Harness **0.2.0-rc.2**.
+> The Shell owns welcome, project creation/switching, menus and multiple windows; Project owns in-window project pages.
+> Community Profile/Recovery/Safe Mode modules are retired. See [current development commands](docs/development.md).
+> The feature/release description below documents published 0.1.11; packaging, updates and Stable data migration remain pending.
+
 ## Features
 
 - **Project startup:** restore the projects left open at exit; otherwise show a welcome screen with recent-project search, creation and opening.
