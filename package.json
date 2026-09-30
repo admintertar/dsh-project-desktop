@@ -26,6 +26,7 @@
     "verify:official-source": "node scripts/verify-official-source.mjs",
     "prepare:official-development": "node scripts/prepare-official-development.mjs",
     "prepare:official-package-set": "node scripts/prepare-official-package-set.mjs",
+    "prepare:official-runtime": "node scripts/prepare-official-runtime.mjs",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:recovery": "node --test scripts/check-recovery.mjs",

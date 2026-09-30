@@ -38,14 +38,49 @@ The official `verifyDesktopCorePackageSet` checks tarball sizes and SHA-512;
 the preparation command also checks the source pin and descriptor before
 returning the set.
 The set can be copied between directories, but it is only the first-party
-package closure. Official `prepare:runtime` and `prepare:dsh` still need to
-assemble external npm dependencies, native binaries and the primary runtime
-before the Shell has a relocatable installation payload.
+package closure. External npm dependencies, native binaries and the primary
+runtime are assembled in the next preparation stage described below.
+
+The migration now also has an unsigned native runtime preparation command:
+
+```sh
+yarn run prepare:official-runtime -- ../deepseek-harness
+# Reuse resources already prepared by the official prepare:runtime stage:
+yarn run prepare:official-runtime -- ../deepseek-harness --reuse-resources
+```
+
+Only `mac-arm64` currently has a reviewed production dependency lock in
+`official-runtime-locks/`; another target fails before downloading resources.
+The command uses official `prepare:runtime`, then reuses the complete package
+metadata, file filtering, manifest normalization, inventory and native smoke
+helpers from `prepare-dsh.ts`. Its development adaptation omits Developer ID
+signing and installs the committed lock into a fresh temporary directory.
+External dependency versions, tarball hashes, Electron's Node version and pnpm
+version must match the target lock. Build logs remain in ignored
+`.cache/official-runtime-logs/` and may contain temporary Host authentication URLs.
+
+`.cache/official-runtime/mac-arm64/` contains Electron, Host/CLI production
+packages, Web/preload resources, pnpm, Node, Python and Office resources. The
+official payload/Host/Office checks run before and after relocation. Its source
+manifest records every shipped file's hash and permissions plus the 14 internal
+Electron framework links; links back to the workspace are rejected. A probe can
+load it with:
+
+```sh
+node --import ../deepseek-harness/node_modules/tsx/dist/loader.mjs \
+  scripts/probe-official-electron-window.mjs ../deepseek-harness --two \
+  --plugin ../dsh-plugin-project --runtime .cache/official-runtime/mac-arm64
+```
+
+The probe controller still imports verified official source helpers, and its
+optional Project plugin is still a local development link. The prepared Host,
+Electron and window resources use the copied payload. Formal Shell startup,
+data migration, CI, installers and other native targets remain pending.
 
 本节以下仍是已发布 `0.1.11` 的构建步骤。迁移分支的新命令只准备官方开发输入，
-不会修改已安装应用或用户数据。临时目录中的 Host 和依赖仍链接本机官方工作区，
-新增官方核心 tarball 集合可搬移，但尚缺外部依赖和原生运行时；需要继续完成
-正式构建闭包与主进程接入。
+不会修改已安装应用或用户数据。默认开发探针的 Host 和依赖链接本机官方工作区；
+新增官方核心 tarball 集合与 macOS arm64 未签名运行目录已通过搬移验证；正式
+Shell 主进程、插件发行打包、其他平台和旧数据迁移仍需接入。
 
 The shell imports immutable source snapshots and independent dependency caches.
 It does not require a private repository or a fork. Commands below use sibling

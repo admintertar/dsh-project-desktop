@@ -6,20 +6,34 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {build} from 'esbuild';
 import {prepareOfficialDevelopment} from './prepare-official-development.mjs';
+import {verifyOfficialSource} from './verify-official-source.mjs';
+import {officialBuildInputs} from '../src/desktop-adapter/official/build-inputs.mjs';
+import {officialRuntimeTarget} from '../src/desktop-adapter/official/runtime-inputs.mjs';
+import {verifyOfficialRuntimePayload} from '../src/desktop-adapter/official/runtime-payload.mjs';
 
 const source = process.argv[2];
 const probeArgs = process.argv.slice(3);
+const runtimeIndex = probeArgs.indexOf('--runtime');
+const runtimePayload = runtimeIndex !== -1 && probeArgs[runtimeIndex + 1] ? resolve(probeArgs[runtimeIndex + 1]) : undefined;
+if (runtimePayload) probeArgs.splice(runtimeIndex, 2);
 const two = probeArgs[0] === '--two';
 if (two) probeArgs.shift();
 const pluginSource = probeArgs[0] === '--plugin' && probeArgs[1] ? resolve(probeArgs[1]) : undefined;
 if (pluginSource) probeArgs.splice(0, 2);
-if (!source || probeArgs.length) throw new Error('Usage: node --import /path/to/tsx/loader.mjs scripts/probe-official-electron-window.mjs /path/to/deepseek-harness [--two] [--plugin /path/to/dsh-plugin-project]');
+if (!source || probeArgs.length) throw new Error('Usage: node --import /path/to/tsx/loader.mjs scripts/probe-official-electron-window.mjs /path/to/deepseek-harness [--two] [--plugin /path/to/dsh-plugin-project] [--runtime /path/to/prepared-runtime]');
 if (pluginSource && !existsSync(join(pluginSource, 'lib/index.js'))) throw new Error('Build the Project plugin before probing it');
 const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
 if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19) || nodeMajor === 23) {
   throw new Error(`Official Desktop probe requires Node 22.19+ or 24+; found ${process.versions.node}`);
 }
-const staged = await prepareOfficialDevelopment(resolve(source));
+const checked = verifyOfficialSource(source);
+const inputs = officialBuildInputs(checked.source, checked.pin);
+if (runtimePayload) verifyOfficialRuntimePayload(runtimePayload, checked.pin, officialRuntimeTarget(process.platform, process.arch));
+const staged = runtimePayload ? {inputs, inventory: {version: checked.pin.version},
+  webDocument: join(runtimePayload, 'desktop/web-document.mjs'), preload: join(runtimePayload, 'desktop/preload-app.cjs'),
+  webDist: join(runtimePayload, 'desktop/web')} : await prepareOfficialDevelopment(checked.source);
+const node = runtimePayload ? join(runtimePayload, 'electron', process.platform === 'win32'
+  ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron') : process.execPath;
 const official = staged.inputs.root;
 const load = name => import(pathToFileURL(join(official, name)).href);
 const [{prepareDevelopmentProject}, {DesktopProjectManager}, {resolveDesktopPaths}, {DesktopHostProcess}, {DESKTOP_HOST_PROTOCOL_VERSION}] = await Promise.all([
@@ -32,18 +46,20 @@ const root = mkdtempSync(join(tmpdir(), 'dsh-official-electron-window-'));
 const resultFile = join(root, 'result.json');
 const hosts = [];
 try {
-  const runtime = join(root, 'runtime');
-  cpSync(staged.inputs.officeSkills, join(runtime, 'office-skills'), {recursive: true});
-  const nodeBin = join(runtime, 'primary-runtime/dependencies/node/bin');
-  mkdirSync(nodeBin, {recursive: true});
-  cpSync(process.execPath, join(nodeBin, process.platform === 'win32' ? 'node.exe' : 'node'));
+  const runtime = runtimePayload ? join(runtimePayload, 'runtime') : join(root, 'runtime');
+  if (!runtimePayload) {
+    cpSync(staged.inputs.officeSkills, join(runtime, 'office-skills'), {recursive: true});
+    const nodeBin = join(runtime, 'primary-runtime/dependencies/node/bin');
+    mkdirSync(nodeBin, {recursive: true});
+    cpSync(process.execPath, join(nodeBin, process.platform === 'win32' ? 'node.exe' : 'node'));
+  }
   const projects = [];
   const count = two ? 2 : 1;
   for (let index = 0; index < count; index++) {
     const id = String.fromCharCode(65 + index);
     const home = join(root, `home-${id}`);
     mkdirSync(home, {recursive: true});
-    const project = prepareDevelopmentProject({projectDir: join(root, `project-${id}`), cliDir: staged.inputs.cli,
+    const project = runtimePayload ? join(runtimePayload, 'dsh') : prepareDevelopmentProject({projectDir: join(root, `project-${id}`), cliDir: staged.inputs.cli,
       hostDir: staged.inputs.host, dependencyDir: staged.inputs.dependencyDir,
       release: {schemaVersion: 1, version, pnpmVersion, nodeVersion: process.versions.node,
         hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION},
@@ -67,7 +83,8 @@ try {
     const environment = {...process.env, DSH_HOME: home, DSH_TELEMETRY_MODE: 'DISABLED',
       ...(manifestPath ? {DSH_PROJECT_MANIFEST: manifestPath} : {})};
     for (const key of Object.keys(environment)) if (/KEY|TOKEN|SECRET|PASSWORD/u.test(key)) delete environment[key];
-    const host = new DesktopHostProcess(process.execPath, project, paths.profile, undefined, environment);
+    const host = new DesktopHostProcess(node, project, paths.profile, undefined, environment, undefined,
+      join(runtime, 'primary-runtime'), runtimePayload ? {pnpm: join(runtime, 'pnpm/bin/pnpm.cjs'), nodeBin: join(runtime, 'bin')} : undefined);
     hosts.push(host);
     const ready = await host.start();
     const auth = await fetch(ready.url, {redirect: 'manual'});
@@ -89,10 +106,10 @@ try {
   const config = {userData: join(root, 'electron'), projects, projectPlugin: Boolean(pluginSource), webDist, preload, result: resultFile};
   const configFile = join(root, 'config.json');
   writeFileSync(configFile, JSON.stringify(config), {mode: 0o600});
-  const electron = await import(pathToFileURL(staged.inputs.electronPackage).href);
+  const electron = runtimePayload ? node : (await import(pathToFileURL(staged.inputs.electronPackage).href)).default;
   const env = {...process.env, DSH_OFFICIAL_WINDOW_PROBE_CONFIG: configFile};
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawnSync(electron.default, [appDir], {cwd: root, env, stdio: 'inherit', timeout: 120000});
+  const child = spawnSync(electron, [appDir], {cwd: root, env, stdio: 'inherit', timeout: 120000});
   if (child.error) throw child.error;
   if (child.status !== 0) throw new Error(`Electron project window exited ${String(child.status)}`);
   const result = JSON.parse(readFileSync(resultFile, 'utf8'));

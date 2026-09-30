@@ -12,7 +12,9 @@
 
 官方开发构建输入统一由 `official/build-inputs.mjs` 映射：校验固定工作区中 Desktop、Desktop Host、CLI、Web 包身份和版本，以及它们的构建输出、pnpm 版本。`prepare-official-development.mjs` 在 `.cache/official-development/` 暂存官方 Web dist、preload、许可证与由官方 `web-document.ts` 编译的模块，并记录全部暂存文件的 SHA-256。双 Host 和双窗口探针改为取这份映射。Host/CLI 和依赖仍位于固定官方工作区，因此它是开发输入验证，不是可搬移的安装包闭包。
 
-`prepare-official-package-set.mjs` 进一步调用固定官方仓库自己的构建、打包和 `prepare-package-set.ts`，生成 287 个筛选后的第一方 tarball 与官方 `desktop-packages.json`；`source.json` 记录来源 pin 和清单 SHA-256，官方 `verifyDesktopCorePackageSet` 校验每个包的大小与 SHA-512。该集合已验证可复制到另一目录，且篡改包会被拒绝。它仍需通过官方 `prepare:runtime`、`prepare:dsh` 组装外部 npm 依赖、原生二进制与主运行时，之后才能成为正式 Shell 的发行闭包。
+`prepare-official-package-set.mjs` 进一步调用固定官方仓库自己的构建、打包和 `prepare-package-set.ts`，生成 287 个筛选后的第一方 tarball 与官方 `desktop-packages.json`；`source.json` 记录来源 pin 和清单 SHA-256，官方 `verifyDesktopCorePackageSet` 校验每个包的大小与 SHA-512。该集合已验证可复制到另一目录，且篡改包会被拒绝。它是下一层运行目录组装的输入，外部 npm 依赖、原生二进制与主运行时按下述流程加入。
+
+`prepare-official-runtime.mjs` 已在 macOS arm64 完成下一层组装：原样调用官方 `prepare:runtime`，由 `official-runtime-worker.mjs` 复用 `prepare-dsh.ts` 的官方元数据、安装配置、文件过滤、manifest 整理、完整性清单和原生/Host/Office smoke。适配原因是官方 macOS `prepare:dsh` 强制 Developer ID 签名，本地迁移实验暂不签名；该适配同时将外部 npm 解析结果固定为 `official-runtime-locks/mac-arm64/`，每次在新目录按 frozen lock 安装，避免依赖漂移和旧 node_modules 残留。输出包含完整 Host/CLI、Electron、Web/preload、pnpm、Node/Python 与 Office 资源；移动后重复上游真实检查通过。`runtime-payload.mjs` 记录并校验全部产物的字节、执行权限和包内框架链接，拒绝外部路径。双窗口探针的 `--runtime` 路径已用真实 Project 插件验证，但插件仍是开发链接，探针控制脚本仍引用固定官方源码；正式 Shell、数据和发行流程尚未接入。
 
 当前正式 `src/app/main.mjs` 仍调用下方的社区 stable adapter；上述新模块已接到官方临时双窗口探针并用真实 Electron/Project 插件验证，尚未接入正式窗口、恢复和打包链。旧架构说明记录已发布 0.1.11 的实现，不代表官方迁移已完成。
 
