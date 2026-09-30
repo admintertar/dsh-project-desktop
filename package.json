@@ -27,6 +27,7 @@
     "check": "yarn run build && yarn run test && node scripts/check-project-files.mjs",
     "smoke:official-shell": "node scripts/smoke-official-shell.mjs",
     "smoke:official-account-sharing": "node scripts/smoke-official-shell.mjs --account-sharing",
+    "smoke:official-updates": "node scripts/smoke-official-shell.mjs --updates",
     "smoke:official-close": "node scripts/smoke-official-shell.mjs --close"
   },
   "dependencies": {

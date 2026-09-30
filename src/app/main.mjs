@@ -26,6 +26,8 @@ import {installOfficialSessionEnd} from '../desktop-adapter/official/session-end
 import {officialCredentials} from '../desktop-adapter/official/credential-runtime.mjs';
 import {prepareSharedAccountStore} from '../desktop-adapter/official/shared-account-store.mjs';
 import {SharedAccountSessions} from '../desktop-adapter/official/shared-account-sessions.mjs';
+import {createProjectUpdates} from '../desktop-adapter/official/project-updates.mjs';
+import {spawn} from 'node:child_process';
 
 const {app, BrowserWindow, Menu, Tray, nativeImage, dialog, protocol} = electron;
 const appIcon = join(repository, 'assets', process.platform === 'darwin' ? 'app-icon-mac.png' : 'app-icon.png');
@@ -37,7 +39,8 @@ if (process.argv.some(arg => retiredModes.includes(arg))) {
 }
 const closeTesting = process.argv.includes('--official-close-smoke') && !app.isPackaged;
 const accountTesting = process.argv.includes('--official-account-sharing-smoke') && !app.isPackaged;
-const testing = (process.argv.includes('--official-shell-smoke') || closeTesting || accountTesting) && !app.isPackaged;
+const updateTesting = process.argv.includes('--official-update-smoke') && !app.isPackaged;
+const testing = (process.argv.includes('--official-shell-smoke') || closeTesting || accountTesting || updateTesting) && !app.isPackaged;
 app.setName(productName);
 protocol.registerSchemesAsPrivileged([{scheme: 'dsh-app', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true,
@@ -55,7 +58,7 @@ async function run() {
   const recent = new RecentProjects(join(userData, 'recent-projects.json'));
   const session = new SessionState(join(userData, 'workspace-session.json'));
   let guide, guideOpening, projectCreate, projectCreateOpening, tray, officialIpc, services, quitGuard, hostEnvironment, sessionEnd;
-  let accountStore;
+  let accountStore, updates, updateFixture;
   const accountSessions = new SharedAccountSessions();
   let quitting = false, quitReady = false, startupComplete = false, lastLocale = 'en';
   const report = error => {
@@ -190,10 +193,12 @@ async function run() {
     let project;
     try {
       project = await openOfficialProjectWindow(electron, {...state, signal, title, locale: language(),
-        hidden: testing, ipc: officialIpc, services, hostEnvironment, accountStore, accountSessions, windowState: session.window(manifest),
+        hidden: testing, ipc: officialIpc, services, hostEnvironment, accountStore, accountSessions, updates, windowState: session.window(manifest),
         rememberAccountReturn: focus => deepLinks.remember(focus),
         sessionEnding: () => sessionEnd.ending, quitForSession: () => app.quit(),
         applicationItems: () => [
+          {label: services.resolveDesktopLocale(language()).messages.checkUpdatesMenu,
+            click: () => perform(() => updates.open(project?.window, true))},
           {role: 'about', label: project?.locale === 'zh' ? `关于 ${productName}` : `About ${productName}`},
           {type: 'separator'}, ...menuTemplate(project), {type: 'separator'},
           {role: 'quit', label: project?.locale === 'zh' ? '退出' : 'Quit'},
@@ -227,7 +232,9 @@ async function run() {
   function menuTemplate(current = active()) {
     const zh = (current?.locale ?? language()) === 'zh';
     const command = (label, action, extra = {}) => ({label, click: () => perform(action), ...extra});
-    const roles = nativeRoleMenus(zh ? 'zh' : 'en', process.platform, app.name);
+    const updateItem = command(services?.resolveDesktopLocale(language()).messages.checkUpdatesMenu ?? (zh ? '检查更新…' : 'Check for Updates…'),
+      () => updates.open(current?.window ?? guide, true), {id: 'project-check-for-updates', enabled: Boolean(updates)});
+    const roles = nativeRoleMenus(zh ? 'zh' : 'en', process.platform, app.name, [updateItem]);
     const currentPath = () => [...projects].find(([, project]) => project === current)?.[0];
     const recents = recent.list().map(item => command(item.title, () => open(item.path), {enabled: item.available !== false}));
     const officialClose = current?.shortcuts.fileMenu({fileMenu: zh ? '文件' : 'File', closePage: zh ? '关闭页面' : 'Close Page'}).submenu ?? [];
@@ -257,6 +264,7 @@ async function run() {
     tray?.setContextMenu(Menu.buildFromTemplate([
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '显示应用' : 'Show App', showApplication),
+      command(zh ? '检查更新…' : 'Check for Updates…', () => updates.open(active()?.window ?? guide, true)),
       command(zh ? '欢迎窗口' : 'Welcome Window', showGuide), {role: 'quit', label: zh ? '退出' : 'Quit'},
     ]));
   }
@@ -271,22 +279,55 @@ async function run() {
   });
   app.on('activate', () => {if (startupComplete) perform(showApplication)});
   app.on('window-all-closed', () => {});
+  async function finishQuit() {
+    await officialIpc?.dispose();
+    updates?.dispose(); quitGuard?.dispose();
+    hostEnvironment?.dispose(); deepLinks.dispose(); sessionEnd?.dispose();
+    quitReady = true; tray?.destroy(); trace.end('quit'); app.exit(process.exitCode ?? 0);
+  }
+  async function installArtifact(path) {
+    if (updateFixture) {updateFixture.installed.push(path); return}
+    if (process.platform === 'darwin') {
+      const error = await electron.shell.openPath(path);
+      if (error) throw new Error('The downloaded installer could not be opened');
+      return;
+    }
+    quitting = true;
+    let stopped = false;
+    try {
+      stopped = await workspace.shutdown({beforeStop: cancelGuideCreations});
+      if (!stopped) {quitting = false; refreshMenus(); return}
+      await new Promise((resolve, reject) => {
+        const child = spawn(path, ['--updated', '--force-run'], {detached: true, stdio: 'ignore', shell: false, windowsHide: false});
+        child.once('error', reject);
+        child.once('spawn', () => {child.unref(); resolve()});
+      });
+      await finishQuit();
+    } catch (error) {
+      quitting = false;
+      if (stopped) await workspace.resumeAfterShutdown();
+      throw error;
+    }
+  }
   app.on('before-quit', event => {
     if (quitReady) return;
     event.preventDefault();
     if (quitting) {quitGuard?.focus(); return}
     quitting = true;
+    updates?.cancelPrompt();
     void workspace.shutdown({beforeStop: cancelGuideCreations}).then(async approved => {
       if (!approved) {quitting = false; refreshMenus(); return}
-      await officialIpc?.dispose();
-      quitGuard?.dispose();
-      hostEnvironment?.dispose(); deepLinks.dispose(); sessionEnd?.dispose();
-      quitReady = true; tray?.destroy(); trace.end('quit'); app.exit(process.exitCode ?? 0);
+      await finishQuit();
     }).catch(error => {quitting = false; report(error); perform(showGuide)});
   });
   await app.whenReady();
   sessionEnd = installOfficialSessionEnd(electron);
   services = await import(pathToFileURL(join(runtimeDirectory(), 'official/native-services.mjs')).href);
+  if (updateTesting) updateFixture = (await import('../../scripts/official-update-fixture.mjs')).createOfficialUpdateFixture();
+  updates = await createProjectUpdates(electron, {directory: join(userData, 'updates'), output: join(repository, 'dist/official-updates'),
+    version: productVersion, productName, locale: language, getWindow: () => active()?.window ?? guide,
+    installArtifact, changed: refreshMenus, automatic: !testing && app.isPackaged,
+    ...(updateFixture ? {request: updateFixture.request} : {})});
   accountStore = await prepareSharedAccountStore({userData, sourceCommit: officialPin.commit,
     credentials: await officialCredentials(runtimeDirectory())});
   hostEnvironment = createOfficialHostEnvironment(services);
@@ -310,10 +351,11 @@ async function run() {
     startupComplete = true;
     deepLinks.ready();
     let timeout;
-    const smoke = accountTesting ? '../../scripts/shared-account-smoke-case.mjs'
+    const smoke = updateTesting ? '../../scripts/official-update-smoke-case.mjs'
+      : accountTesting ? '../../scripts/shared-account-smoke-case.mjs'
       : closeTesting ? '../../scripts/official-close-smoke-case.mjs' : '../../scripts/official-shell-smoke-case.mjs';
     try {await Promise.race([(await import(smoke)).runOfficialShellSmoke({
-      electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc, deepLinks,
+      electron, open, close, restart, showGuide, showProjectCreate, workspace, session, userData, officialIpc, deepLinks, updates, updateFixture,
     }), new Promise((_, reject) => {timeout = setTimeout(() => reject(new Error('Official Shell smoke timed out')), closeTesting ? 600000 : 120000)})])} catch (error) {console.error(error); process.exitCode = 1}
     finally {clearTimeout(timeout); app.quit()}
     return;

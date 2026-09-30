@@ -28,6 +28,8 @@ English summary: read the companion plugin's shared frontend guidelines and this
 
 DeepSeek 登录账号由 Shell 按应用共享，继续使用官方登录和退出界面。一次登录同步所有项目窗口，退出确认的账号任务影响涵盖所有打开项目，取消不改变账号。模型 API Key、第三方授权、Host 认证密钥与浏览器分区仍按项目隔离。
 
+更新入口原样复用官方账号右侧的 DesktopUpdateIndicator 与折叠侧栏的 DesktopUpdateBadge，Shell 通过官方预加载协议广播自有更新状态；不在插件中重建按钮。无更新时按官方规则隐藏，连接状态保留官方优先级。检查、下载失败与安装确认复用官方 DesktopUpdateDialog；macOS 的 DMG 手动交接说明按实际安装方式适配。原生验收入口为 `yarn smoke:official-updates`，覆盖多个项目、语言、主题、窄窗、失败、取消和确认。
+
 ## 3. 欢迎与创建窗口的布局基线
 
 这两个窗口复用官方窗口参数，由 Shell 自有 [GuideFrame](../src/desktop-adapter/official/GuideFrame.tsx) 管理双栏布局，控件、locale 与主题来自固定官方源码。布局常量归 Shell，不依赖社区 AdvancedFrame；不得为了调整引导尺寸改写上游源码。

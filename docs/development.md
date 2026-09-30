@@ -14,6 +14,7 @@ yarn prepare:official-runtime -- ../deepseek-harness-official-021
 yarn check
 yarn smoke:official-shell
 yarn smoke:official-account-sharing
+yarn smoke:official-updates
 DSH_PROJECT_DESKTOP_USER_DATA=/private/tmp/dsh-official-development yarn start
 ```
 

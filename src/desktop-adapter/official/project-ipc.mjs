@@ -22,10 +22,11 @@ export function installOfficialProjectIpc(electron, services, platform = process
       const scope = services.createWindowIpcScope(ipc, event => owners.trusted(event));
       const handlers = [];
       const listeners = [];
-      let shortcuts, disposeChrome;
+      let shortcuts, disposeChrome, detachUpdates;
       const pending = new Set();
       const dispose = async () => {
         platforms.delete(context.platformView);
+        detachUpdates?.();
         unregister();
         if (shortcuts) {scope.run(() => shortcuts.dispose()); shortcuts = undefined}
         scope.dispose();
@@ -63,7 +64,7 @@ export function installOfficialProjectIpc(electron, services, platform = process
         const languages = electron.app.getPreferredSystemLanguages();
         shortcuts = scope.run(() => services.installDesktopShortcuts(() => window, context.stateDirectory,
           process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux',
-          context.onMenuChanged, () => ({revision: 0, blocked: false})));
+          context.onMenuChanged, owner => context.updates?.input(owner) ?? ({revision: 0, blocked: false})));
         scope.run(() => services.installDesktopDirectoryPicker(() => window));
         shortcuts.attach(window);
         if (platform === 'win32') disposeChrome = installOfficialWindowsChrome({electron, services, window, shortcuts, handle, on, context});
@@ -77,9 +78,13 @@ export function installOfficialProjectIpc(electron, services, platform = process
         handle('dsh-desktop:locale-bootstrap', async () => ({languages, preference: await backend.readLocalePreference()}));
         handle('dsh-desktop:onboarding-api-key', async () => (await backend.read()).hasApiKey);
         handle('dsh-desktop:device-info', () => services.readDeviceInfo());
-        // idle 是官方无进行中更新的状态。自动更新尚未接入；点击给出明确失败，不安装官方产品覆盖本壳。
-        handle('dsh-desktop:updates-status', () => ({phase: 'idle'}));
-        handle('dsh-desktop:updates-open', () => {throw new Error('Automatic updates are unavailable in this development Shell')});
+        detachUpdates = context.updates?.attach(window);
+        handle('dsh-desktop:updates-status', () => context.updates?.presentation() ?? ({phase: 'idle'}));
+        handle('dsh-desktop:updates-open', () => {
+          if (!context.updates) throw new Error('Project updates are unavailable');
+          // The application owns this operation. Do not hold project IPC shutdown while installing.
+          void context.updates.open(window, false, context.getLocale()).catch(context.onError);
+        });
         handle('dsh-desktop:browser-acquire', workspace => browserGuests.acquire(window.webContents, workspace));
         handle('dsh-desktop:browser-release', lease => browserGuests.release(window.webContents, lease));
         handle('dsh-platform:open', (page, bounds) => {

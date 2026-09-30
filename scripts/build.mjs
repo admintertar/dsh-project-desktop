@@ -5,6 +5,7 @@ import {join, resolve} from 'node:path';
 import {verifyOfficialSource} from './verify-official-source.mjs';
 import {repository, projectSource, officialPin, officialSource} from '../src/desktop-adapter/official/paths.mjs';
 import {verifyProjectPlugin} from '../src/desktop-adapter/official/profile.mjs';
+import {buildOfficialUpdates} from './build-official-updates.mjs';
 
 const source = resolve(process.argv.slice(2).find(arg => arg !== '--') ?? officialSource);
 verifyOfficialSource(source);
@@ -36,7 +37,7 @@ const theme = join(source, 'packages/client/ui-theme/src/styles');
 writeFileSync(join(output, 'guide/official.css'), ['base', 'corner-shape', 'design-platform', 'scrollbar', 'gradient-shadow-text', 'shiki']
   .map(name => readFileSync(join(theme, name + '.css'), 'utf8')).join('\n'));
 cpSync(join(repository, 'src/guide/index.html'), join(output, 'guide/index.html'));
-const inputs = [...new Set(builds.flatMap(value => Object.keys(value.metafile.inputs)))];
+const inputs = [...new Set([...builds.flatMap(value => Object.keys(value.metafile.inputs)), ...await buildOfficialUpdates(source, output)])];
 if (inputs.some(path => /(?:\.upstream\/(?:desktop|harness-guide)|dsh-plugin-desktop|\.cache\/runtime)/u.test(path))) {
   throw new Error('Community input in the official Shell build');
 }

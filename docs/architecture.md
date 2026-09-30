@@ -94,10 +94,27 @@
 授权交换、账号状态订阅与注销；验证只登录一次、双窗口与新窗口/重启、官方取消/确认、并发登录及退出期间的回调清理。
 该夹具不使用真实账号，不代表线上账号授权或平台充值验收。
 
-发行前仍须完成自有更新器/强制版本策略、全局 CLI 安装、签名安装包与协议关联、Windows/macOS Intel 实机验收、
-真实账号授权后的用量/充值交互、Stable 数据迁移回退。当前 `updates-status` 返回 idle，`updates-open` 明确拒绝。
+`project-updates.mjs` 通过官方预加载 `updates.status/open/subscribe` 接入原样的账号右侧
+`DesktopUpdateIndicator` 与 `DesktopUpdateBadge`；空闲隐藏，连接状态优先，多个项目共享同一应用状态。
+`build-official-updates.mjs` 从固定官方源码编译 `DesktopUpdateCoordinator`、`DesktopUpdateSchedule`、
+`DesktopUpdateDialog`、`DesktopUpdateOverlays` 和 presentation，原始 renderer/preload 输出到自有 dist。
+对话框走独立 default Session 的 `dsh-app://shell` 白名单；项目 Host 和分区不接管 shell 文档。
+更新弹窗期间快捷键使用官方 overlay input 状态。长更新操作归应用持有，项目 IPC 不等待安装关闭自身。
+
+自有 `ProjectReleaseUpdater` 适配官方检查、下载和事件契约，仅访问本仓库 `update.json` 与固定版本安装包。
+下载前重读版本清单并核对已确认的 commit/资产，限制清单与包大小，验证流的字节数与 SHA-256 后原子落盘；
+交接前再次校验本地包。手动检查入口位于应用菜单/托盘，打包版启动 60 秒后开始后台检查及 6 小时间隔轮询。
+失败、取消和关闭弹窗不授权安装。官方安装器要求不同的发行格式，因此仅复用其完整 check/download 协调逻辑；
+本壳保留已发布安装包契约：macOS 明确提示打开 DMG 后手动安装，Windows 确认后先关闭全部项目再启动 NSIS，
+启动安装器失败则恢复项目。Windows 安装交接仍需真实机器验收。
+
+`yarn smoke:official-updates` 使用临时发行传输夹具验证官方侧栏及弹窗、双窗口状态、检查与下载失败、
+进度、确认/取消、窗口关闭和重开；安装交接边界被截获，不运行测试安装包。
+
+发行前仍须完成强制版本策略、全局 CLI 安装、签名安装包与协议关联、Windows/macOS Intel 实机验收、
+真实账号授权后的用量/充值交互、Stable 数据迁移回退。
 Windows 官方 preload 的 mandatory overlay 在开发无策略时允许 status 请求失败，本壳沿用此开发行为；
-不能接入官方发行源让其安装原版覆盖 Shell。原版 Welcome/CLI/update 专用窗口及 IPC 不计作当前项目主窗口漏接。
+不能接入官方发行源让其安装原版覆盖 Shell。原版 Welcome/CLI 专用窗口及 IPC 不计作当前项目主窗口漏接。
 
 ### 验证边界
 
@@ -107,7 +124,7 @@ Windows 官方 preload 的 mandatory overlay 在开发无策略时允许 status 
 中英文、明暗和键盘验收；Schedule 测试组合不改变默认生产 Profile。
 运行目录是未签名开发产物，Project 插件仍使用已校验的开发工作树；不等于安装包依赖闭包。
 登录后账号页面、真实浏览器会话、麦克风、完整快捷键编辑/物理按键、`dsh://open`、
-自动更新、用户数据迁移回退、Windows 与 macOS Intel 验收尚未完成。打包命令会明确停止。
+更新安装包的真实安装交接、用户数据迁移回退、Windows 与 macOS Intel 验收尚未完成。打包命令会明确停止。
 
 ## 旧 Stable 架构（仅供删除审计）
 
