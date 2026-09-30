@@ -12,7 +12,7 @@ import {tmpdir} from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {verifyOfficialPackageSet} from './prepare-official-package-set.mjs';
 import {verifyOfficialSource} from './verify-official-source.mjs';
-import {readOfficialRuntimeLock} from '../src/desktop-adapter/official/runtime-inputs.mjs';
+import {bindOfficialRuntimeLock} from './bind-official-runtime-lock.mjs';
 import {inventoryOfficialPayload, verifyOfficialRuntimePayload} from '../src/desktop-adapter/official/runtime-payload.mjs';
 import {build} from 'esbuild';
 import {buildOfficialNative} from './build-official-native.mjs';
@@ -85,8 +85,8 @@ try {
   cpSync(join(set, core.DESKTOP_PACKAGE_SET_FILE), join(install, core.DESKTOP_PACKAGE_SET_FILE));
   cpSync(join(set, core.DESKTOP_PACKAGES_DIR), join(install, core.DESKTOP_PACKAGES_DIR), {recursive: true});
   project.createRuntimeProjectMetadata(install, release);
-  const {body: lock} = readOfficialRuntimeLock(join(repository, 'official-runtime-locks', target),
-    {pin, packageSetSha256: verified.metadata.descriptorSha256, release, target});
+  const {body: lock} = bindOfficialRuntimeLock(join(repository, 'official-runtime-locks', target), set,
+    {pin, release, target});
   writeFileSync(join(install, 'pnpm-lock.yaml'), lock);
   core.verifyDesktopCoreLockfile(lock, core.readDesktopCorePackageSet(install, pin.version));
   await pnpm(['install', '--prod', '--frozen-lockfile', '--trust-lockfile']);

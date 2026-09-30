@@ -7,5 +7,6 @@
   "packageSetSha256": "0eee4f4ba6422009cb9fcaaacbc3a3727b145fe797b674b0c7dfc4c0c17a5e7b",
   "nodeVersion": "24.18.1",
   "pnpmVersion": "11.7.0",
-  "lockfileSha256": "de7b0fb411d660d4f78a4f981027f3d14a3776a1b129c97d0098c3b374d34191"
+  "lockfileSha256": "de7b0fb411d660d4f78a4f981027f3d14a3776a1b129c97d0098c3b374d34191",
+  "packageManifestsSha256": "459184e8c7ce86f9309a02e4f1132026c0c68f46c5e89164f24779cdedd739ee"
 }

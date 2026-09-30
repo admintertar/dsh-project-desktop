@@ -4,7 +4,7 @@
 
 - DeepSeek 官方 Harness/Desktop：`official-source.lock.json`。
 - 自有 Project 插件：`project-source.lock.json`，必须先推送插件提交，才可发布引用它的壳。
-- 外部运行时依赖：`official-runtime-locks/<target>/`，以官方 tarball 集、Node/pnpm 版本和 SHA-256 绑定。三个目标使用包含各平台 optional 包的同一依赖图，必须分别通过 frozen 安装及官方 native/Office smoke。
+- 外部运行时依赖：`official-runtime-locks/<target>/`，以官方源码、包配置、Node/pnpm 版本和 SHA-256 绑定。官方 pnpm 打包时 JSON 字段顺序不固定，因此先核对每个包的完整 manifest，再只替换本次官方 tarball 的 integrity；第三方版本、哈希和依赖图保持固定。三个目标使用包含各平台 optional 包的同一依赖图，必须分别通过 frozen 安装及官方 native/Office smoke。
 - 旧 `upstream.lock.json` 与 `src/desktop-adapter/stable` 不进入构建、打包或 CI。
 
 ## 原生构建
