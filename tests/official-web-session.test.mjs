@@ -56,18 +56,73 @@ test('official project Session rejects non-loopback Host and non-persistent part
     hostUrl: 'http://127.0.0.1:43101/'}), /persistent partition/);
 });
 
+test('Session teardown revokes old credentials and permits a new Host in the same partition', async () => {
+  const partitions = new Map();
+  const electron = {session: {fromPartition(name) {
+    if (!partitions.has(name)) {
+      const partition = {protocol: {
+        handle(_scheme, handler) {assert.equal(partition.handle, undefined); partition.handle = handler;},
+        unhandle() {partition.handle = undefined;},
+      }, webRequest: {onBeforeSendHeaders(_filter, handler) {partition.headers = handler;}}};
+      partitions.set(name, partition);
+    }
+    return partitions.get(name);
+  }}};
+  const forwarded = [];
+  const options = {electron, partitionName: 'persist:reopen', hostUrl: 'http://127.0.0.1:43101/login',
+    cookie: 'session=old', webDist: '/web', serveWebDocument: () => new Response('static'),
+    forwardWebRequest: (_request, url, cookie) => {forwarded.push({url, cookie}); return new Response('host');}};
+  const first = configureOfficialProjectSession(options);
+  first.bindWindow({webContents: {id: 11}, isDestroyed: () => false});
+  assert.throws(() => configureOfficialProjectSession(options), /already has an owner/);
+  assert.throws(() => first.bindWindow({webContents: {id: 12}}), /already has a window/);
+  const oldRequest = first.partition.handle, oldHeaders = first.partition.headers;
+  first.dispose();
+  assert.equal(first.partition.handle, undefined);
+  assert.equal(first.partition.headers, undefined);
+  assert.throws(() => first.bindWindow({webContents: {id: 12}}), /disposed/);
+  const request = new Request('dsh-app://app/api/project/snapshot');
+  assert.equal((await oldRequest(request)).status, 410);
+  let staleAnswer;
+  oldHeaders({url: 'ws://127.0.0.1:43101/events', webContentsId: 11,
+    requestHeaders: {Origin: 'dsh-app://app'}}, value => {staleAnswer = value});
+  assert.deepEqual(staleAnswer, {cancel: true});
+  assert.deepEqual(forwarded, []);
+  const second = configureOfficialProjectSession({...options, hostUrl: 'http://127.0.0.1:43102/login', cookie: 'session=new'});
+  assert.equal(second.partition, first.partition);
+  second.bindWindow({webContents: {id: 22}});
+  first.dispose();
+  assert.equal((await second.partition.handle(request)).status, 200);
+  assert.deepEqual(forwarded, [{url: 'http://127.0.0.1:43102/login', cookie: 'session=new'}]);
+  second.dispose();
+});
+
 test('official IPC owner requires the project main frame and dsh-app origin', () => {
   const owners = createOfficialWindowOwners();
   const webContents = {id: 7};
   const window = {webContents, isDestroyed: () => false};
   const mainFrame = {url: 'dsh-app://app/'};
-  owners.register(window, {project: {id: 'A'}});
+  const release = owners.register(window, {project: {id: 'A'}});
   const trusted = {sender: webContents, senderFrame: mainFrame};
   // Electron exposes mainFrame on WebContents; the fixture mirrors it.
   webContents.mainFrame = mainFrame;
   assert.deepEqual(owners.trusted(trusted).project, {id: 'A'});
   assert.throws(() => owners.trusted({...trusted, senderFrame: {url: 'dsh-app://app/iframe'}}), /Untrusted/);
   assert.throws(() => owners.trusted({...trusted, senderFrame: {url: 'https://example.test/'}}), /Untrusted/);
-  owners.unregister(window);
+  release();
+  assert.equal(owners.size, 0);
+});
+
+test('IPC cleanup works after WebContents destruction without erasing a newer owner', () => {
+  const owners = createOfficialWindowOwners();
+  const window = {webContents: {id: 7}};
+  const release = owners.register(window, {project: 'first'});
+  Object.defineProperty(window, 'webContents', {get() {throw new Error('Object has been destroyed');}});
+  release();
+  const next = {webContents: {id: 7}};
+  const releaseNext = owners.register(next, {project: 'next'});
+  release();
+  assert.equal(owners.size, 1);
+  releaseNext();
   assert.equal(owners.size, 0);
 });

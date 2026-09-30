@@ -77,6 +77,11 @@ optional Project plugin is still a local development link. The prepared Host,
 Electron and window resources use the copied payload. Formal Shell startup,
 data migration, CI, installers and other native targets remain pending.
 
+The window probe also destroys and reopens window A in the same persistent
+Session, verifies that B stays usable, and checks complete protocol/IPC cleanup.
+It keeps the Host running during this check; Host restart and the formal Shell
+close confirmation remain separate acceptance gates.
+
 本节以下仍是已发布 `0.1.11` 的构建步骤。迁移分支的新命令只准备官方开发输入，
 不会修改已安装应用或用户数据。默认开发探针的 Host 和依赖链接本机官方工作区；
 新增官方核心 tarball 集合与 macOS arm64 未签名运行目录已通过搬移验证；正式

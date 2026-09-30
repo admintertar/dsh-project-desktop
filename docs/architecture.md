@@ -8,7 +8,7 @@
 
 ## 官方 0.2.0-rc.2 迁移中的新边界
 
-`src/desktop-adapter/official/web-session.mjs` 已从临时双窗口实验提取为 Shell 自有的逐项目 Electron Session 适配器。它调用固定官方 `apps/desktop/src/web-document.ts` 的 `serveWebDocument` 和 `forwardWebRequest`，在 `dsh-app://app/` 提供官方静态资源，将动态请求连同所属 Host Cookie 转发到项目 Host；同一 Session 的 WebSocket 仅允许所属 WebContents、Host 地址及 `dsh-app://app` Origin，才改写 Origin 并附带 Cookie。临时探针仍保留已验证的 preload IPC 主 Frame 检查；可复用的 `ipc-owners.mjs` 测试模块尚未接入正式窗口。官方 `dsh://open` 仍是操作系统唤起入口，与窗口页面协议分工不同。
+`src/desktop-adapter/official/web-session.mjs` 已从临时双窗口实验提取为 Shell 自有的逐项目 Electron Session 适配器。它调用固定官方 `apps/desktop/src/web-document.ts` 的 `serveWebDocument` 和 `forwardWebRequest`，在 `dsh-app://app/` 提供官方静态资源，将动态请求连同所属 Host Cookie 转发到项目 Host；同一 Session 的 WebSocket 仅允许所属 WebContents、Host 地址及 `dsh-app://app` Origin，才改写 Origin 并附带 Cookie。每个 Session 只允许一个活跃所有者，`dispose()` 成对释放协议与 WebSocket 注册，旧生命周期重复清理不会删除新所有者。`ipc-owners.mjs` 已接入真实探针，用主 Frame 和所属 WebContents 校验 preload IPC；注册时返回清理闭包，窗口销毁后无需读取已销毁的 Electron 对象。真实 payload 双窗口实验已验证 A 销毁后在同一 Session 重开，B 保持可用，全部关闭后协议和 IPC 注册清空。此实验保持 Host 运行，尚不覆盖正式 Shell 的 Host 重启、Profile 恢复和用户关闭确认。官方 `dsh://open` 仍是操作系统唤起入口，与窗口页面协议分工不同。
 
 官方开发构建输入统一由 `official/build-inputs.mjs` 映射：校验固定工作区中 Desktop、Desktop Host、CLI、Web 包身份和版本，以及它们的构建输出、pnpm 版本。`prepare-official-development.mjs` 在 `.cache/official-development/` 暂存官方 Web dist、preload、许可证与由官方 `web-document.ts` 编译的模块，并记录全部暂存文件的 SHA-256。双 Host 和双窗口探针改为取这份映射。Host/CLI 和依赖仍位于固定官方工作区，因此它是开发输入验证，不是可搬移的安装包闭包。
 

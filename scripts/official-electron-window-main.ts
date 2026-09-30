@@ -3,11 +3,14 @@ import electron from 'electron';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {serveWebDocument, forwardWebRequest} from '@official-web-document';
 import {configureOfficialProjectSession} from '../src/desktop-adapter/official/web-session.mjs';
+import {createOfficialWindowOwners} from '../src/desktop-adapter/official/ipc-owners.mjs';
 
 const {app, BrowserWindow, ipcMain, protocol} = electron;
 const config = JSON.parse(readFileSync(process.env.DSH_OFFICIAL_WINDOW_PROBE_CONFIG!, 'utf8'));
 app.setName('DSH Project Desktop Official Probe');
 app.setPath('userData', config.userData);
+// A single-window probe also temporarily has no windows while testing reopen.
+app.on('window-all-closed', () => {});
 protocol.registerSchemesAsPrivileged([{scheme: 'dsh-app', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true,
 }}]);
@@ -24,13 +27,8 @@ const quit = (error?: unknown) => {
 async function run() {
   // Electron's ready event cannot fire while this ESM entry is awaiting at top level.
   await app.whenReady();
-  const owners = new Map();
-  const trusted = event => {
-    const owner = owners.get(event.sender.id);
-    if (!owner || event.sender !== owner.window.webContents || event.senderFrame !== event.sender.mainFrame
-      || !event.senderFrame?.url.startsWith('dsh-app://app/')) throw new Error('Untrusted Desktop caller');
-    return owner;
-  };
+  const owners = createOfficialWindowOwners();
+  const trusted = event => owners.trusted(event);
   ipcMain.handle('dsh-desktop:boot', event => {
     const {project} = trusted(event);
     return {injections: project.injections, streamBaseUrl: new URL(project.hostUrl).origin};
@@ -64,32 +62,42 @@ async function run() {
 
   const windows = [];
   const rendererErrors = [];
-  for (const project of config.projects) {
+  /** Own the protocol and IPC registrations for exactly one window lifetime. */
+  async function openProjectWindow(project) {
     const projectSession = configureOfficialProjectSession({electron, partitionName: project.partition,
       hostUrl: project.hostUrl, cookie: project.cookie, webDist: config.webDist,
       serveWebDocument, forwardWebRequest});
-    const window = new BrowserWindow({width: 1120, height: 760, show: true,
-      webPreferences: {preload: config.preload, partition: project.partition,
-        nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true}});
-    const webContentsId = window.webContents.id;
-    projectSession.bindWindow(window);
-    owners.set(webContentsId, {window, project});
-    window.on('closed', () => {
-      owners.delete(webContentsId);
-      if (owners.size === 0) quit();
-    });
-    window.webContents.on('console-message', event => {
-      if (event.level === 'error') {
-        rendererErrors.push(`${project.id}: ${event.message}`);
-        console.error(`Official renderer ${project.id}:`, event.message);
-      }
-    });
-    await window.loadURL('dsh-app://app/');
-    windows.push({window, project, partition: projectSession.partition});
+    let window;
+    let unregister;
+    const close = () => {
+      unregister?.();
+      if (window && !window.isDestroyed()) window.destroy();
+      projectSession.dispose();
+    };
+    try {
+      window = new BrowserWindow({width: 1120, height: 760, show: true,
+        webPreferences: {preload: config.preload, partition: project.partition,
+          nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true}});
+      projectSession.bindWindow(window);
+      unregister = owners.register(window, {project});
+      window.on('closed', () => {
+        unregister();
+        projectSession.dispose();
+      });
+      window.webContents.on('console-message', event => {
+        if (event.level === 'error') {
+          rendererErrors.push(`${project.id}: ${event.message}`);
+          console.error(`Official renderer ${project.id}:`, event.message);
+        }
+      });
+      await window.loadURL('dsh-app://app/');
+      return {window, project, partition: projectSession.partition, close};
+    } catch (error) {close(); throw error}
   }
+  for (const project of config.projects) windows.push(await openProjectWindow(project));
 
-  const results = [];
-  for (const {window, project} of windows) {
+  /** Assert real Web/Project readiness, including after reuse of the persistent Session. */
+  async function verifyWindow({window, project}) {
     const deadline = Date.now() + 30000;
     let state;
     do {
@@ -119,23 +127,47 @@ async function run() {
     // Let Chromium paint the settled DOM before capturePage records evidence.
     await new Promise(resolve => setTimeout(resolve, 700));
     await window.webContents.capturePage().then(image => writeFileSync(project.screenshot, image.toPNG()));
-    results.push({id: project.id, title: state.title, boot: state.boot, transport: state.transport,
+    return {id: project.id, title: state.title, boot: state.boot, transport: state.transport,
       platform: state.platform, textLength: state.text.length, hostOrigin: new URL(project.hostUrl).origin,
-      partition: project.partition, webContentsId: window.webContents.id});
+      partition: project.partition, webContentsId: window.webContents.id};
   }
+  const results = [];
+  for (const window of windows) results.push(await verifyWindow(window));
   if (new Set(results.map(result => result.hostOrigin)).size !== results.length
     || new Set(results.map(result => result.partition)).size !== results.length
     || new Set(windows.map(({partition}) => partition)).size !== windows.length) {
     throw new Error('Project Host origins or Electron Sessions are not isolated');
   }
-  if (rendererErrors.length) throw new Error(`Official renderer errors: ${rendererErrors.join(' | ')}`);
+  windows[0].window.destroy();
   if (windows.length > 1) {
-    windows[0].window.destroy();
     const survivor = windows[1].window;
     const stillAlive = await survivor.webContents.executeJavaScript('document.title === "DeepSeek Harness" && globalThis.__DSH_TRANSPORT__?.ownsHost === true');
     if (!stillAlive) throw new Error('Closing the first project window affected the second');
   }
-  const result = {ok: true, projectPlugin: Boolean(config.projectPlugin), projects: results, survivingWindow: windows.length > 1};
+  if (owners.size !== windows.length - 1 || await windows[0].partition.protocol.isProtocolHandled('dsh-app')) {
+    throw new Error('Closed window retained its IPC owner or protocol handler');
+  }
+  // Keep the Host running here: this specifically verifies window/Session reuse,
+  // not Host restart, Profile recovery or the formal Shell close confirmation.
+  const reopened = await openProjectWindow(config.projects[0]);
+  const reopenedResult = await verifyWindow(reopened);
+  if (reopened.partition !== windows[0].partition || reopenedResult.webContentsId === results[0].webContentsId) {
+    throw new Error('Window reopen did not reuse its persistent Session with a new WebContents');
+  }
+  // A delayed second cleanup from the old lifecycle must not remove the new handler.
+  windows[0].close();
+  if (!await reopened.partition.protocol.isProtocolHandled('dsh-app')) throw new Error('Old cleanup detached the reopened window');
+  if (windows.length > 1 && !await windows[1].window.webContents.executeJavaScript('globalThis.__DSH_TRANSPORT__?.ownsHost === true')) {
+    throw new Error('Reopening the first window affected the second');
+  }
+  reopened.close();
+  for (const window of windows) window.close();
+  if (owners.size || (await Promise.all(windows.map(({partition}) => partition.protocol.isProtocolHandled('dsh-app')))).some(Boolean)) {
+    throw new Error('Window teardown left IPC owners or protocol handlers');
+  }
+  if (rendererErrors.length) throw new Error(`Official renderer errors: ${rendererErrors.join(' | ')}`);
+  const result = {ok: true, projectPlugin: Boolean(config.projectPlugin), projects: results, survivingWindow: windows.length > 1,
+    windowLifecycle: {reopened: reopenedResult, reusedSession: true, oldCleanupSafe: true, ownersAfterClose: owners.size, protocolsReleased: true}};
   writeFileSync(config.result, JSON.stringify(result, null, 2) + '\n');
   console.log('OFFICIAL_WINDOW_PROBE', JSON.stringify(result));
   setTimeout(() => app.exit(0), 500);

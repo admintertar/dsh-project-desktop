@@ -3,12 +3,13 @@ export function createOfficialWindowOwners() {
   const owners = new Map();
   return {
     register(window, context) {
-      if (owners.has(window.webContents.id)) throw new Error('Official Desktop WebContents already has an owner');
-      owners.set(window.webContents.id, {window, ...context});
-    },
-    unregister(window) {
-      const owner = owners.get(window.webContents.id);
-      if (owner?.window === window) owners.delete(window.webContents.id);
+      const id = window.webContents.id;
+      if (owners.has(id)) throw new Error('Official Desktop WebContents already has an owner');
+      const owner = {...context, window};
+      owners.set(id, owner);
+      // Capture the ID while WebContents is alive. The closed event must not
+      // query a destroyed Electron object or erase a newer registration.
+      return () => {if (owners.get(id) === owner) owners.delete(id)};
     },
     get size() {return owners.size},
     trusted(event) {
