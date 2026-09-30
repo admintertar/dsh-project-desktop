@@ -28,6 +28,8 @@ English summary: read the companion plugin's shared frontend guidelines and this
 
 DeepSeek 登录账号由 Shell 按应用共享，继续使用官方登录和退出界面。一次登录同步所有项目窗口，退出确认的账号任务影响涵盖所有打开项目，取消不改变账号。模型 API Key、第三方授权、Host 认证密钥与浏览器分区仍按项目隔离。
 
+「文件 → 关闭页面」完整沿用官方 `page.close` 上下文逻辑与可配置快捷键（默认 `Cmd/Ctrl+W`）：关闭当前弹窗或右侧页面，没有页面目标时关闭窗口。「项目 → 关闭当前项目」与重启操作放在一起，使用 `Cmd/Ctrl+Shift+W`，经 Shell 关闭确认和生命周期流程停止所属项目。
+
 更新入口原样复用官方账号右侧的 DesktopUpdateIndicator 与折叠侧栏的 DesktopUpdateBadge，Shell 通过官方预加载协议广播自有更新状态；不在插件中重建按钮。无更新时按官方规则隐藏，连接状态保留官方优先级。检查、下载失败与安装确认复用官方 DesktopUpdateDialog；macOS 的 DMG 手动交接说明按实际安装方式适配。原生验收入口为 `yarn smoke:official-updates`，覆盖多个项目、语言、主题、窄窗、失败、取消和确认。
 
 ## 3. 欢迎与创建窗口的布局基线

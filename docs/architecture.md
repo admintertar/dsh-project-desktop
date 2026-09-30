@@ -32,6 +32,8 @@
   `device-info.ts`、`locale.ts`、`browser-guests.ts`、`platform-view.ts` 和 `microphone-permissions.ts`。
   `scoped-electron.mjs` 将单窗口实现的 IPC 注册点改为 `webContents.ipc`，不改官方快捷键/目录选择行为。
   当前键位配置保存在各项目状态目录，避免两个官方单写入协调器竞争同一文件。
+  「文件 → 关闭页面」保留官方 `page.close` 的弹窗/右侧页面/窗口上下文语义；
+  Shell 的「关闭当前项目」放在「项目」菜单，与重启相邻，沿用 `CmdOrCtrl+Shift+W` 及项目关闭确认。
   Platform 账号分区名另加项目命名空间，避免相同账号跨项目共享 Cookie。
 - `project-ipc.mjs` 只接收所属 `dsh-app://app/` 主 Frame；API Key 和语言读取官方 Welcome Backend，
   不伪造 onboarding 完成。浏览器、平台页面和麦克风桥接继续复用上述官方 helper。

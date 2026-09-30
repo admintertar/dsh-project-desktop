@@ -238,19 +238,19 @@ async function run() {
     const currentPath = () => [...projects].find(([, project]) => project === current)?.[0];
     const recents = recent.list().map(item => command(item.title, () => open(item.path), {enabled: item.available !== false}));
     const officialClose = current?.shortcuts.fileMenu({fileMenu: zh ? '文件' : 'File', closePage: zh ? '关闭页面' : 'Close Page'}).submenu ?? [];
-    // Cmd+W 由官方快捷键管理关闭页面/窗口，Shell 关闭整个项目使用独立快捷键。
+    // File 保留官方的上下文关闭；整个项目的生命周期操作放在 Project 菜单。
     return [...roles.application, {label: zh ? '文件' : 'File', submenu: [
       command(zh ? '新建项目…' : 'New Project…', showProjectCreate, {id: 'project-new', accelerator: 'CmdOrCtrl+Shift+N'}),
       command(zh ? '打开项目…' : 'Open Project…', pickOpen, {id: 'project-open', accelerator: 'CmdOrCtrl+O'}),
       {label: zh ? '最近项目' : 'Recent Projects', submenu: recents, enabled: recents.length > 0},
       command(zh ? '欢迎窗口' : 'Welcome Window', showGuide, {id: 'project-welcome'}),
       {type: 'separator'}, ...officialClose,
-      command(zh ? '关闭项目' : 'Close Project', () => close(currentPath()),
-        {id: 'project-close', accelerator: 'CmdOrCtrl+Shift+W', enabled: Boolean(current)}),
     ]}, ...(process.platform === 'win32' && current ? [] : [roles.edit]), roles.view,
     {label: zh ? '项目' : 'Project', submenu: [
       ...liveProjects().map(project => command(project.window.getTitle(), project.focus)),
       {type: 'separator'}, command(zh ? '重启当前项目' : 'Restart Current Project', () => restart(currentPath()), {enabled: Boolean(current)}),
+      command(zh ? '关闭当前项目' : 'Close Current Project', () => close(currentPath()),
+        {id: 'project-close', accelerator: 'CmdOrCtrl+Shift+W', enabled: Boolean(current)}),
     ]}, roles.window];
   }
   function refreshMenus() {
