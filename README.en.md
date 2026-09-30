@@ -19,6 +19,8 @@ An independent AI development desktop for projects spanning multiple repositorie
 
 Early development; only the `stable` channel is supported: Desktop **2.0.15** and Harness **0.1.7-rc.2**. The plugin revision is pinned in [upstream.lock.json](upstream.lock.json). Stable is a release channel, not a long-term API guarantee.
 
+The `codex/direct-official-desktop` branch is migrating to DeepSeek's official Desktop / Harness **0.2.0-rc.2**. The formal launch and installer paths still use the Stable runtime above. See [development notes](docs/development.md) and the project task for migration commands and status.
+
 The current local native acceptance baseline is **macOS x64**. GitHub Actions produces one macOS Universal DMG for Intel and Apple Silicon, plus Windows x64 installers. The same DMG is launched on both Mac architectures; acceptance depends on each job's result. Background checks use our own Releases; installer downloads require confirmation and checksum verification. Linux packages, formally signed releases and silent installation are not provided. This is independently maintained, not an official DeepSeek or Anywhere Labs distribution.
 
 ## Development setup

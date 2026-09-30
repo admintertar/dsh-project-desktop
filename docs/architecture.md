@@ -10,6 +10,8 @@
 
 `src/desktop-adapter/official/web-session.mjs` 已从临时双窗口实验提取为 Shell 自有的逐项目 Electron Session 适配器。它调用固定官方 `apps/desktop/src/web-document.ts` 的 `serveWebDocument` 和 `forwardWebRequest`，在 `dsh-app://app/` 提供官方静态资源，将动态请求连同所属 Host Cookie 转发到项目 Host；同一 Session 的 WebSocket 仅允许所属 WebContents、Host 地址及 `dsh-app://app` Origin，才改写 Origin 并附带 Cookie。临时探针仍保留已验证的 preload IPC 主 Frame 检查；可复用的 `ipc-owners.mjs` 测试模块尚未接入正式窗口。官方 `dsh://open` 仍是操作系统唤起入口，与窗口页面协议分工不同。
 
+官方开发构建输入统一由 `official/build-inputs.mjs` 映射：校验固定工作区中 Desktop、Desktop Host、CLI、Web 包身份和版本，以及它们的构建输出、pnpm 版本。`prepare-official-development.mjs` 在 `.cache/official-development/` 暂存官方 Web dist、preload、许可证与由官方 `web-document.ts` 编译的模块，并记录全部暂存文件的 SHA-256。双 Host 和双窗口探针改为取这份映射。Host/CLI 和依赖仍位于固定官方工作区，因此它是开发输入验证，不是可搬移的安装包闭包。
+
 当前正式 `src/app/main.mjs` 仍调用下方的社区 stable adapter；上述新模块已接到官方临时双窗口探针并用真实 Electron/Project 插件验证，尚未接入正式窗口、恢复和打包链。旧架构说明记录已发布 0.1.11 的实现，不代表官方迁移已完成。
 
 ## 所有权

@@ -1,5 +1,36 @@
 # Development / 开发准备
 
+## Official 0.2.0-rc.2 migration work / 官方 0.2.0-rc.2 迁移开发
+
+The commands below this section still describe the released `0.1.11` Stable
+build. On the `codex/direct-official-desktop` branch, the new official source
+bridge can be prepared without changing that installed application or its
+data. Use Node 22.19+ and the exact commit in `official-source.lock.json`:
+
+```sh
+cd ../deepseek-harness
+pnpm install --frozen-lockfile
+pnpm run build:official
+cd ../dsh-project-desktop
+yarn run prepare:official-development -- ../deepseek-harness
+```
+
+`scripts/verify-official-source.mjs` checks HEAD, release tag, Desktop tree,
+dependency lock and clean tracked source. `src/desktop-adapter/official/build-inputs.mjs`
+checks official Desktop, Host, CLI and Web package identities and built outputs.
+The command stages the official preload, Web dist, license and a compiled copy
+of the official `web-document.ts` in ignored `.cache/official-development/`.
+`inputs.json` records the source pin, live Host/CLI paths and SHA-256 of every
+staged file. The official Host and pnpm dependencies still run from the source
+workspace. This directory is for development verification, not a relocatable
+installation package. The two Host and two Electron window probes consume
+these mapped inputs; the formal Shell `build`, `start`, CI and packaging paths
+still use the previous Stable runtime until their official adapters are ready.
+
+本节以下仍是已发布 `0.1.11` 的构建步骤。迁移分支的新命令只准备官方开发输入，
+不会修改已安装应用或用户数据。临时目录中的 Host 和依赖仍链接本机官方工作区，
+需要继续完成正式构建闭包与主进程接入。
+
 The shell imports immutable source snapshots and independent dependency caches.
 It does not require a private repository or a fork. Commands below use sibling
 directories as shown in the README. On macOS, install Xcode Command Line Tools

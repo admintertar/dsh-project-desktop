@@ -24,6 +24,7 @@
     "setup": "node scripts/setup.mjs",
     "verify:upstream": "node scripts/verify-upstream.mjs",
     "verify:official-source": "node scripts/verify-official-source.mjs",
+    "prepare:official-development": "node scripts/prepare-official-development.mjs",
     "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:recovery": "node --test scripts/check-recovery.mjs",

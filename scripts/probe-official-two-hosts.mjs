@@ -1,13 +1,15 @@
 import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
-import {fileURLToPath, pathToFileURL} from 'node:url';
-import {execFileSync} from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+import {verifyOfficialSource} from './verify-official-source.mjs';
+import {officialBuildInputs} from '../src/desktop-adapter/official/build-inputs.mjs';
 
 const source = process.argv[2];
 if (!source || process.argv.length !== 3) throw new Error('Usage: tsx scripts/probe-official-two-hosts.mjs /path/to/deepseek-harness');
-const official = resolve(source);
-execFileSync(process.execPath, [fileURLToPath(new URL('./verify-official-source.mjs', import.meta.url)), official], {stdio: 'inherit'});
+const verified = verifyOfficialSource(resolve(source));
+const inputs = officialBuildInputs(verified.source, verified.pin);
+const official = inputs.root;
 const load = name => import(pathToFileURL(join(official, name)).href);
 const [{prepareDevelopmentProject}, {DesktopProjectManager}, {resolveDesktopPaths}, {DesktopHostProcess}, {DESKTOP_HOST_PROTOCOL_VERSION}] = await Promise.all([
   load('apps/desktop/scripts/development-project.ts'),
@@ -16,8 +18,8 @@ const [{prepareDevelopmentProject}, {DesktopProjectManager}, {resolveDesktopPath
   load('apps/desktop/src/host-process.ts'),
   load('apps/desktop/src/host-protocol.ts'),
 ]);
-const version = JSON.parse(readFileSync(join(official, 'apps/desktop/package.json'), 'utf8')).version;
-const pnpmVersion = JSON.parse(readFileSync(join(official, 'apps/desktop/node_modules/pnpm/package.json'), 'utf8')).version;
+const version = verified.pin.version;
+const pnpmVersion = JSON.parse(readFileSync(inputs.pnpmPackage, 'utf8')).version;
 const root = mkdtempSync(join(tmpdir(), 'dsh-official-two-hosts-'));
 const hosts = [];
 
@@ -26,15 +28,15 @@ async function start(name) {
   const home = join(base, 'home');
   const runtime = join(base, 'runtime');
   mkdirSync(home, {recursive: true});
-  cpSync(join(official, 'packages/skill/skill-office/assets'), join(runtime, 'office-skills'), {recursive: true});
+  cpSync(inputs.officeSkills, join(runtime, 'office-skills'), {recursive: true});
   const nodeBin = join(runtime, 'primary-runtime/dependencies/node/bin');
   mkdirSync(nodeBin, {recursive: true});
   cpSync(process.execPath, join(nodeBin, process.platform === 'win32' ? 'node.exe' : 'node'));
   const project = prepareDevelopmentProject({
     projectDir: join(base, 'project'),
-    cliDir: join(official, 'apps/cli'),
-    hostDir: join(official, 'apps/desktop-host'),
-    dependencyDir: join(official, 'node_modules/.pnpm/node_modules'),
+    cliDir: inputs.cli,
+    hostDir: inputs.host,
+    dependencyDir: inputs.dependencyDir,
     release: {schemaVersion: 1, version, pnpmVersion, nodeVersion: process.versions.node,
       hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION},
     target: process.platform === 'win32' ? 'win-x64' : process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64',
